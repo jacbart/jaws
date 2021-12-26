@@ -1,4 +1,5 @@
-fc.config
-./fc
+firm.config
+firm
+!cmd/firm
 
 secrets

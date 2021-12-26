@@ -1,4 +1,4 @@
-package fc
+package firm
 
 import (
 	"fmt"
@@ -38,14 +38,14 @@ func Path(secretsPath string) error {
 }
 
 func PathCommand() {
-	shCommand := `function fc-cd() {
-  if [[ $(pwd) == $(fc path) ]]; then
+	shCommand := `function firm-cd() {
+  if [[ $(pwd) == $(firm path) ]]; then
     popd;
   else
-    pushd $(fc path);
+    pushd $(firm path);
   fi
 }
 
-alias fcd=fc-cd`
+alias firmd=firm-cd`
 	fmt.Println(shCommand)
 }

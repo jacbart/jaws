@@ -9,15 +9,15 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
-	fc "github.com/jacbart/fidelius-charm/pkg"
+	firm "github.com/jacbart/fidelius-charm/pkg"
 )
 
 func main() {
 	cobra.CheckErr(rootCmd.Execute())
 }
 
-//fc config file layout
-type fc_config struct {
+//firm config file layout
+type firm_config struct {
 	Platform     string `mapstructure:"platform"`
 	Secrets_path string `mapstructure:"secrets_path"`
 	Editor       string `mapstructure:"editor"`
@@ -67,7 +67,7 @@ func flags() {
 
 var (
 	cfgFile           string
-	fcConfig          fc_config
+	firmConfig        firm_config
 	secretsPath       string
 	scheduleInDays    int64
 	useEditor         bool
@@ -78,31 +78,31 @@ var (
 
 	// rootCmd represents the base command when called without any subcommands
 	rootCmd = &cobra.Command{
-		Use:   "fc",
-		Short: "fc (Fidelius Charm) is a cli tool to interact with AWS's secrets manager",
-		Long: `fc (Fidelius Charm) is a cli tool to interact with AWS's secrets manager.
+		Use:   "firm",
+		Short: "firm (Fidelius Charm) is a cli tool to interact with AWS's secrets manager",
+		Long: `firm (Fidelius Charm) is a cli tool to interact with AWS's secrets manager.
 A recommened secrets format is ENV/APP/DEPLOYMENT/SecretType. When downloading
 secrets will create a path using the name of the secret, it requires the same format when uploading secrets.`,
-		Example: "fc get --print",
+		Example: "firm get --print",
 	}
 
 	// pathCmd represents the set command
 	pathCmd = &cobra.Command{
 		Use:     "path",
 		Short:   "prints path to secrets folder and will create the path if it does not exist",
-		Example: "cd $(fc path)",
+		Example: "cd $(firm path)",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return fc.Path(secretsPath)
+			return firm.Path(secretsPath)
 		},
 	}
 
 	// pathCommandCmd represents the path command command
 	pathCommandCmd = &cobra.Command{
 		Use:     "command",
-		Short:   "prints out the shell function that lets fc-cd work properly",
-		Example: "source <(fc path command)",
+		Short:   "prints out the shell function that lets firm-cd work properly",
+		Example: "source <(firm path command)",
 		Run: func(cmd *cobra.Command, args []string) {
-			fc.PathCommand()
+			firm.PathCommand()
 		},
 	}
 
@@ -112,7 +112,7 @@ secrets will create a path using the name of the secret, it requires the same fo
 		Short:   "clean the local secrets from your computer, same as 'rm -rf /path/to/secrets'",
 		Aliases: []string{"scrub"},
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return fc.Clean(secretsPath)
+			return firm.Clean(secretsPath)
 		},
 	}
 
@@ -121,7 +121,7 @@ secrets will create a path using the name of the secret, it requires the same fo
 		Use:   "create",
 		Short: "creates folder path and empty file to edit",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return fc.Create(args, secretsPath, useEditor)
+			return firm.Create(args, secretsPath, useEditor)
 		},
 	}
 
@@ -131,7 +131,7 @@ secrets will create a path using the name of the secret, it requires the same fo
 		Short:   "schedule secret(s) for deletion",
 		Aliases: []string{"remove"},
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return fc.Delete(scheduleInDays)
+			return firm.Delete(scheduleInDays)
 		},
 	}
 
@@ -139,9 +139,9 @@ secrets will create a path using the name of the secret, it requires the same fo
 	deleteCancelCmd = &cobra.Command{
 		Use:     "cancel",
 		Short:   "cancel a scheduled secret deletion",
-		Example: "fc delete cancel testing/app/default/secret",
+		Example: "firm delete cancel testing/app/default/secret",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return fc.DeleteCancel(args)
+			return firm.DeleteCancel(args)
 		},
 	}
 
@@ -150,7 +150,7 @@ secrets will create a path using the name of the secret, it requires the same fo
 		Use:   "diff",
 		Short: "uses git to compare original secret with the changed secret, you can run git diff in the secrets location to get the same results",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return fc.GitDiff(secretsPath)
+			return firm.GitDiff(secretsPath)
 		},
 	}
 
@@ -159,7 +159,7 @@ secrets will create a path using the name of the secret, it requires the same fo
 		Use:   "status",
 		Short: "uses git status to compare original secret with the changed secret",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return fc.GitStatus(secretsPath)
+			return firm.GitStatus(secretsPath)
 		},
 	}
 
@@ -170,9 +170,9 @@ secrets will create a path using the name of the secret, it requires the same fo
 		Long: `download or print secret from aws, if no secret is specified fc loads the list of secrets into
 fzf, you can then search for secrets by typing, select secrets with tab and enter to confirm
 selected secrets to download them.`,
-		Example: "fc get testing/app/default/key -p",
+		Example: "firm get testing/app/default/key -p",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return fc.Get(args, secretsPath, useEditor, formatPrintValue, cleanPrintValue)
+			return firm.Get(args, secretsPath, useEditor, formatPrintValue, cleanPrintValue)
 		},
 	}
 
@@ -182,7 +182,7 @@ selected secrets to download them.`,
 		Short:   "list available secrets",
 		Aliases: []string{"ls"},
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return fc.List()
+			return firm.List()
 		},
 	}
 
@@ -192,7 +192,7 @@ selected secrets to download them.`,
 		Short:   "rollback the selected secrets by one version (only 2 total versions available)",
 		Aliases: []string{"rotate"},
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return fc.Rollback()
+			return firm.Rollback()
 		},
 	}
 
@@ -201,10 +201,10 @@ selected secrets to download them.`,
 		Use:   "set",
 		Short: "updates secrets and will prompt to create if there is a new secret detected",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return fc.Set(secretsPath, createPrompt)
+			return firm.Set(secretsPath, createPrompt)
 		},
 		PostRunE: func(cmd *cobra.Command, args []string) error {
-			return fc.SetPostRun(secretsPath, cleanLocalSecrets)
+			return firm.SetPostRun(secretsPath, cleanLocalSecrets)
 		},
 	}
 )
@@ -221,10 +221,10 @@ func initConfig() {
 		// Use config file from the flag.
 		viper.SetConfigFile(cfgFile)
 	} else {
-		viper.SetConfigName("fc.config")
+		viper.SetConfigName("firm.config")
 		viper.SetConfigType("yaml")
 		viper.AddConfigPath(".")
-		viper.AddConfigPath(fmt.Sprintf("%s/.config/fc", os.Getenv("HOME")))
+		viper.AddConfigPath(fmt.Sprintf("%s/.config/firm", os.Getenv("HOME")))
 		viper.AddConfigPath(fmt.Sprintf("%s/.aws", os.Getenv("HOME")))
 		viper.AddConfigPath(os.Getenv("HOME"))
 	}
@@ -240,13 +240,13 @@ func initConfig() {
 			log.Fatalf("unable to read fc.config: %v\n", err)
 		}
 	} else {
-		err := viper.Unmarshal(&fcConfig)
+		err := viper.Unmarshal(&firmConfig)
 		// check if secretsPath flag is set to something other than secrets, if not then use config set path
 		if strings.Compare(secretsPath, "secrets") == 0 {
-			secretsPath = fcConfig.Secrets_path
+			secretsPath = firmConfig.Secrets_path
 		}
-		if fcConfig.Editor != "" {
-			os.Setenv("EDITOR", fcConfig.Editor)
+		if firmConfig.Editor != "" {
+			os.Setenv("EDITOR", firmConfig.Editor)
 		}
 		cobra.CheckErr(err)
 	}

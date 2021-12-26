@@ -89,11 +89,11 @@ func GitControlSecrets(secretIDs []string, secretsPath string) error {
 		All: false,
 		Author: &object.Signature{
 			Name:  "Fidelius Charm",
-			Email: "fc@local.com",
+			Email: "firm@local.com",
 			When:  time.Now(),
 		},
 	}
-	_, err = w.Commit(fmt.Sprintf("fc commit %v", time.Now()), commitOptions)
+	_, err = w.Commit(fmt.Sprintf("firm commit %v", time.Now()), commitOptions)
 	if err != nil {
 		return err
 	}
