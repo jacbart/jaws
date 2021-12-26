@@ -1,0 +1,87 @@
+# Fidelius Charm or FC
+
+AWS does not have the best UX for their secrets management, among other features. This tool uses [FZF](https://github.com/junegunn/fzf) making filtering and selecting of multiple secrets a breeze. Once you have the secrets downloaded just edit the files as you would like and run the set command to update the secrets.
+
+Rollback currently only lets there be 2 total versions of each secret so you can only rollback once. **DOUBLE CHECK YOUR WORK BEFORE UPLOADING**
+
+For info on how to use this tool the `--help/-h` option will work on the root `fc -h` command as well as all sub commands i.e. `fc get -h`.
+
+## Dependencies
+
+- golang >=1.17
+- fzf
+
+## Install/Update fc with golang
+
+```bash
+go install github.com/jacbart/fidelius-charm/cmd/fc@latest
+```
+
+## Configure fc
+
+This tool uses `~/.aws/credentials` and `~/.aws/config` to configure itself.
+
+**~/.aws/credentials**
+```ini
+[default]
+aws_access_key_id = 
+aws_secret_access_key =
+```
+
+**~/.aws/config**
+```ini
+[default]
+region = 
+output = json
+```
+
+### Optional config file
+**~/.aws/fc.config** or **~/.config/fc/fc.config** or **~/fc.config** or **./fc.config**
+```yaml
+# aws is the only working platform right now
+platform: "aws" # gcp, azure, do (digital ocean)
+secrets_path: "/absolute/path/to/secrets/download/folder"
+editor: "nvim"
+```
+
+The `secrets_path` can be set with the `--path` flag and the `editor` can be set with the `$EDITOR` environment variable.
+
+## fc Examples
+
+```bash
+# pulls a list of secrets into fzf, select secrets with tab and press enter
+# to confirm selection
+fc get
+
+# create the folder stucture and an empty file then open with editor
+fc create -e testing/fake/example/secret
+
+# add cd command to shell
+fc path command >> ~/.bashrc
+# then source or restart your terminal jcd should then work
+# or
+# load the command into your current session only
+source <(fc path command)
+# fcd or fc-cd toggles between your current directory and the secrets folder in your fc.config file
+fcd
+# or
+fc-cd
+
+# pushes all secrets in the secrets folder, and prompts user if there
+# are any new secrets found (Deletes all local secrets as well --keep
+# if you want to keep them locally)
+fc set
+
+# pulls a list of secrets into fzf, select the secrets you want to rollback a
+# version with tab and hit enter to confirm selection
+fc rollback
+
+# to schedule secret(s) for deletion
+fc delete --days 30
+
+# to cancel the deletion you need to specify the secret name
+fc delete cancel testing/fake/example/secret
+
+# remove local secrets (basically rm -rf /path/to/secrets)
+fc clean
+```
