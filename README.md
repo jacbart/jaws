@@ -1,4 +1,4 @@
-# **Fi**delius Cha**rm** or Firm
+# **FI**delius cha**RM** or FIRM
 
 AWS does not have the best UX for their secrets management, among other features. This tool uses [FZF](https://github.com/junegunn/fzf) making filtering and selecting of multiple secrets a breeze. Once you have the secrets downloaded just edit the files as you would like and run the set command to update the secrets.
 
