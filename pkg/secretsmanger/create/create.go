@@ -1,4 +1,4 @@
-package firm
+package create
 
 import (
 	"fmt"
@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/fatih/color"
-	"github.com/jacbart/fidelius-charm/internal/utils"
+	"github.com/jacbart/fidelius-charm/utils/helpers"
 )
 
 func Create(args []string, secretsPath string, useEditor bool) error {
@@ -24,7 +24,7 @@ func Create(args []string, secretsPath string, useEditor bool) error {
 	defer f.Close()
 	color.Red("%s/%s created locally\n", secretsPath, args[0])
 	if useEditor {
-		if err = utils.OpenEditor([]string{filePath}); err != nil {
+		if err = helpers.OpenEditor([]string{filePath}); err != nil {
 			return err
 		}
 	}

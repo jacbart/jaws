@@ -3,3 +3,4 @@ firm
 !cmd/firm
 
 secrets
+!pkg/secrets

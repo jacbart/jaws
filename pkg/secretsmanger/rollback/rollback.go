@@ -1,11 +1,11 @@
-package firm
+package rollback
 
 import (
 	"context"
 	"fmt"
 
 	"github.com/jacbart/fidelius-charm/internal/aws"
-	"github.com/jacbart/fidelius-charm/internal/utils"
+	"github.com/jacbart/fidelius-charm/utils/fzf"
 
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
@@ -22,7 +22,7 @@ func Rollback() error {
 
 	client := secretsmanager.NewFromConfig(cfg)
 
-	sID, err := utils.PrintListFZF(ctx, client)
+	sID, err := fzf.PrintListFZF(ctx, client)
 	if err != nil {
 		return fmt.Errorf("error while iterating and printing secret names: %v", err)
 	}

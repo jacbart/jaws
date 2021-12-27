@@ -1,4 +1,4 @@
-package firm
+package get
 
 import (
 	"context"
@@ -10,7 +10,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
 	"github.com/jacbart/fidelius-charm/internal/aws"
-	"github.com/jacbart/fidelius-charm/internal/utils"
+	"github.com/jacbart/fidelius-charm/utils/fzf"
+	"github.com/jacbart/fidelius-charm/utils/helpers"
 )
 
 func Get(args []string, secretsPath string, useEditor bool, formatPrintValue bool, cleanPrintValue bool) error {
@@ -29,7 +30,7 @@ func Get(args []string, secretsPath string, useEditor bool, formatPrintValue boo
 
 	var secretIDs []string
 	if len(args) == 0 {
-		secretIDs, err = utils.PrintListFZF(ctx, awsClient)
+		secretIDs, err = fzf.PrintListFZF(ctx, awsClient)
 		if err != nil {
 			if err.Error() != exitErr.Error() {
 				return fmt.Errorf("iterating and printing secret names: %v", err)
@@ -51,10 +52,10 @@ func Get(args []string, secretsPath string, useEditor bool, formatPrintValue boo
 		}
 		baseOfPath := fmt.Sprintf("/%s", filepath.Base(f))
 		parentPath := strings.TrimSuffix(f, baseOfPath)
-		_ = utils.CheckIfGitRepo(parentPath, true)
-		utils.GitControlSecrets(secretIDs, secretsPath)
+		_ = helpers.CheckIfGitRepo(parentPath, true)
+		helpers.GitControlSecrets(secretIDs, secretsPath)
 		if useEditor {
-			if err = utils.OpenEditor(secretsList); err != nil {
+			if err = helpers.OpenEditor(secretsList); err != nil {
 				if err.Error() != noSelErr.Error() {
 					return err
 				}

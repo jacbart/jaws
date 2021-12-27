@@ -1,4 +1,4 @@
-package firm
+package clean
 
 import (
 	"os"

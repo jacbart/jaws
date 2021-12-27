@@ -1,4 +1,4 @@
-package firm
+package list
 
 import (
 	"context"

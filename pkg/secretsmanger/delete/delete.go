@@ -1,4 +1,4 @@
-package firm
+package delete
 
 import (
 	"context"
@@ -7,7 +7,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
 	"github.com/jacbart/fidelius-charm/internal/aws"
-	"github.com/jacbart/fidelius-charm/internal/utils"
+	"github.com/jacbart/fidelius-charm/utils/fzf"
 )
 
 func Delete(scheduleInDays int64) error {
@@ -21,7 +21,7 @@ func Delete(scheduleInDays int64) error {
 
 	client := secretsmanager.NewFromConfig(cfg)
 
-	sID, err := utils.PrintListFZF(ctx, client)
+	sID, err := fzf.PrintListFZF(ctx, client)
 	if err != nil {
 		return fmt.Errorf("error while iterating and printing secret names: %v", err)
 	}

@@ -9,7 +9,14 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
-	firm "github.com/jacbart/fidelius-charm/pkg"
+	"github.com/jacbart/fidelius-charm/pkg/secretsmanger/clean"
+	"github.com/jacbart/fidelius-charm/pkg/secretsmanger/create"
+	"github.com/jacbart/fidelius-charm/pkg/secretsmanger/delete"
+	"github.com/jacbart/fidelius-charm/pkg/secretsmanger/get"
+	"github.com/jacbart/fidelius-charm/pkg/secretsmanger/list"
+	"github.com/jacbart/fidelius-charm/pkg/secretsmanger/rollback"
+	"github.com/jacbart/fidelius-charm/pkg/secretsmanger/set"
+	"github.com/jacbart/fidelius-charm/utils/helpers"
 )
 
 func main() {
@@ -92,7 +99,7 @@ secrets will create a path using the name of the secret, it requires the same fo
 		Short:   "prints path to secrets folder and will create the path if it does not exist",
 		Example: "cd $(firm path)",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return firm.Path(secretsPath)
+			return helpers.Path(secretsPath)
 		},
 	}
 
@@ -102,7 +109,7 @@ secrets will create a path using the name of the secret, it requires the same fo
 		Short:   "prints out the shell function that lets firm-cd work properly",
 		Example: "source <(firm path command)",
 		Run: func(cmd *cobra.Command, args []string) {
-			firm.PathCommand()
+			helpers.PathCommand()
 		},
 	}
 
@@ -112,7 +119,7 @@ secrets will create a path using the name of the secret, it requires the same fo
 		Short:   "clean the local secrets from your computer, same as 'rm -rf /path/to/secrets'",
 		Aliases: []string{"scrub"},
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return firm.Clean(secretsPath)
+			return clean.Clean(secretsPath)
 		},
 	}
 
@@ -121,7 +128,7 @@ secrets will create a path using the name of the secret, it requires the same fo
 		Use:   "create",
 		Short: "creates folder path and empty file to edit",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return firm.Create(args, secretsPath, useEditor)
+			return create.Create(args, secretsPath, useEditor)
 		},
 	}
 
@@ -131,7 +138,7 @@ secrets will create a path using the name of the secret, it requires the same fo
 		Short:   "schedule secret(s) for deletion",
 		Aliases: []string{"remove"},
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return firm.Delete(scheduleInDays)
+			return delete.Delete(scheduleInDays)
 		},
 	}
 
@@ -141,7 +148,7 @@ secrets will create a path using the name of the secret, it requires the same fo
 		Short:   "cancel a scheduled secret deletion",
 		Example: "firm delete cancel testing/app/default/secret",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return firm.DeleteCancel(args)
+			return delete.DeleteCancel(args)
 		},
 	}
 
@@ -150,7 +157,7 @@ secrets will create a path using the name of the secret, it requires the same fo
 		Use:   "diff",
 		Short: "uses git to compare original secret with the changed secret, you can run git diff in the secrets location to get the same results",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return firm.GitDiff(secretsPath)
+			return helpers.GitDiff(secretsPath)
 		},
 	}
 
@@ -159,7 +166,7 @@ secrets will create a path using the name of the secret, it requires the same fo
 		Use:   "status",
 		Short: "uses git status to compare original secret with the changed secret",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return firm.GitStatus(secretsPath)
+			return helpers.GitStatus(secretsPath)
 		},
 	}
 
@@ -172,7 +179,7 @@ fzf, you can then search for secrets by typing, select secrets with tab and ente
 selected secrets to download them.`,
 		Example: "firm get testing/app/default/key -p",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return firm.Get(args, secretsPath, useEditor, formatPrintValue, cleanPrintValue)
+			return get.Get(args, secretsPath, useEditor, formatPrintValue, cleanPrintValue)
 		},
 	}
 
@@ -182,7 +189,7 @@ selected secrets to download them.`,
 		Short:   "list available secrets",
 		Aliases: []string{"ls"},
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return firm.List()
+			return list.List()
 		},
 	}
 
@@ -192,7 +199,7 @@ selected secrets to download them.`,
 		Short:   "rollback the selected secrets by one version (only 2 total versions available)",
 		Aliases: []string{"rotate"},
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return firm.Rollback()
+			return rollback.Rollback()
 		},
 	}
 
@@ -201,10 +208,10 @@ selected secrets to download them.`,
 		Use:   "set",
 		Short: "updates secrets and will prompt to create if there is a new secret detected",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return firm.Set(secretsPath, createPrompt)
+			return set.Set(secretsPath, createPrompt)
 		},
 		PostRunE: func(cmd *cobra.Command, args []string) error {
-			return firm.SetPostRun(secretsPath, cleanLocalSecrets)
+			return set.SetPostRun(secretsPath, cleanLocalSecrets)
 		},
 	}
 )
