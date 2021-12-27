@@ -4,8 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/aws/aws-sdk-go-v2/config"
-	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
 	"github.com/jacbart/fidelius-charm/internal/aws"
 )
 
@@ -13,12 +11,10 @@ func List() error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	awsCfg, err := config.LoadDefaultConfig(ctx)
+	awsClient, err := aws.LoadClient(ctx)
 	if err != nil {
-		return fmt.Errorf("unable to load AWS SDK config, %v", err)
+		return err
 	}
-
-	awsClient := secretsmanager.NewFromConfig(awsCfg)
 
 	var l int
 	listSecretsOutput, err := aws.GetSecretsList(ctx, awsClient, nil)

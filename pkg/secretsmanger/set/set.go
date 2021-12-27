@@ -2,30 +2,22 @@ package set
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io/ioutil"
 	"os"
-	"strings"
 
 	"github.com/fatih/color"
 	"github.com/jacbart/fidelius-charm/internal/aws"
-
-	"github.com/aws/aws-sdk-go-v2/config"
-	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
-	"github.com/aws/aws-sdk-go-v2/service/secretsmanager/types"
 )
 
 func Set(secretsPath string, createPrompt bool) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	cfg, err := config.LoadDefaultConfig(ctx)
+	client, err := aws.LoadClient(ctx)
 	if err != nil {
-		return fmt.Errorf("unable to load ~/.aws/credentials, %v", err)
+		return err
 	}
-
-	client := secretsmanager.NewFromConfig(cfg)
 
 	sID, err := aws.GetSecretNames(secretsPath)
 	if err != nil {
@@ -44,42 +36,11 @@ func Set(secretsPath string, createPrompt bool) error {
 			return nil
 		}
 		if shouldSecretUpdate {
-			if err = handleUpdateCreate(ctx, client, sID[i], string(secretUpdate), createPrompt); err != nil {
+			if err = aws.HandleUpdateCreate(ctx, client, sID[i], string(secretUpdate), createPrompt); err != nil {
 				return err
 			}
 		} else {
 			fmt.Printf("%s %s\n", sID[i], color.CyanString("skipped"))
-		}
-	}
-	return nil
-}
-
-func handleUpdateCreate(ctx context.Context, client *secretsmanager.Client, secretID string, secretString string, createPrompt bool) error {
-	var userResponse string
-	var rnfErr *types.ResourceNotFoundException
-	if err := aws.UpdateSecretString(ctx, client, secretID, string(secretString)); err != nil {
-		if errors.As(err, &rnfErr) {
-			if !createPrompt {
-				fmt.Printf("%s was not found, would you like to create this secret? [y/N] ", secretID)
-				fmt.Scanln(&userResponse)
-
-				userResponse = strings.TrimSpace(userResponse)
-				userResponse = strings.ToLower(userResponse)
-
-				if userResponse == "y" || userResponse == "yes" {
-					if err = aws.CreateSecret(ctx, client, secretID, string(secretString)); err != nil {
-						return err
-					}
-				} else {
-					fmt.Printf("creation of %s %s\n", secretID, color.CyanString("skipped"))
-				}
-			} else {
-				if err = aws.CreateSecret(ctx, client, secretID, string(secretString)); err != nil {
-					return err
-				}
-			}
-		} else {
-			return err
 		}
 	}
 	return nil

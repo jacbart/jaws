@@ -4,3 +4,4 @@ firm
 
 secrets
 !pkg/secrets
+!internal/aws/secrets

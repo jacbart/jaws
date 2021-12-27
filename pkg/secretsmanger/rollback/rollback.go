@@ -6,21 +6,16 @@ import (
 
 	"github.com/jacbart/fidelius-charm/internal/aws"
 	"github.com/jacbart/fidelius-charm/utils/fzf"
-
-	"github.com/aws/aws-sdk-go-v2/config"
-	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
 )
 
 func Rollback() error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	cfg, err := config.LoadDefaultConfig(ctx) // config.WithRegion("us-east-1"),
+	client, err := aws.LoadClient(ctx)
 	if err != nil {
-		return fmt.Errorf("unable to load SDK config, %v", err)
+		return err
 	}
-
-	client := secretsmanager.NewFromConfig(cfg)
 
 	sID, err := fzf.PrintListFZF(ctx, client)
 	if err != nil {
