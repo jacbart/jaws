@@ -1,4 +1,4 @@
-package clean
+package manager
 
 import (
 	"os"
@@ -6,6 +6,7 @@ import (
 	"github.com/fatih/color"
 )
 
+// Clean
 func Clean(secretsPath string) error {
 	err := os.RemoveAll(secretsPath)
 	if err != nil {

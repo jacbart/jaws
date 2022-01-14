@@ -1,4 +1,4 @@
-package set
+package manager
 
 import (
 	"context"
@@ -10,11 +10,12 @@ import (
 	"github.com/jacbart/fidelius-charm/internal/aws"
 )
 
-func Set(secretsPath string, createPrompt bool) error {
+// AWSManager Set
+func (a *AWSManager) Set(secretsPath string, createPrompt bool) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	client, err := aws.LoadClient(ctx)
+	client, err := LoadAWSClient(a, ctx)
 	if err != nil {
 		return err
 	}
@@ -46,6 +47,7 @@ func Set(secretsPath string, createPrompt bool) error {
 	return nil
 }
 
+// SetPostRun
 func SetPostRun(secretsPath string, cleanLocalSecrets bool) error {
 	if !cleanLocalSecrets {
 		err := os.RemoveAll(secretsPath)

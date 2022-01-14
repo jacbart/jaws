@@ -11,9 +11,13 @@ import (
 	"github.com/go-git/go-git/v5/plumbing/object"
 )
 
-func OpenEditor(secretsList []string) error {
-	if len(secretsList) == 0 {
+func OpenEditor(secretsIDs []string, secretsPath string) error {
+	var secretsList []string
+	if len(secretsIDs) == 0 {
 		return fmt.Errorf("no secrets selected")
+	}
+	for _, id := range secretsIDs {
+		secretsList = append(secretsList, fmt.Sprintf("%s/%s", secretsPath, id))
 	}
 	editor, present := os.LookupEnv("EDITOR")
 	if !present {

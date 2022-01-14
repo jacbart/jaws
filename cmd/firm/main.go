@@ -1,33 +1,20 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 	"strings"
 
-	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
-
-	"github.com/jacbart/fidelius-charm/pkg/secretsmanger/clean"
-	"github.com/jacbart/fidelius-charm/pkg/secretsmanger/create"
-	"github.com/jacbart/fidelius-charm/pkg/secretsmanger/delete"
-	"github.com/jacbart/fidelius-charm/pkg/secretsmanger/get"
-	"github.com/jacbart/fidelius-charm/pkg/secretsmanger/list"
-	"github.com/jacbart/fidelius-charm/pkg/secretsmanger/rollback"
-	"github.com/jacbart/fidelius-charm/pkg/secretsmanger/set"
+	"github.com/jacbart/fidelius-charm/pkg/manager"
 	"github.com/jacbart/fidelius-charm/utils/helpers"
+	"github.com/spf13/cobra"
 )
 
 func main() {
 	cobra.CheckErr(rootCmd.Execute())
-}
-
-//firm config file layout
-type firm_config struct {
-	Platform     string `mapstructure:"platform"`
-	Secrets_path string `mapstructure:"secrets_path"`
-	Editor       string `mapstructure:"editor"`
 }
 
 func commands() {
@@ -58,7 +45,7 @@ func commands() {
 func flags() {
 	// global persistent flags
 	rootCmd.PersistentFlags().StringVar(&secretsPath, "path", "secrets", "sets download path for secrets, overrides config")
-	rootCmd.PersistentFlags().StringVarP(&cfgFile, "config", "c", "", "set config file (default location is $HOME/.aws/fc.config)")
+	rootCmd.PersistentFlags().StringVarP(&cfgFile, "config", "c", "", "set config file (default location is $HOME/.aws/firm.config)")
 	// create command flags
 	createCmd.Flags().BoolVarP(&useEditor, "editor", "e", false, "open any selected secrets in an editor")
 	// delete command flags
@@ -73,8 +60,8 @@ func flags() {
 }
 
 var (
+	secretsManager    manager.Manager
 	cfgFile           string
-	firmConfig        firm_config
 	secretsPath       string
 	scheduleInDays    int64
 	useEditor         bool
@@ -119,7 +106,7 @@ secrets will create a path using the name of the secret, it requires the same fo
 		Short:   "clean the local secrets from your computer, same as 'rm -rf /path/to/secrets'",
 		Aliases: []string{"scrub"},
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return clean.Clean(secretsPath)
+			return manager.Clean(secretsPath)
 		},
 	}
 
@@ -128,7 +115,7 @@ secrets will create a path using the name of the secret, it requires the same fo
 		Use:   "create",
 		Short: "creates folder path and empty file to edit",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return create.Create(args, secretsPath, useEditor)
+			return secretsManager.Create(args, secretsPath, useEditor)
 		},
 	}
 
@@ -138,7 +125,7 @@ secrets will create a path using the name of the secret, it requires the same fo
 		Short:   "schedule secret(s) for deletion",
 		Aliases: []string{"remove"},
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return delete.Delete(scheduleInDays)
+			return secretsManager.Delete(scheduleInDays)
 		},
 	}
 
@@ -148,7 +135,7 @@ secrets will create a path using the name of the secret, it requires the same fo
 		Short:   "cancel a scheduled secret deletion",
 		Example: "firm delete cancel testing/app/default/secret",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return delete.DeleteCancel(args)
+			return secretsManager.DeleteCancel(args)
 		},
 	}
 
@@ -174,12 +161,46 @@ secrets will create a path using the name of the secret, it requires the same fo
 	getCmd = &cobra.Command{
 		Use:   "get",
 		Short: "download or print secret from aws, if no secret is specified use fzf to select secret(s)",
-		Long: `download or print secret from aws, if no secret is specified fc loads the list of secrets into
+		Long: `download or print secret from aws, if no secret is specified firm loads the list of secrets into
 fzf, you can then search for secrets by typing, select secrets with tab and enter to confirm
 selected secrets to download them.`,
 		Example: "firm get testing/app/default/key -p",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return get.Get(args, secretsPath, useEditor, formatPrintValue, cleanPrintValue)
+			var noSelErr = errors.New("no secrets selected")
+			var secretIDs []string
+			Secrets, err := secretsManager.Get(args)
+			if err != nil {
+				return err
+			}
+			for _, s := range Secrets {
+				secretIDs = append(secretIDs, s.ID)
+			}
+
+			if !formatPrintValue && !cleanPrintValue {
+				f, err := filepath.Abs(secretsPath)
+				if err != nil {
+					return err
+				}
+				baseOfPath := fmt.Sprintf("/%s", filepath.Base(f))
+				parentPath := strings.TrimSuffix(f, baseOfPath)
+				_ = helpers.CheckIfGitRepo(parentPath, true)
+				helpers.GitControlSecrets(secretIDs, secretsPath)
+				if useEditor {
+					if err = helpers.OpenEditor(secretIDs, secretsPath); err != nil {
+						if err.Error() != noSelErr.Error() {
+							return err
+						}
+					}
+				}
+			} else {
+				if cleanPrintValue {
+					manager.CleanPrintSecrets(Secrets)
+				} else if formatPrintValue {
+					manager.FormatPrintSecret(Secrets)
+				}
+
+			}
+			return nil
 		},
 	}
 
@@ -189,7 +210,11 @@ selected secrets to download them.`,
 		Short:   "list available secrets",
 		Aliases: []string{"ls"},
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return list.List()
+			list, err := secretsManager.ListAll()
+			for _, secretID := range list {
+				fmt.Println(secretID)
+			}
+			return err
 		},
 	}
 
@@ -199,7 +224,7 @@ selected secrets to download them.`,
 		Short:   "rollback the selected secrets by one version (only 2 total versions available)",
 		Aliases: []string{"rotate"},
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return rollback.Rollback()
+			return secretsManager.Rollback()
 		},
 	}
 
@@ -208,10 +233,10 @@ selected secrets to download them.`,
 		Use:   "set",
 		Short: "updates secrets and will prompt to create if there is a new secret detected",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return set.Set(secretsPath, createPrompt)
+			return secretsManager.Set(secretsPath, createPrompt)
 		},
 		PostRunE: func(cmd *cobra.Command, args []string) error {
-			return set.SetPostRun(secretsPath, cleanLocalSecrets)
+			return manager.SetPostRun(secretsPath, cleanLocalSecrets)
 		},
 	}
 )
@@ -224,37 +249,37 @@ func init() {
 
 // initConfig reads in config file and ENV variables if set.
 func initConfig() {
+
+	c := manager.NewFirmConfig()
+
 	if cfgFile != "" {
-		// Use config file from the flag.
-		viper.SetConfigFile(cfgFile)
+		c.SetConfigName(cfgFile)
 	} else {
-		viper.SetConfigName("firm.config")
-		viper.SetConfigType("yaml")
-		viper.AddConfigPath(".")
-		viper.AddConfigPath(fmt.Sprintf("%s/.config/firm", os.Getenv("HOME")))
-		viper.AddConfigPath(fmt.Sprintf("%s/.aws", os.Getenv("HOME")))
-		viper.AddConfigPath(os.Getenv("HOME"))
+		c.SetConfigName("firm.config")
+		c.AddConfigPath(".")
+		c.AddConfigPath(fmt.Sprintf("%s/.config/firm", os.Getenv("HOME")))
+		c.AddConfigPath(fmt.Sprintf("%s/.aws", os.Getenv("HOME")))
+		c.AddConfigPath(os.Getenv("HOME"))
 	}
 
-	viper.AutomaticEnv() // read in environment variables that match
-
-	if err := viper.ReadInConfig(); err != nil {
-		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
-			// Config file not found; ignore error if desired
-			return
-		} else {
-			// Config file was found but another error was produced
-			log.Fatalf("unable to read fc.config: %v\n", err)
-		}
-	} else {
-		err := viper.Unmarshal(&firmConfig)
-		// check if secretsPath flag is set to something other than secrets, if not then use config set path
-		if strings.Compare(secretsPath, "secrets") == 0 {
-			secretsPath = firmConfig.Secrets_path
-		}
-		if firmConfig.Editor != "" {
-			os.Setenv("EDITOR", firmConfig.Editor)
-		}
-		cobra.CheckErr(err)
+	general, managers, err := c.ReadInConfig()
+	if err != nil {
+		log.Fatalln(err)
 	}
+	for _, m := range managers {
+		if m.ProfileName() == general.DefaultProfile {
+			secretsManager = m
+		}
+	}
+	if secretsManager == nil {
+		log.Fatalln("No config found")
+	}
+	// check if secretsPath flag is set to something other than secrets, if not then use config set path
+	if strings.Compare(secretsPath, "secrets") == 0 {
+		secretsPath = general.SecretsPath
+	}
+	if general.Editor != "" {
+		os.Setenv("EDITOR", general.Editor)
+	}
+	cobra.CheckErr(err)
 }

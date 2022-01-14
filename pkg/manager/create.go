@@ -1,4 +1,4 @@
-package create
+package manager
 
 import (
 	"fmt"
@@ -9,7 +9,8 @@ import (
 	"github.com/jacbart/fidelius-charm/utils/helpers"
 )
 
-func Create(args []string, secretsPath string, useEditor bool) error {
+// AWSManager Create
+func (a *AWSManager) Create(args []string, secretsPath string, useEditor bool) error {
 	pattern := strings.Split(args[0], "/")
 	filePath := fmt.Sprintf("%s/%s", secretsPath, args[0])
 	dir := fmt.Sprintf("%s/%s", secretsPath, strings.Join(pattern[:len(pattern)-1], "/"))
@@ -24,7 +25,7 @@ func Create(args []string, secretsPath string, useEditor bool) error {
 	defer f.Close()
 	color.Red("%s/%s created locally\n", secretsPath, args[0])
 	if useEditor {
-		if err = helpers.OpenEditor([]string{filePath}); err != nil {
+		if err = helpers.OpenEditor(args, secretsPath); err != nil {
 			return err
 		}
 	}

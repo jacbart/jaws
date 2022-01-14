@@ -1,23 +1,23 @@
-package delete
+package manager
 
 import (
 	"context"
 	"fmt"
 
 	"github.com/jacbart/fidelius-charm/internal/aws"
-	"github.com/jacbart/fidelius-charm/utils/fzf"
 )
 
-func Delete(scheduleInDays int64) error {
+// AWSManager Delete
+func (a *AWSManager) Delete(scheduleInDays int64) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	client, err := aws.LoadClient(ctx)
+	client, err := LoadAWSClient(a, ctx)
 	if err != nil {
 		return err
 	}
 
-	sID, err := fzf.PrintListFZF(ctx, client)
+	sID, err := a.FuzzyFind(ctx)
 	if err != nil {
 		return fmt.Errorf("error while iterating and printing secret names: %v", err)
 	}
@@ -31,11 +31,12 @@ func Delete(scheduleInDays int64) error {
 	return nil
 }
 
-func DeleteCancel(args []string) error {
+// AWSManager DeleteCancel
+func (a *AWSManager) DeleteCancel(args []string) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	client, err := aws.LoadClient(ctx)
+	client, err := LoadAWSClient(a, ctx)
 	if err != nil {
 		return err
 	}
