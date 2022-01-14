@@ -72,19 +72,19 @@ var (
 
 	// rootCmd represents the base command when called without any subcommands
 	rootCmd = &cobra.Command{
-		Use:   "firm",
-		Short: "firm (Fidelius Charm) is a cli tool to interact with secrets managers",
-		Long: `firm (Fidelius Charm) is a cli tool to interact with secrets managers.
+		Use:   "jaws",
+		Short: "jaws (Fidelius Charm) is a cli tool to interact with secrets managers",
+		Long: `jaws (Fidelius Charm) is a cli tool to interact with secrets managers.
 A recommened secrets format is ENV/APP/DEPLOYMENT/SecretType. When downloading
 secrets they will create a path using the name of the secret, it requires the same format when uploading secrets.`,
-		Example: "firm get --print",
+		Example: "jaws get --print",
 	}
 
 	// pathCmd represents the set command
 	pathCmd = &cobra.Command{
 		Use:     "path",
 		Short:   "prints path to secrets folder and will create the path if it does not exist",
-		Example: "cd $(firm path)",
+		Example: "cd $(jaws path)",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return helpers.Path(secretsPath)
 		},
@@ -93,8 +93,8 @@ secrets they will create a path using the name of the secret, it requires the sa
 	// pathCommandCmd represents the path command command
 	pathCommandCmd = &cobra.Command{
 		Use:     "command",
-		Short:   "prints out the shell function that lets firm-cd work properly",
-		Example: "source <(firm path command)",
+		Short:   "prints out the shell function that lets jaws-cd work properly",
+		Example: "source <(jaws path command)",
 		Run: func(cmd *cobra.Command, args []string) {
 			helpers.PathCommand()
 		},
@@ -133,7 +133,7 @@ secrets they will create a path using the name of the secret, it requires the sa
 	deleteCancelCmd = &cobra.Command{
 		Use:     "cancel",
 		Short:   "cancel a scheduled secret deletion",
-		Example: "firm delete cancel testing/app/default/secret",
+		Example: "jaws delete cancel testing/app/default/secret",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return secretManager.DeleteCancel(args)
 		},
@@ -161,10 +161,10 @@ secrets they will create a path using the name of the secret, it requires the sa
 	getCmd = &cobra.Command{
 		Use:   "get",
 		Short: "download or print secret from aws, if no secret is specified use fzf to select secret(s)",
-		Long: `download or print secret from aws, if no secret is specified firm loads the list of secrets into
+		Long: `download or print secret from aws, if no secret is specified jaws loads the list of secrets into
 fzf, you can then search for secrets by typing, select secrets with tab and enter to confirm
 selected secrets to download them.`,
-		Example: "firm get testing/app/default/key -p",
+		Example: "jaws get testing/app/default/key -p",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			var noSelErr = errors.New("no secrets selected")
 			var secretIDs []string
@@ -249,14 +249,14 @@ func init() {
 // initConfig reads in config file and ENV variables if set.
 func initConfig() {
 
-	c := secretsmanager.NewFirmConfig()
+	c := secretsmanager.NewJawsConfig()
 
 	if cfgFile != "" {
 		c.SetConfigName(cfgFile)
 	} else {
-		c.SetConfigName("firm.config")
+		c.SetConfigName("jaws.config")
 		c.AddConfigPath(".")
-		c.AddConfigPath(fmt.Sprintf("%s/.config/firm", os.Getenv("HOME")))
+		c.AddConfigPath(fmt.Sprintf("%s/.config/jaws", os.Getenv("HOME")))
 		c.AddConfigPath(os.Getenv("HOME"))
 	}
 

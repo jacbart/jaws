@@ -15,32 +15,32 @@ import (
 
 const (
 	environmentKey = "env"
-	envVarPrefix   = "FC_"
+	envVarPrefix   = "JAWS_"
 )
 
-type FirmConfig struct {
+type JawsConfig struct {
 	Conf      Config
 	FileName  string
 	FilePaths []string
 }
 
-// NewFirmConfig
-func NewFirmConfig() FirmConfig {
-	return FirmConfig{}
+// NewJawsConfig
+func NewJawsConfig() JawsConfig {
+	return JawsConfig{}
 }
 
 // SetConfigName
-func (c *FirmConfig) SetConfigName(file string) {
+func (c *JawsConfig) SetConfigName(file string) {
 	c.FileName = file
 }
 
 // AddConfigPath
-func (c *FirmConfig) AddConfigPath(path string) {
+func (c *JawsConfig) AddConfigPath(path string) {
 	c.FilePaths = append(c.FilePaths, path)
 }
 
 // ReadInConfig
-func (c *FirmConfig) ReadInConfig() (*GeneralHCL, []Manager, error) {
+func (c *JawsConfig) ReadInConfig() (*GeneralHCL, []Manager, error) {
 	f, err := checkForConfig(c)
 	if err != nil {
 		return nil, nil, err
@@ -103,7 +103,7 @@ func (c *FirmConfig) ReadInConfig() (*GeneralHCL, []Manager, error) {
 }
 
 // checkForConfig
-func checkForConfig(c *FirmConfig) (string, error) {
+func checkForConfig(c *JawsConfig) (string, error) {
 	if len(c.FilePaths) == 0 {
 		if _, err := os.Stat(c.FileName); err == nil {
 			return c.FileName, nil
