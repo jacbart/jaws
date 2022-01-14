@@ -9,6 +9,7 @@ For info on how to use this tool the `--help/-h` option will work on the root `j
 ## Dependencies
 
 - golang >=1.17
+- git
 
 ## Install/Update jaws with golang
 
@@ -19,6 +20,16 @@ go install github.com/jacbart/jaws/cmd/jaws@latest
 ## Configure jaws
 
 **~/.config/jaws/jaws.config** or **~/jaws.config** or **./jaws.config**
+
+Secret Manager Compatibility:
+| Platform              | Working? |
+| --------------------- | -------- |
+| Amazon Web Services   | Yes      |
+| Google Cloud Platform | No       |
+| Digital Ocean         | No       |
+| Hasicorp Vault        | No       |
+
+
 ```
 general {
   default_profile = "default"
@@ -38,7 +49,7 @@ The `secrets_path` can be set with the `--path` flag and the `editor` can be set
 ## jaws Examples
 
 ```bash
-# pulls a list of secrets into fzf, select secrets with tab and press enter
+# pulls a list of secrets into a fuzzy finder, select secrets with tab and press enter
 # to confirm selection
 jaws get
 
@@ -52,7 +63,7 @@ jaws path command >> ~/.bashrc
 # load the command into your current session only
 source <(jaws path command)
 # jawsd or jaws-cd toggles between your current directory and the secrets folder in your jaws.config file
-jawsd
+jd
 # or
 jaws-cd
 
@@ -61,7 +72,7 @@ jaws-cd
 # if you want to keep them locally)
 jaws set
 
-# pulls a list of secrets into fzf, select the secrets you want to rollback a
+# pulls a list of secrets into a fuzzy finder, select the secrets you want to rollback a
 # version with tab and hit enter to confirm selection
 jaws rollback
 

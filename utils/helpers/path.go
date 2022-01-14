@@ -38,14 +38,14 @@ func Path(secretsPath string) error {
 }
 
 func PathCommand() {
-	shCommand := `function firm-cd() {
-  if [[ $(pwd) == $(firm path) ]]; then
+	shCommand := `function jaws-cd() {
+  if [[ $(pwd) == $(jaws path) ]]; then
     popd;
   else
-    pushd $(firm path);
+    pushd $(jaws path);
   fi
 }
 
-alias firmd=firm-cd`
+alias jd=jaws-cd`
 	fmt.Println(shCommand)
 }
