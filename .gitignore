@@ -1,6 +1,6 @@
-firm.config
-firm
-!cmd/firm
+jaws.config
+jaws
+!cmd/jaws
 
 secrets
 !pkg/secrets
