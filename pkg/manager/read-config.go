@@ -43,13 +43,11 @@ func (c *FirmConfig) AddConfigPath(path string) {
 func (c *FirmConfig) ReadInConfig() (*GeneralHCL, []Manager, error) {
 	f, err := checkForConfig(c)
 	if err != nil {
-		return &GeneralHCL{}, []Manager{}, fmt.Errorf(
-			"error in ReadConfig finding config file: %w", err,
-		)
+		return nil, nil, err
 	}
 	input, err := os.Open(f)
 	if err != nil {
-		return &GeneralHCL{}, []Manager{}, fmt.Errorf(
+		return nil, nil, fmt.Errorf(
 			"error in ReadConfig opening config file: %w", err,
 		)
 	}
@@ -57,7 +55,7 @@ func (c *FirmConfig) ReadInConfig() (*GeneralHCL, []Manager, error) {
 
 	src, err := ioutil.ReadAll(input)
 	if err != nil {
-		return &GeneralHCL{}, []Manager{}, fmt.Errorf(
+		return nil, nil, fmt.Errorf(
 			"error in ReadConfig reading input `%s`: %w", f, err,
 		)
 	}
@@ -65,21 +63,21 @@ func (c *FirmConfig) ReadInConfig() (*GeneralHCL, []Manager, error) {
 	parser := hclparse.NewParser()
 	srcHCL, diag := parser.ParseHCL(src, f)
 	if diag.HasErrors() {
-		return &GeneralHCL{}, []Manager{}, fmt.Errorf(
+		return nil, nil, fmt.Errorf(
 			"error in ReadConfig parsing HCL: %w", diag,
 		)
 	}
 
 	evalContext, err := createContext()
 	if err != nil {
-		return &GeneralHCL{}, []Manager{}, fmt.Errorf(
+		return nil, nil, fmt.Errorf(
 			"error in ReadConfig creating HCL evaluation context: %w", err,
 		)
 	}
 
 	configHCL := &Config{}
 	if diag := gohcl.DecodeBody(srcHCL.Body, evalContext, configHCL); diag.HasErrors() {
-		return &GeneralHCL{}, []Manager{}, fmt.Errorf(
+		return nil, nil, fmt.Errorf(
 			"error in ReadConfig decoding HCL configuration: %w", diag,
 		)
 	}
@@ -91,14 +89,14 @@ func (c *FirmConfig) ReadInConfig() (*GeneralHCL, []Manager, error) {
 			aws := &AWSManager{Profile: c.Profile}
 			if c.Auth != nil {
 				if diag := gohcl.DecodeBody(c.Auth, evalContext, aws); diag.HasErrors() {
-					return &GeneralHCL{}, []Manager{}, fmt.Errorf(
+					return nil, nil, fmt.Errorf(
 						"error in ReadConfig decoding aws HCL configuration: %w", diag,
 					)
 				}
 			}
 			managers = append(managers, aws)
 		default:
-			return &GeneralHCL{}, []Manager{}, fmt.Errorf("error in ReadConfig: unknown platform `%s`", managerPlatform)
+			return nil, nil, fmt.Errorf("error in ReadConfig: unknown platform `%s`", managerPlatform)
 		}
 	}
 	return configHCL.General, managers, nil
@@ -106,12 +104,19 @@ func (c *FirmConfig) ReadInConfig() (*GeneralHCL, []Manager, error) {
 
 // checkForConfig
 func checkForConfig(c *FirmConfig) (string, error) {
+	if len(c.FilePaths) == 0 {
+		if _, err := os.Stat(c.FileName); err == nil {
+			return c.FileName, nil
+		} else {
+			return "", &NoConfigFileFound{c.FileName, []string{"."}}
+		}
+	}
 	for _, path := range c.FilePaths {
 		if _, err := os.Stat(fmt.Sprintf("%s/%s", path, c.FileName)); err == nil {
 			return fmt.Sprintf("%s/%s", path, c.FileName), nil
 		}
 	}
-	return "", fmt.Errorf("%s not found in any paths", c.FileName)
+	return "", &NoConfigFileFound{c.FileName, c.FilePaths}
 }
 
 // createContext

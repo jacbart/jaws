@@ -258,22 +258,34 @@ func initConfig() {
 		c.SetConfigName("firm.config")
 		c.AddConfigPath(".")
 		c.AddConfigPath(fmt.Sprintf("%s/.config/firm", os.Getenv("HOME")))
-		c.AddConfigPath(fmt.Sprintf("%s/.aws", os.Getenv("HOME")))
 		c.AddConfigPath(os.Getenv("HOME"))
 	}
 
 	general, managers, err := c.ReadInConfig()
 	if err != nil {
-		log.Fatalln(err)
-	}
-	for _, m := range managers {
-		if m.ProfileName() == general.DefaultProfile {
-			secretsManager = m
+		switch err.(type) {
+		case *manager.NoConfigFileFound:
+			fmt.Println("no config found, defaulting to aws")
+			secretsManager = &manager.AWSManager{
+				Profile: "default",
+			}
+			general = &manager.GeneralHCL{
+				DefaultProfile: "default",
+				SecretsPath:    "secrets",
+			}
+		default:
+			log.Fatalln(err)
+		}
+	} else {
+		if len(managers) != 0 {
+			for _, m := range managers {
+				if m.ProfileName() == general.DefaultProfile {
+					secretsManager = m
+				}
+			}
 		}
 	}
-	if secretsManager == nil {
-		log.Fatalln("No config found")
-	}
+
 	// check if secretsPath flag is set to something other than secrets, if not then use config set path
 	if strings.Compare(secretsPath, "secrets") == 0 {
 		secretsPath = general.SecretsPath
@@ -281,5 +293,4 @@ func initConfig() {
 	if general.Editor != "" {
 		os.Setenv("EDITOR", general.Editor)
 	}
-	cobra.CheckErr(err)
 }

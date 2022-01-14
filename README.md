@@ -1,7 +1,7 @@
 # Fidelius Charm or Firm
 >**FI**delius cha**RM** -> FIRM
 
-AWS does not have the best UX for their secrets management, among other features. This tool uses [FZF](https://github.com/junegunn/fzf) making filtering and selecting of multiple secrets a breeze. Once you have the secrets downloaded just edit the files as you would like and run the set command to update the secrets.
+AWS does not have the best UX for their secrets management. This tool uses a fuzzy finder to make filtering and selecting of multiple secrets easy. Once you have the secrets downloaded just edit the files as you would like and run the set command to update the secrets.
 
 Rollback currently only lets there be 2 total versions of each secret so you can only rollback once. **DOUBLE CHECK YOUR WORK BEFORE UPLOADING**
 
@@ -10,7 +10,6 @@ For info on how to use this tool the `--help/-h` option will work on the root `f
 ## Dependencies
 
 - golang >=1.17
-- fzf
 
 ## Install/Update firm with golang
 
@@ -20,29 +19,15 @@ go install github.com/jacbart/fidelius-charm/cmd/firm@latest
 
 ## Configure firm
 
-This tool uses `~/.aws/credentials` and `~/.aws/config` to configure itself.
-
-**~/.aws/credentials**
-```ini
-[default]
-aws_access_key_id = 
-aws_secret_access_key =
+**~/.config/firm/firm.config** or **~/firm.config** or **./firm.config**
 ```
+general {
+  default_profile = "default"
+  editor = ""
+  secrets_path = ""
+}
 
-**~/.aws/config**
-```ini
-[default]
-region = 
-output = json
-```
-
-### Optional config file
-**~/.aws/firm.config** or **~/.config/firm/firm.config** or **~/firm.config** or **./firm.config**
-```yaml
-# aws is the only working platform right now
-platform: "aws" # gcp, azure, do (digital ocean)
-secrets_path: "/absolute/path/to/secrets/download/folder"
-editor: "nvim"
+manager "aws" "default" {} # if no creds are provided firm will use the ~/.aws/credentials
 ```
 
 The `secrets_path` can be set with the `--path` flag and the `editor` can be set with the `$EDITOR` environment variable.
