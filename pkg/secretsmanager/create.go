@@ -1,4 +1,4 @@
-package manager
+package secretsmanager
 
 import (
 	"fmt"
@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/fatih/color"
-	"github.com/jacbart/fidelius-charm/utils/helpers"
+	"github.com/jacbart/jaws/utils/helpers"
 )
 
 // AWSManager Create

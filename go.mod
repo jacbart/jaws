@@ -1,4 +1,4 @@
-module github.com/jacbart/fidelius-charm
+module github.com/jacbart/jaws
 
 go 1.17
 

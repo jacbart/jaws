@@ -1,4 +1,4 @@
-package manager
+package secretsmanager
 
 import (
 	"context"
@@ -7,7 +7,7 @@ import (
 	"os"
 
 	"github.com/fatih/color"
-	"github.com/jacbart/fidelius-charm/internal/aws"
+	"github.com/jacbart/jaws/internal/aws"
 )
 
 // AWSManager Set

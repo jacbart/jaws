@@ -8,8 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/jacbart/fidelius-charm/pkg/manager"
-	"github.com/jacbart/fidelius-charm/utils/helpers"
+	"github.com/jacbart/jaws/pkg/secretsmanager"
+	"github.com/jacbart/jaws/utils/helpers"
 	"github.com/spf13/cobra"
 )
 
@@ -45,7 +45,7 @@ func commands() {
 func flags() {
 	// global persistent flags
 	rootCmd.PersistentFlags().StringVar(&secretsPath, "path", "secrets", "sets download path for secrets, overrides config")
-	rootCmd.PersistentFlags().StringVarP(&cfgFile, "config", "c", "", "set config file (default location is $HOME/.aws/firm.config)")
+	rootCmd.PersistentFlags().StringVarP(&cfgFile, "config", "c", "", "set config file")
 	// create command flags
 	createCmd.Flags().BoolVarP(&useEditor, "editor", "e", false, "open any selected secrets in an editor")
 	// delete command flags
@@ -60,7 +60,7 @@ func flags() {
 }
 
 var (
-	secretsManager    manager.Manager
+	secretManager     secretsmanager.Manager
 	cfgFile           string
 	secretsPath       string
 	scheduleInDays    int64
@@ -73,10 +73,10 @@ var (
 	// rootCmd represents the base command when called without any subcommands
 	rootCmd = &cobra.Command{
 		Use:   "firm",
-		Short: "firm (Fidelius Charm) is a cli tool to interact with AWS's secrets manager",
-		Long: `firm (Fidelius Charm) is a cli tool to interact with AWS's secrets manager.
+		Short: "firm (Fidelius Charm) is a cli tool to interact with secrets managers",
+		Long: `firm (Fidelius Charm) is a cli tool to interact with secrets managers.
 A recommened secrets format is ENV/APP/DEPLOYMENT/SecretType. When downloading
-secrets will create a path using the name of the secret, it requires the same format when uploading secrets.`,
+secrets they will create a path using the name of the secret, it requires the same format when uploading secrets.`,
 		Example: "firm get --print",
 	}
 
@@ -106,7 +106,7 @@ secrets will create a path using the name of the secret, it requires the same fo
 		Short:   "clean the local secrets from your computer, same as 'rm -rf /path/to/secrets'",
 		Aliases: []string{"scrub"},
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return manager.Clean(secretsPath)
+			return secretsmanager.Clean(secretsPath)
 		},
 	}
 
@@ -115,7 +115,7 @@ secrets will create a path using the name of the secret, it requires the same fo
 		Use:   "create",
 		Short: "creates folder path and empty file to edit",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return secretsManager.Create(args, secretsPath, useEditor)
+			return secretManager.Create(args, secretsPath, useEditor)
 		},
 	}
 
@@ -125,7 +125,7 @@ secrets will create a path using the name of the secret, it requires the same fo
 		Short:   "schedule secret(s) for deletion",
 		Aliases: []string{"remove"},
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return secretsManager.Delete(scheduleInDays)
+			return secretManager.Delete(scheduleInDays)
 		},
 	}
 
@@ -135,7 +135,7 @@ secrets will create a path using the name of the secret, it requires the same fo
 		Short:   "cancel a scheduled secret deletion",
 		Example: "firm delete cancel testing/app/default/secret",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return secretsManager.DeleteCancel(args)
+			return secretManager.DeleteCancel(args)
 		},
 	}
 
@@ -168,7 +168,7 @@ selected secrets to download them.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			var noSelErr = errors.New("no secrets selected")
 			var secretIDs []string
-			Secrets, err := secretsManager.Get(args)
+			Secrets, err := secretManager.Get(args)
 			if err != nil {
 				return err
 			}
@@ -194,11 +194,10 @@ selected secrets to download them.`,
 				}
 			} else {
 				if cleanPrintValue {
-					manager.CleanPrintSecrets(Secrets)
+					secretsmanager.CleanPrintSecrets(Secrets)
 				} else if formatPrintValue {
-					manager.FormatPrintSecret(Secrets)
+					secretsmanager.FormatPrintSecret(Secrets)
 				}
-
 			}
 			return nil
 		},
@@ -210,7 +209,7 @@ selected secrets to download them.`,
 		Short:   "list available secrets",
 		Aliases: []string{"ls"},
 		RunE: func(cmd *cobra.Command, args []string) error {
-			list, err := secretsManager.ListAll()
+			list, err := secretManager.ListAll()
 			for _, secretID := range list {
 				fmt.Println(secretID)
 			}
@@ -224,7 +223,7 @@ selected secrets to download them.`,
 		Short:   "rollback the selected secrets by one version (only 2 total versions available)",
 		Aliases: []string{"rotate"},
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return secretsManager.Rollback()
+			return secretManager.Rollback()
 		},
 	}
 
@@ -233,10 +232,10 @@ selected secrets to download them.`,
 		Use:   "set",
 		Short: "updates secrets and will prompt to create if there is a new secret detected",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return secretsManager.Set(secretsPath, createPrompt)
+			return secretManager.Set(secretsPath, createPrompt)
 		},
 		PostRunE: func(cmd *cobra.Command, args []string) error {
-			return manager.SetPostRun(secretsPath, cleanLocalSecrets)
+			return secretsmanager.SetPostRun(secretsPath, cleanLocalSecrets)
 		},
 	}
 )
@@ -250,7 +249,7 @@ func init() {
 // initConfig reads in config file and ENV variables if set.
 func initConfig() {
 
-	c := manager.NewFirmConfig()
+	c := secretsmanager.NewFirmConfig()
 
 	if cfgFile != "" {
 		c.SetConfigName(cfgFile)
@@ -264,12 +263,12 @@ func initConfig() {
 	general, managers, err := c.ReadInConfig()
 	if err != nil {
 		switch err.(type) {
-		case *manager.NoConfigFileFound:
+		case *secretsmanager.NoConfigFileFound:
 			fmt.Println("no config found, defaulting to aws")
-			secretsManager = &manager.AWSManager{
+			secretManager = &secretsmanager.AWSManager{
 				Profile: "default",
 			}
-			general = &manager.GeneralHCL{
+			general = &secretsmanager.GeneralHCL{
 				DefaultProfile: "default",
 				SecretsPath:    "secrets",
 			}
@@ -280,7 +279,7 @@ func initConfig() {
 		if len(managers) != 0 {
 			for _, m := range managers {
 				if m.ProfileName() == general.DefaultProfile {
-					secretsManager = m
+					secretManager = m
 				}
 			}
 		}

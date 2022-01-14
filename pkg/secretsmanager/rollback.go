@@ -1,10 +1,10 @@
-package manager
+package secretsmanager
 
 import (
 	"context"
 	"fmt"
 
-	"github.com/jacbart/fidelius-charm/internal/aws"
+	"github.com/jacbart/jaws/internal/aws"
 )
 
 // AWSManager Rollback
