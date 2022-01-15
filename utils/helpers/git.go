@@ -22,3 +22,5 @@ func GitStatus(secretsPath string) error {
 	c.Run()
 	return nil
 }
+
+// func NewGitDiff(secretsPath)

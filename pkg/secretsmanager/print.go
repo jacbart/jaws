@@ -15,7 +15,7 @@ func CleanPrintSecrets(Secrets []Secret) {
 
 func FormatPrintSecret(Secrets []Secret) {
 	for _, s := range Secrets {
-		color.Magenta(s.ID)
+		fmt.Printf("Secret ID: %s\n", color.MagentaString(s.ID))
 		color.HiGreen(s.Content)
 	}
 }

@@ -172,11 +172,15 @@ selected secrets to download them.`,
 			if err != nil {
 				return err
 			}
-			for _, s := range Secrets {
-				secretIDs = append(secretIDs, s.ID)
-			}
 
 			if !formatPrintValue && !cleanPrintValue {
+				for _, s := range Secrets {
+					err = secretsmanager.DownloadSecret(s.ID, s.Content, secretsPath)
+					if err != nil {
+						return err
+					}
+					fmt.Printf("%s/%s\n", secretsPath, s.ID)
+				}
 				f, err := filepath.Abs(secretsPath)
 				if err != nil {
 					return err
@@ -270,7 +274,6 @@ func initConfig() {
 			}
 			general = &secretsmanager.GeneralHCL{
 				DefaultProfile: "default",
-				SecretsPath:    "secrets",
 			}
 		default:
 			log.Fatalln(err)
@@ -287,7 +290,11 @@ func initConfig() {
 
 	// check if secretsPath flag is set to something other than secrets, if not then use config set path
 	if strings.Compare(secretsPath, "secrets") == 0 {
-		secretsPath = general.SecretsPath
+		if general.SecretsPath == "" {
+			secretsPath = "secrets"
+		} else {
+			secretsPath = general.SecretsPath
+		}
 	}
 	if general.Editor != "" {
 		os.Setenv("EDITOR", general.Editor)
