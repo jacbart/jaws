@@ -25,6 +25,7 @@ func commands() {
 	rootCmd.AddCommand(cleanCmd)
 	// add create command
 	rootCmd.AddCommand(createCmd)
+	createCmd.AddCommand(createConfigCmd)
 	// add delete command and sub cancel command
 	rootCmd.AddCommand(deleteCmd)
 	deleteCmd.AddCommand(deleteCancelCmd)
@@ -73,8 +74,8 @@ var (
 	// rootCmd represents the base command when called without any subcommands
 	rootCmd = &cobra.Command{
 		Use:   "jaws",
-		Short: "jaws (Fidelius Charm) is a cli tool to interact with secrets managers",
-		Long: `jaws (Fidelius Charm) is a cli tool to interact with secrets managers.
+		Short: "jaws is a cli tool to interact with secrets managers",
+		Long: `jaws is a cli tool to interact with secrets managers.
 A recommened secrets format is ENV/APP/DEPLOYMENT/SecretType. When downloading
 secrets they will create a path using the name of the secret, it requires the same format when uploading secrets.`,
 		Example: "jaws get --print",
@@ -116,6 +117,15 @@ secrets they will create a path using the name of the secret, it requires the sa
 		Short: "creates folder path and empty file to edit",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return secretManager.Create(args, secretsPath, useEditor)
+		},
+	}
+
+	// createConfigCmd represents the set command
+	createConfigCmd = &cobra.Command{
+		Use:   "config",
+		Short: "Creates a new config file",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return secretsmanager.CreateConfig()
 		},
 	}
 

@@ -2,8 +2,12 @@ package secretsmanager
 
 import (
 	"context"
+	_ "embed"
+	"os"
+	"text/template"
 
 	"github.com/hashicorp/hcl/v2"
+	"github.com/jacbart/jaws/utils/helpers"
 )
 
 type Manager interface {
@@ -40,4 +44,33 @@ type AWSManager struct {
 	AccessID  string `hcl:"access_id,optional"`
 	SecretKey string `hcl:"secret_key,optional"`
 	Region    string `hcl:"region,optional"`
+}
+
+//go:embed config.tmpl
+var configTmpl string
+
+func CreateConfig() error {
+	c := Config{
+		General: &GeneralHCL{
+			DefaultProfile: "default",
+			Editor:         os.Getenv("EDITOR"),
+		},
+		Managers: []*managerHCL{
+			{
+				Platform: "aws",
+				Profile:  "default",
+				Auth:     hcl.EmptyBody(),
+			},
+		},
+	}
+
+	tmpl, err := template.New("jaws-new.config").Funcs(helpers.Funcs).Parse(configTmpl)
+	if err != nil {
+		return err
+	}
+	err = tmpl.Execute(os.Stdout, c)
+	if err != nil {
+		return err
+	}
+	return nil
 }

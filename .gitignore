@@ -5,3 +5,4 @@ jaws
 secrets
 !pkg/secrets
 !internal/aws/secrets
+dist/

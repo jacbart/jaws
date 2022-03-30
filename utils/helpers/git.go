@@ -23,4 +23,6 @@ func GitStatus(secretsPath string) error {
 	return nil
 }
 
-// func NewGitDiff(secretsPath)
+func NewGitDiff(secretsPath string) error {
+	return nil
+}

@@ -1,0 +1,13 @@
+general {
+  default_profile = {{ .DefaultProfile | default "default" }}
+  {{ if .Editor }}
+  editor = {{ .Editor }}
+  {{ end }}
+  {{ if .SecretPath }}
+  secrets_path = {{ .SecretPath }}
+  {{ end }}
+}
+
+{{ range $platform := .Platforms }}{{ range $profile := .Profiles }}
+manager {{ $platform }} {{ $profile }} {}
+{{ end }}{{ end }}
