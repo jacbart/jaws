@@ -8,7 +8,6 @@ import (
 
 func CleanPrintSecrets(Secrets []Secret) {
 	for _, s := range Secrets {
-		fmt.Println(s.ID)
 		fmt.Println(s.Content)
 	}
 }
