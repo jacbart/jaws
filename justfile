@@ -1,14 +1,14 @@
 alias b := build
 alias c := clean
 
-date := `date "+%Y-%m-%d"`
-version := `git tag --points-at HEAD --sort -version:refname`
-
 build:
-    CGO_ENABLED=1 go build -ldflags "-s -w -X 'main.Version={{version}}-rc' -X 'main.Date={{date}}'" ./cmd/jaws
+    goreleaser build --single-target --rm-dist --snapshot
+
+build-all:
+    goreleaser build --rm-dist --snapshot
 
 release:
-    goreleaser --rm-dist
+    goreleaser release --rm-dist
 
 clean:
     rm -f ./jaws
