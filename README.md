@@ -11,6 +11,12 @@ For info on how to use this tool the `--help/-h` option will work on the root `j
 - golang >=1.18
 - git (optional)
 
+## Install binary
+
+```bash
+curl -sfL https://raw.githubusercontent.com/jacbart/jaws/main/install.sh | bash
+```
+
 ## Install/Update jaws with golang
 
 ```bash
