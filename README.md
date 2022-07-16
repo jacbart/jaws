@@ -9,7 +9,7 @@ For info on how to use this tool the `--help/-h` option will work on the root `j
 ## Dependencies
 
 - golang >=1.18
-- git (optional)
+- git (optional for `jaws diff` command)
 
 ## Install binary
 
@@ -35,6 +35,10 @@ Secret Manager Compatibility:
 | Digital Ocean         | No       |
 | Hasicorp Vault        | No       |
 
+Generate new config
+```sh
+jaws config create > jaws.config
+```
 
 ```
 general {
