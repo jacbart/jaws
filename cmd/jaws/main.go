@@ -53,6 +53,8 @@ func flags() {
 	// global persistent flags
 	rootCmd.PersistentFlags().StringVar(&secretsPath, "path", "secrets", "sets download path for secrets, overrides config")
 	rootCmd.PersistentFlags().StringVarP(&cfgFile, "config", "c", "", "set config file")
+	// version command flags
+	versionCmd.Flags().BoolVarP(&rawVersion, "raw", "r", false, "return version only")
 	// create command flags
 	createCmd.Flags().BoolVarP(&useEditor, "editor", "e", false, "open any selected secrets in an editor")
 	// delete command flags
@@ -77,6 +79,7 @@ var (
 	cleanPrintValue   bool
 	createPrompt      bool
 	cleanLocalSecrets bool
+	rawVersion        bool
 	Version           string
 	Date              string
 
@@ -92,11 +95,16 @@ secrets they will create a path using the name of the secret, it requires the sa
 
 	// versionCmd represents the set command
 	versionCmd = &cobra.Command{
-		Use:   "version",
-		Short: "display version and info on jaws binary",
+		Use:     "version",
+		Short:   "display version and info on jaws binary",
+		Aliases: []string{"v"},
 		RunE: func(cmd *cobra.Command, args []string) error {
-			fmt.Printf("jaws version %s (%s)\n", Version, Date)
-			fmt.Println("https://github.com/jacbart/jaws/releases/tag/" + Version)
+			if rawVersion {
+				fmt.Print(Version)
+			} else {
+				fmt.Printf("jaws version %s (%s)\n", Version, Date)
+				fmt.Println("https://github.com/jacbart/jaws/releases/tag/" + Version)
+			}
 			return nil
 		},
 	}
@@ -133,8 +141,9 @@ secrets they will create a path using the name of the secret, it requires the sa
 
 	// createCmd represents the set command
 	createCmd = &cobra.Command{
-		Use:   "create",
-		Short: "creates folder path and empty file to edit",
+		Use:     "create",
+		Short:   "creates folder path and empty file to edit",
+		Aliases: []string{"c"},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return secretManager.Create(args, secretsPath, useEditor)
 		},
@@ -186,6 +195,7 @@ secrets they will create a path using the name of the secret, it requires the sa
 fzf, you can then search for secrets by typing, select secrets with tab and enter to confirm
 selected secrets to download them.`,
 		Example: "jaws get testing/app/default/key -p",
+		Aliases: []string{"g"},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			var noSelErr = errors.New("no secrets selected")
 			var secretIDs []string
@@ -255,8 +265,9 @@ selected secrets to download them.`,
 
 	// setCmd represents the set command
 	setCmd = &cobra.Command{
-		Use:   "set",
-		Short: "updates secrets and will prompt to create if there is a new secret detected",
+		Use:     "set",
+		Short:   "updates secrets and will prompt to create if there is a new secret detected",
+		Aliases: []string{"s"},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return secretManager.Set(secretsPath, createPrompt)
 		},
