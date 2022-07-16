@@ -70,11 +70,11 @@ func CreateConfig() error {
 
 	tmpl, err := template.New("jaws.config").Funcs(helpers.TemplateFuncs).Parse(configTmpl)
 	if err != nil {
-		return err
+    return fmt.Errorf("tmpl parse phase: %w", err)
 	}
 	err = tmpl.Execute(os.Stdout, c)
 	if err != nil {
-		return fmt.Errorf("encountered at execution phase: %w", err)
+		return fmt.Errorf("tmpl execution phase: %w", err)
 	}
 	return nil
 }

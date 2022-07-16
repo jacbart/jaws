@@ -3,6 +3,7 @@ package secretsmanager
 import (
 	"context"
 	"log"
+	"sync"
 
 	"github.com/jacbart/jaws/internal/aws"
 	"github.com/ktr0731/go-fuzzyfinder"
@@ -41,9 +42,12 @@ func (a *AWSManager) FuzzyFind(ctx context.Context) ([]string, error) {
 		}
 	}(a, &allIDs)
 
+	rw := sync.RWMutex{}
+	l := rw.RLocker()
+
 	idxs, _ := fuzzyfinder.FindMulti(&allIDs, func(i int) string {
 		return allIDs[i]
-	}, fuzzyfinder.WithHotReload())
+	}, fuzzyfinder.WithHotReloadLock(l))
 	for _, idx := range idxs {
 		selectedIDs = append(selectedIDs, allIDs[idx])
 	}
