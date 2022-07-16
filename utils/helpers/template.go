@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-var Funcs = map[string]interface{}{
+var TemplateFuncs = map[string]interface{}{
 	"default": dfault,
 	"quote":   quote,
 }
@@ -22,7 +22,6 @@ var Funcs = map[string]interface{}{
 //
 // For everything else, including pointers, a nil value is unset.
 func dfault(d interface{}, given ...interface{}) interface{} {
-
 	if empty(given) || empty(given[0]) {
 		return d
 	}

@@ -8,7 +8,7 @@ For info on how to use this tool the `--help/-h` option will work on the root `j
 
 ## Dependencies
 
-- golang >=1.17
+- golang >=1.18
 - git
 
 ## Install/Update jaws with golang

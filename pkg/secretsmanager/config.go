@@ -1,8 +1,11 @@
 package secretsmanager
 
 import (
+	"bufio"
 	"context"
 	_ "embed"
+	"fmt"
+	"log"
 	"os"
 	"text/template"
 
@@ -23,8 +26,8 @@ type Manager interface {
 }
 
 type Config struct {
-	General  *GeneralHCL   `hcl:"general,block"`
-	Managers []*managerHCL `hcl:"manager,block"`
+	General  GeneralHCL   `hcl:"general,block"`
+	Managers []managerHCL `hcl:"manager,block"`
 }
 
 type GeneralHCL struct {
@@ -51,26 +54,46 @@ var configTmpl string
 
 func CreateConfig() error {
 	c := Config{
-		General: &GeneralHCL{
+		General: GeneralHCL{
 			DefaultProfile: "default",
 			Editor:         os.Getenv("EDITOR"),
+			SecretsPath:    fmt.Sprintf("%s/.jaws/secrets", os.Getenv("HOME")),
 		},
-		Managers: []*managerHCL{
+		Managers: []managerHCL{
 			{
 				Platform: "aws",
 				Profile:  "default",
-				Auth:     hcl.EmptyBody(),
+				Auth:     nil,
 			},
 		},
 	}
 
-	tmpl, err := template.New("jaws-new.config").Funcs(helpers.Funcs).Parse(configTmpl)
+	tmpl, err := template.New("jaws.config").Funcs(helpers.TemplateFuncs).Parse(configTmpl)
 	if err != nil {
 		return err
 	}
 	err = tmpl.Execute(os.Stdout, c)
 	if err != nil {
+		return fmt.Errorf("encountered at execution phase: %w", err)
+	}
+	return nil
+}
+
+func ShowConfig(path string) error {
+	file, err := os.Open(path)
+	if err != nil {
 		return err
+	}
+	defer func() {
+		if err = file.Close(); err != nil {
+			log.Fatal(err)
+		}
+	}()
+
+	scanner := bufio.NewScanner(file)
+
+	for scanner.Scan() {
+		fmt.Println(scanner.Text())
 	}
 	return nil
 }

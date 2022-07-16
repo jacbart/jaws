@@ -25,7 +25,6 @@ func commands() {
 	rootCmd.AddCommand(cleanCmd)
 	// add create command
 	rootCmd.AddCommand(createCmd)
-	createCmd.AddCommand(createConfigCmd)
 	// add delete command and sub cancel command
 	rootCmd.AddCommand(deleteCmd)
 	deleteCmd.AddCommand(deleteCancelCmd)
@@ -41,6 +40,11 @@ func commands() {
 	rootCmd.AddCommand(rollbackCmd)
 	// add set command
 	rootCmd.AddCommand(setCmd)
+	// add config command
+	rootCmd.AddCommand(configCmd)
+	configCmd.AddCommand(configShowCmd)
+	configCmd.AddCommand(configCreateCmd)
+
 }
 
 func flags() {
@@ -62,6 +66,7 @@ func flags() {
 
 var (
 	secretManager     secretsmanager.Manager
+	jawsConf          secretsmanager.JawsConfig
 	cfgFile           string
 	secretsPath       string
 	scheduleInDays    int64
@@ -117,15 +122,6 @@ secrets they will create a path using the name of the secret, it requires the sa
 		Short: "creates folder path and empty file to edit",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return secretManager.Create(args, secretsPath, useEditor)
-		},
-	}
-
-	// createConfigCmd represents the set command
-	createConfigCmd = &cobra.Command{
-		Use:   "config",
-		Short: "Creates a new config file",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return secretsmanager.CreateConfig()
 		},
 	}
 
@@ -252,6 +248,35 @@ selected secrets to download them.`,
 			return secretsmanager.SetPostRun(secretsPath, cleanLocalSecrets)
 		},
 	}
+
+	// configCmd represents the config command
+	configCmd = &cobra.Command{
+		Use:   "config",
+		Short: "display current config path, subcommands to create and show config",
+		Run: func(cmd *cobra.Command, args []string) {
+			fmt.Println(jawsConf.CurrentConfig)
+		},
+	}
+
+	// configShowCmd represents the config command
+	configShowCmd = &cobra.Command{
+		Use:     "show",
+		Short:   "Show config",
+		Aliases: []string{"get", "display"},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return secretsmanager.ShowConfig(jawsConf.CurrentConfig)
+		},
+	}
+
+	// configCreateCmd represents the set command
+	configCreateCmd = &cobra.Command{
+		Use:     "create",
+		Short:   "Creates a new config file",
+		Aliases: []string{"gen", "generate"},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return secretsmanager.CreateConfig()
+		},
+	}
 )
 
 func init() {
@@ -262,19 +287,18 @@ func init() {
 
 // initConfig reads in config file and ENV variables if set.
 func initConfig() {
-
-	c := secretsmanager.NewJawsConfig()
+	jawsConf = secretsmanager.InitJawsConfig()
 
 	if cfgFile != "" {
-		c.SetConfigName(cfgFile)
+		jawsConf.SetConfigName(cfgFile)
 	} else {
-		c.SetConfigName("jaws.config")
-		c.AddConfigPath(".")
-		c.AddConfigPath(fmt.Sprintf("%s/.config/jaws", os.Getenv("HOME")))
-		c.AddConfigPath(os.Getenv("HOME"))
+		jawsConf.SetConfigName("jaws.config")
+		jawsConf.AddConfigPath(".")
+		jawsConf.AddConfigPath(fmt.Sprintf("%s/.config/jaws", os.Getenv("HOME")))
+		jawsConf.AddConfigPath(os.Getenv("HOME"))
 	}
 
-	general, managers, err := c.ReadInConfig()
+	general, managers, err := jawsConf.ReadInConfig()
 	if err != nil {
 		switch err.(type) {
 		case *secretsmanager.NoConfigFileFound:
@@ -282,7 +306,7 @@ func initConfig() {
 			secretManager = &secretsmanager.AWSManager{
 				Profile: "default",
 			}
-			general = &secretsmanager.GeneralHCL{
+			general = secretsmanager.GeneralHCL{
 				DefaultProfile: "default",
 			}
 		default:
