@@ -200,6 +200,7 @@ selected secrets to download them.`,
 					if err != nil {
 						return err
 					}
+					secretIDs = append(secretIDs, s.ID)
 					fmt.Printf("%s/%s\n", secretsPath, s.ID)
 				}
 				f, err := filepath.Abs(secretsPath)
