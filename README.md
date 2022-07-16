@@ -13,6 +13,8 @@ For info on how to use this tool the `--help/-h` option will work on the root `j
 
 ## Install binary
 
+This script will download the latest released jaws binary for your system and move it into `~/.local/bin`.
+
 ```bash
 curl -sfL https://raw.githubusercontent.com/jacbart/jaws/main/install.sh | bash
 ```
@@ -25,7 +27,10 @@ go install github.com/jacbart/jaws/cmd/jaws@latest
 
 ## Configure jaws
 
-**~/.config/jaws/jaws.config** or **~/jaws.config** or **./jaws.config**
+jaws will look for a config in these folders in order  
+1. **./jaws.conf**  
+2. **~/.jaws/jaws.conf**  
+3. **~/.config/jaws/jaws.conf**  
 
 Secret Manager Compatibility:
 | Platform              | Working? |
@@ -37,7 +42,7 @@ Secret Manager Compatibility:
 
 Generate new config
 ```sh
-jaws config create > jaws.config
+jaws config create > jaws.conf
 ```
 
 ```
@@ -72,7 +77,7 @@ jaws path command >> ~/.bashrc
 # or
 # load the command into your current session only
 source <(jaws path command)
-# jawsd or jaws-cd toggles between your current directory and the secrets folder in your jaws.config file
+# jawsd or jaws-cd toggles between your current directory and the secrets folder in your jaws.conf file
 jd
 # or
 jaws-cd

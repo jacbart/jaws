@@ -68,7 +68,7 @@ func CreateConfig() error {
 		},
 	}
 
-	tmpl, err := template.New("jaws.config").Funcs(helpers.TemplateFuncs).Parse(configTmpl)
+	tmpl, err := template.New("jaws.conf").Funcs(helpers.TemplateFuncs).Parse(configTmpl)
 	if err != nil {
     return fmt.Errorf("tmpl parse phase: %w", err)
 	}

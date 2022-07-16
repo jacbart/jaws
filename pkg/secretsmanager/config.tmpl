@@ -1,17 +1,16 @@
-{{- with .General }}
-general {
-  default_profile = {{ .DefaultProfile | default "default" }}
+{{- with .General }}general {
+  default_profile = {{ .DefaultProfile | quote }}
   {{- if .Editor }}
-  editor = {{ .Editor }}
+  editor = {{ .Editor | quote }}
   {{- end }}
   {{- if .SecretsPath }}
-  secrets_path = {{ .SecretsPath }}
+  secrets_path = {{ .SecretsPath | quote }}
   {{- end }}
 }
-{{- end }}
+{{ end }}
 
 {{- range $manager := .Managers }}
-manager {{ $manager.Platform }} {{ $manager.Profile }} {
-  {{ $manager.Auth | default "" }}
+manager {{ $manager.Platform | quote }} {{ $manager.Profile | quote }} {
+  {{- $manager.Auth | default "" }}
 }
 {{ end }}

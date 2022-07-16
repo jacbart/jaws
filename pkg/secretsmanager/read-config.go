@@ -84,21 +84,23 @@ func (c *JawsConfig) ReadInConfig() (GeneralHCL, []Manager, error) {
 
 	configHCL := &Config{}
 	if diag := gohcl.DecodeBody(srcHCL.Body, evalContext, configHCL); diag.HasErrors() {
-		return *nilGeneral, nil, fmt.Errorf(
-			"error in ReadConfig decoding HCL configuration: %w", diag,
-		)
+		// return *nilGeneral, nil, fmt.Errorf(
+		// 	"error in ReadConfig decoding HCL configuration: %w", diag,
+		// )
+		return *nilGeneral, nil, &DecodeConfigFailed{File: c.CurrentConfig}
 	}
 
 	managers := []Manager{}
-	for _, c := range configHCL.Managers {
-		switch managerPlatform := c.Platform; managerPlatform {
+	for _, m := range configHCL.Managers {
+		switch managerPlatform := m.Platform; managerPlatform {
 		case "aws":
-			aws := &AWSManager{Profile: c.Profile}
-			if c.Auth != nil {
-				if diag := gohcl.DecodeBody(c.Auth, evalContext, aws); diag.HasErrors() {
-					return *nilGeneral, nil, fmt.Errorf(
-						"error in ReadConfig decoding aws HCL configuration: %w", diag,
-					)
+			aws := &AWSManager{Profile: m.Profile}
+			if m.Auth != nil {
+				if diag := gohcl.DecodeBody(m.Auth, evalContext, aws); diag.HasErrors() {
+					// return *nilGeneral, nil, fmt.Errorf(
+					// 	"error in ReadConfig decoding aws HCL configuration: %w", diag,
+					// )
+					return *nilGeneral, nil, &DecodeConfigFailed{File: c.CurrentConfig}
 				}
 			}
 			managers = append(managers, aws)

@@ -319,10 +319,10 @@ func initConfig() {
 	if cfgFile != "" {
 		jawsConf.SetConfigName(cfgFile)
 	} else {
-		jawsConf.SetConfigName("jaws.config")
+		jawsConf.SetConfigName("jaws.conf")
 		jawsConf.AddConfigPath(".")
+		jawsConf.AddConfigPath(fmt.Sprintf("%s/.jaws", os.Getenv("HOME")))
 		jawsConf.AddConfigPath(fmt.Sprintf("%s/.config/jaws", os.Getenv("HOME")))
-		jawsConf.AddConfigPath(os.Getenv("HOME"))
 	}
 
 	general, managers, err := jawsConf.ReadInConfig()
@@ -330,6 +330,13 @@ func initConfig() {
 		switch err.(type) {
 		case *secretsmanager.NoConfigFileFound:
 			fmt.Println("no config found, defaulting to aws")
+			secretManager = &secretsmanager.AWSManager{
+				Profile: "default",
+			}
+			general = secretsmanager.GeneralHCL{
+				DefaultProfile: "default",
+			}
+		case *secretsmanager.DecodeConfigFailed:
 			secretManager = &secretsmanager.AWSManager{
 				Profile: "default",
 			}
