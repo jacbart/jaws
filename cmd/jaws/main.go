@@ -18,6 +18,8 @@ func main() {
 }
 
 func commands() {
+	// add version command
+	rootCmd.AddCommand(versionCmd)
 	// add path command and sub commands
 	rootCmd.AddCommand(pathCmd)
 	pathCmd.AddCommand(pathCommandCmd)
@@ -75,6 +77,8 @@ var (
 	cleanPrintValue   bool
 	createPrompt      bool
 	cleanLocalSecrets bool
+	Version           string
+	Date              string
 
 	// rootCmd represents the base command when called without any subcommands
 	rootCmd = &cobra.Command{
@@ -84,6 +88,17 @@ var (
 A recommened secrets format is ENV/APP/DEPLOYMENT/SecretType. When downloading
 secrets they will create a path using the name of the secret, it requires the same format when uploading secrets.`,
 		Example: "jaws get --print",
+	}
+
+	// versionCmd represents the set command
+	versionCmd = &cobra.Command{
+		Use:   "version",
+		Short: "display version and info on jaws binary",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			fmt.Printf("jaws version %s (%s)\n", Version, Date)
+			fmt.Println("https://github.com/jacbart/jaws/releases/tag/" + Version)
+			return nil
+		},
 	}
 
 	// pathCmd represents the set command
