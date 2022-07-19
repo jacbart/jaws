@@ -8,10 +8,9 @@ For info on how to use this tool the `--help/-h` option will work on the root `j
 
 ## Dependencies
 
-- golang >=1.18
 - git (optional for `jaws diff` command)
 
-## Install binary
+## Install latest released binary
 
 This script will download the latest released jaws binary for your system and move it into `~/.local/bin`.
 
@@ -19,10 +18,20 @@ This script will download the latest released jaws binary for your system and mo
 curl -sfL https://raw.githubusercontent.com/jacbart/jaws/main/install.sh | bash
 ```
 
-## Install/Update jaws with golang
+## Install jaws with golang
+
+**Dependencies**  
+
+- golang >=1.18
 
 ```bash
 go install github.com/jacbart/jaws/cmd/jaws@latest
+```
+
+## Build from source
+
+```bash
+CGO_ENABLED=0 go build -ldflags "-s -w -X 'main.Version=0.1.4-rc' -X 'main.Date=today'" ./cmd/jaws
 ```
 
 ## Configure jaws
@@ -37,7 +46,6 @@ Secret Manager Compatibility:
 | --------------------- | -------- |
 | Amazon Web Services   | Yes      |
 | Google Cloud Platform | No       |
-| Digital Ocean         | No       |
 | Hasicorp Vault        | No       |
 
 Generate new config
