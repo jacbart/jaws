@@ -1,6 +1,6 @@
 # JAWS  
 
-This project was insired by AWS's bad UX for their secrets manager. JAWS utilizes a fuzzy finder to make filtering and selecting of multiple secrets easy. Once you have the secrets downloaded just edit the files as you would like and run the push command to update those secrets.
+This project was inspired by AWS not having the best UX for their secrets management. This tool uses a fuzzy finder to make filtering and selecting of multiple secrets easy. Once you have the secrets downloaded just edit the files as you would like and run the set command to update the secrets.
 
 # Guides
 
