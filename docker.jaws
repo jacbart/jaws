@@ -1,0 +1,6 @@
+msg = "testing config file for jaws docker"
+prefix = "testing/jaws/"
+
+vars {
+    TEST_CONFIG = file("jaws.conf", var.CONFIG)
+}

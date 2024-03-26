@@ -1,16 +1,32 @@
+{{- define "empty" }}
 {{- with .General }}general {
   default_profile = {{ .DefaultProfile | quote }}
-  {{- if .Editor }}
+  disable_auto_detect = {{ .DisableDetectJawsFiles }}
   editor = {{ .Editor | quote }}
-  {{- end }}
-  {{- if .SecretsPath }}
+  gh_token = {{ .GithubToken | quote }}
+  repo_warn = {{ .RepoWarn }}
+  safe_mode = {{ .SafeMode }}
   secrets_path = {{ .SecretsPath | quote }}
-  {{- end }}
 }
 {{ end }}
 
 {{- range $manager := .Managers }}
-manager {{ $manager.Platform | quote }} {{ $manager.Profile | quote }} {
-  {{- $manager.Auth | default "" }}
+manager {{ $manager.Platform | quote }} {{ $manager.ProfileLabel | quote }} {
+  {{ $manager.Auth | default "  profile = \"default\"" }}
+}
+{{ end }}{{- end }}
+{{- define "cicd" }}
+{{- with .General }}general {
+  default_profile = {{ .DefaultProfile | quote }}
+  disable_auto_detect = {{ .DisableDetectJawsFiles }}
+  editor = {{ .Editor | quote }}
+  gh_token = {{ .GithubToken | quote }}
+  repo_warn = {{ .RepoWarn }}
+  safe_mode = {{ .SafeMode }}
+  secrets_path = {{ .SecretsPath | quote }}
 }
 {{ end }}
+
+{{- range $manager := .Managers }}
+manager {{ $manager.Platform | quote }} {{ $manager.ProfileLabel | quote }} {}
+{{ end }}{{- end }}

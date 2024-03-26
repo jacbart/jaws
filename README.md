@@ -1,110 +1,94 @@
-# Just A Working Secretsmanager or JAWS
+# JAWS  
 
-This project was insired by AWS not having the best UX for their secrets management. This tool uses a fuzzy finder to make filtering and selecting of multiple secrets easy. Once you have the secrets downloaded just edit the files as you would like and run the set command to update the secrets.
+This project was insired by AWS's bad UX for their secrets manager. JAWS utilizes a fuzzy finder to make filtering and selecting of multiple secrets easy. Once you have the secrets downloaded just edit the files as you would like and run the push command to update those secrets.
 
-Rollback currently only lets there be 2 total versions of each secret so you can only rollback once. **DOUBLE CHECK YOUR WORK BEFORE UPLOADING**
+# Guides
 
-For info on how to use this tool the `--help/-h` option will work on the root `jaws -h` command as well as all sub commands i.e. `jaws get -h`.
+[Getting Started](./docs/getting-started.md)  
+[How to Install](./docs/install.md)  
+[Configuring Jaws](./docs/configure.md)  
+[Managing Project Environment Files](./docs/manage-env.md)  
 
-## Dependencies
+# Demo
 
-- git (optional for `jaws diff` command)
+![demo](./docs/vhs/demo/pull_edit_push.gif)
 
-## Install latest released binary
+# Commands
+## Secrets Manager
+- pull
+- push
+- list
+- add
+- delete
+- rollback
+## Self
+- config - displays basic info on the current config
+	- create - create a new config
+	- show - display the config contents
+	- path - show the current config path
+	- edit - open the current config using the `$EDITOR` env variable
+	- lock - Encrypt the current config with a password or using `$JAWS_CONFIG_KEY` env variable
+	- unlock - Decrypt the current config with a password or using `$JAWS_CONFIG_KEY` env variable
+- clean - clean local secrets by deleting the path
+- completion - shell completions
+- diff - git diff for downloaded secrets
+- path - display the current secrets download path
+	- command - prints a shell function to `popd` and `pushd` to and from the secrets path
+- status - git status for the downloaded secrets
+- update - self update command
+- version - display jaws version
 
-This script will download the latest released jaws binary for your system and move it into `~/.local/bin`.
+# Platforms
 
-```bash
-curl -sfL https://raw.githubusercontent.com/jacbart/jaws/main/install.sh | bash
-```
+## AWS
 
-## Install jaws with golang
+- [x] pull
+	- [x] suggest secret if you miss-type the ID
+- [x] push
+- [x] list
+- [x] add
+- [x] delete
+- [ ] rollback - partial working, no rollback choice
 
-**Dependencies**  
+## GCP
 
-- golang >=1.18
+- [x] pull - partial working
+	- [x] fuzzy pull a secret using the args, if `testing_key` is passed look for `projects/projectID/secrets/testing_key`
+- [x] push
+- [x] list
+- [x] add
+- [x] delete
+- [x] rollback
 
-```bash
-go install github.com/jacbart/jaws/cmd/jaws@latest
-```
+# Environment File Manager
 
-## Build from source
+**purpose**: Using a config file, output a var file that can be consumed at runtime. Using an integration with aws or gcp's secret manager pull secrets and use them as values for keys set in `whatever.jaws`. Using a config file with no important infomation in it can prevent secrets from being leaked or accidentally committed to a repo, it also lets a developer have multiple environments declared in the config i.e. dev, testing, or production.
 
-```bash
-CGO_ENABLED=0 go build -ldflags "-s -w -X 'main.Version=0.1.4-rc' -X 'main.Date=today'" ./cmd/jaws
-```
+## Input
 
-## Configure jaws
+- config file in hcl format
+	- vars
+		- secrets - `secret`
+		- local and env variables - `var`
+			- an environment variable will override one set in the locals block
+	- functions
+		- quote
+		- encode
+		- decode
+		- file
+		- sh
+		- resolve
+		- escape
+		- input
+	- [operators](https://developer.hashicorp.com/terraform/language/expressions/operators)
+	- [conditionals](https://developer.hashicorp.com/terraform/language/expressions/conditionals)
 
-jaws will look for a config in these folders in order  
-1. **./jaws.conf**  
-2. **~/.jaws/jaws.conf**  
-3. **~/.config/jaws/jaws.conf**  
+## Output
 
-Secret Manager Compatibility:
-| Platform              | Working? |
-| --------------------- | -------- |
-| Amazon Web Services   | Yes      |
-| Google Cloud Platform | No       |
-| Hasicorp Vault        | No       |
+>output can print to stdout or to a file directly.
 
-Generate new config
-```sh
-jaws config create > jaws.conf
-```
+- shell variable file i.g. `.env` 
+- json 
+- yaml 
+- tfvars 
 
-```
-general {
-  default_profile = "default"
-  editor = ""
-  secrets_path = ""
-}
-
-manager "aws" "default" {
-  access_id = ""
-  secret_key = ""
-  region = ""
-} # if no creds are provided jaws will use the ~/.aws/credentials or standard environment variables
-```
-
-The `secrets_path` can be set with the `--path` flag and the `editor` can be set with the `$EDITOR` environment variable.
-
-## jaws Examples
-
-```bash
-# pulls a list of secrets into a fuzzy finder, select secrets with tab and press enter
-# to confirm selection
-jaws get
-
-# create the folder stucture and an empty file then open with editor
-jaws create -e testing/fake/example/secret
-
-# add cd command to shell
-jaws path command >> ~/.bashrc
-# then source or restart your terminal jcd should then work
-# or
-# load the command into your current session only
-source <(jaws path command)
-# jawsd or jaws-cd toggles between your current directory and the secrets folder in your jaws.conf file
-jd
-# or
-jaws-cd
-
-# pushes all secrets in the secrets folder, and prompts user if there
-# are any new secrets found (Deletes all local secrets as well --keep
-# if you want to keep them locally)
-jaws set
-
-# pulls a list of secrets into a fuzzy finder, select the secrets you want to rollback a
-# version with tab and hit enter to confirm selection
-jaws rollback
-
-# to schedule secret(s) for deletion
-jaws delete --days 30
-
-# to cancel the deletion you need to specify the secret name
-jaws delete cancel testing/fake/example/secret
-
-# remove local secrets (basically rm -rf /path/to/secrets)
-jaws clean
-```

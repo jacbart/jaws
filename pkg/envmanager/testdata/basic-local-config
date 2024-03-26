@@ -1,0 +1,19 @@
+msg = "test functions"
+out = "local.out"
+
+profile = "default"
+
+// include = ["./basic-aws-config"]
+
+locals {
+	localVar = quote(env.VAR)
+}
+
+vars {
+	SH = quote(sh("jaws", "version"))
+	VAR_NORMAL = local.localVar
+	VAR_QUOTE = quote("02")
+	BASE64 = decode(encode("test"))
+	RESOLVE = resolve("gmail.com")
+	ESCAPE = escape("$", "$100")
+}

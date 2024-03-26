@@ -1,10 +1,20 @@
+# jaws binary and configuration files
 jaws.conf
 jaws
+*.jaws
+!docker.jaws
 !cmd/jaws
 
+# secrets
 secrets
+**/*service-account.json
 !pkg/secrets
 !internal/aws/secrets
+
+# goreleaser builds
 dist/
 
-dist/
+# nix
+result
+vendor/
+.direnv/

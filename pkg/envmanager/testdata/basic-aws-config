@@ -1,0 +1,9 @@
+msg = "test message"
+out = ".env"
+
+profile = "aws"
+prefix = "testing/"
+vars {
+    cert_file = encode(var.CONFIG)
+    SERVER = "${resolve("localhost")}:8080"
+}
