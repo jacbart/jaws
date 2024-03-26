@@ -15,8 +15,8 @@ func ScheduleDeletion(ctx context.Context, client *secretsmanager.Client, secret
 	defer cancel()
 	deleteSecretInput := &secretsmanager.DeleteSecretInput{
 		SecretId:                   aws.String(secretID),
-		ForceDeleteWithoutRecovery: false,
-		RecoveryWindowInDays:       recoveryWindow,
+		ForceDeleteWithoutRecovery: aws.Bool(false),
+		RecoveryWindowInDays:       aws.Int64(recoveryWindow),
 	}
 
 	deleteSecretOutput, err := client.DeleteSecret(timeCtx, deleteSecretInput)
