@@ -30,7 +30,7 @@ test-integration:
   go test -tags=integration github.com/jacbart/jaws/cmd/jaws/... -v -cover
 
 release:
-  GITHUB_TOKEN=$(bw get notes gh-releaser) goreleaser release --clean
+  GITHUB_TOKEN=$(bw get notes gh-token-goreleaser) goreleaser release --clean
 
 clean:
   rm -f ./jaws
