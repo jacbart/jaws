@@ -4,10 +4,7 @@
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
     flake-utils.url = "github:numtide/flake-utils";
-    jaws-stable = {
-      url = "git+ssh://git@github.com/jacbart/jaws.git";
-      flake = false;
-    };
+    jaws-stable.url = "git+ssh://git@github.com/jacbart/jaws.git";
   };
 
   outputs = { self, nixpkgs, flake-utils, jaws-stable, ... }:
@@ -16,26 +13,13 @@
       inherit (nixpkgs) lib;
       pkgs = nixpkgs.legacyPackages.${system};
 
-      utils = import ./nix/utils.nix { inherit lib self; };
-
-      repo = pkgs.fetchgit {
-        url = "git@github.com:jacbart/jaws.git";
-        rev = "HEAD";
-        ref = "refs/heads/main";
-      };
-
-      getLatestTag = pkgs.runCommand "get-latest-tag" { buildInputs = [ pkgs.git ]; } ''
-        cd ${repo}
-        git fetch --tags
-        git tag -l | sort -V | tail -n 1 > $out
-      '';
+      utils = import ./nix/utils.nix { inherit pkgs lib self; };
     in {
       packages = rec {
         jaws = { source }: pkgs.buildGoModule rec {
           pname = "jaws";
           src = source;
-          # version = utils.mkVersion pname source;
-          version = getLatestTag;
+          version = utils.mkVersion pname source;
           ldflags = [
             "-s" "-w"
             "-X 'main.Version=${version}'"
@@ -58,8 +42,11 @@
             platforms = platforms.all;
           };
         };
-        stable = jaws { source = jaws-stable; };
-        test = jaws { source = lib.cleanSource ./.; };
+
+        # Packages
+        stable = jaws-stable;
+        rc = jaws { source = lib.cleanSource self; };
+        docker = utils.mkDocker "jaws" "latest" rc;
     };
     devShells = {
       default = pkgs.mkShell {
@@ -77,6 +64,6 @@
       };
     };
 
-    defaultPackage = self.packages.${system}.stable;
+    defaultPackage = self.packages.${system}.rc;
   });
 }

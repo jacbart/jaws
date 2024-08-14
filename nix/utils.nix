@@ -1,6 +1,8 @@
-{ lib, self }:
-
+{ pkgs, lib, self }: let
+  inherit (pkgs.dockerTools) buildImage;
+in
 rec {
+  # get last modifidated date
   getLastModifiedDate = input: let
     date = if input ? lastModifiedDate
       then input.lastModifiedDate
@@ -12,6 +14,7 @@ rec {
   in
     "${year}-${month}-${day}";
 
+  # generate a version from the flake.lock
   mkVersion = name: input: let
     inputs = (builtins.fromJSON (builtins.readFile ../flake.lock)).nodes;
 
@@ -34,8 +37,25 @@ rec {
       then (
         "${lib.substring 0 8 (getLastModifiedDate input)}_${input.shortRev}"
       ) else (
-        "${lib.substring 0 8 (getLastModifiedDate self.sourceInfo)}_developer"
+        "${lib.substring 0 8 (getLastModifiedDate self.sourceInfo)}_rc"
       );
   in
     version;
+
+  # build docker image
+  mkDocker = name: tag: mainPkg: let 
+    pkgImage = buildImage {
+      name = name;
+      tag = tag;
+      copyToRoot = pkgs.buildEnv {
+        name = "image-root";
+        paths = [ mainPkg ];
+        pathsToLink = [ "/bin" ];
+      };
+      config = {
+        Cmd = "/bin/${name}";
+      };
+    };
+  in
+    pkgImage;
 }
