@@ -24,7 +24,7 @@ build-all:
   goreleaser build --clean --snapshot
 
 test-unit:
-  go test -tags=unit github.com/jacbart/jaws/... -v -cover
+  GH_TOKEN=$(bw get notes gh-token-goreleaser) go test -tags=unit github.com/jacbart/jaws/... -v -cover
 
 test-integration:
   go test -tags=integration github.com/jacbart/jaws/cmd/jaws/... -v -cover

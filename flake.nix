@@ -1,31 +1,47 @@
 {
-  description = "jaws flake";
+  description = "JAWS is a cli tool for managing secrets on major cloud providors.";
 
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
+    flake-utils.url = "github:numtide/flake-utils";
+    jaws-stable = {
+      url = "git+ssh://git@github.com/jacbart/jaws.git";
+      flake = false;
+    };
   };
 
-  outputs = { self, nixpkgs }: 
-  let
-    supportedSystems = [ "x86_64-linux" "x86_64-darwin" "aarch64-linux" "aarch64-darwin" ];
-    forAllSystems = nixpkgs.lib.genAttrs supportedSystems;
-    nixpkgsFor = forAllSystems (system: import nixpkgs { inherit system; });
-  in {
-    packages = forAllSystems (system:
-      let
-        pkgs = nixpkgsFor.${system};
-      in {
-        jaws = pkgs.buildGoModule rec {
+  outputs = { self, nixpkgs, flake-utils, jaws-stable, ... }:
+    flake-utils.lib.eachDefaultSystem (system:
+    let
+      inherit (nixpkgs) lib;
+      pkgs = nixpkgs.legacyPackages.${system};
+
+      utils = import ./nix/utils.nix { inherit lib self; };
+
+      repo = pkgs.fetchgit {
+        url = "git@github.com:jacbart/jaws.git";
+        rev = "HEAD";
+        ref = "refs/heads/main";
+      };
+
+      getLatestTag = pkgs.runCommand "get-latest-tag" { buildInputs = [ pkgs.git ]; } ''
+        cd ${repo}
+        git fetch --tags
+        git tag -l | sort -V | tail -n 1 > $out
+      '';
+    in {
+      packages = rec {
+        jaws = { source }: pkgs.buildGoModule rec {
           pname = "jaws";
-          src = pkgs.lib.cleanSource ./.;
-          version = "1.0.6-rc";
+          src = source;
+          # version = utils.mkVersion pname source;
+          version = getLatestTag;
           ldflags = [
             "-s" "-w"
             "-X 'main.Version=${version}'"
-            "-X 'main.Date=20xx-xx-xx'"
+            "-X 'main.Date=${utils.getLastModifiedDate source}'"
           ];
-          # vendorHash = "";
-          vendorHash = pkgs.lib.fakeHash;
+          vendorHash = null;
 
           meta = with pkgs.lib; {
             mainProgram = "jaws";
@@ -42,26 +58,25 @@
             platforms = platforms.all;
           };
         };
-    });
-    devShells = forAllSystems (system:
-      let
-        pkgs = nixpkgsFor.${system};
-      in {
-        default = pkgs.mkShell {
-          name = "jaws";
-          buildInputs = with pkgs; [
-            go
-            gopls
-            gotools
-            go-tools
-            goreleaser
-            just
-            bitwarden-cli
-            vhs
-          ];
-        };
-    });
+        stable = jaws { source = jaws-stable; };
+        test = jaws { source = lib.cleanSource ./.; };
+    };
+    devShells = {
+      default = pkgs.mkShell {
+        name = "jaws";
+        buildInputs = with pkgs; [
+          go
+          gopls
+          gotools
+          go-tools
+          goreleaser
+          just
+          bitwarden-cli
+          vhs
+        ];
+      };
+    };
 
-    defaultPackage = forAllSystems (system: self.packages.${system}.jaws);
-  };
+    defaultPackage = self.packages.${system}.stable;
+  });
 }

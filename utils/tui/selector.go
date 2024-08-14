@@ -24,7 +24,7 @@ func newListKeyMap() *listKeyMap {
 var (
 	appStyle   = lipgloss.NewStyle().Padding(1, 2)
 	titleStyle = lipgloss.NewStyle().
-			Foreground(style.JrnyBlue).
+			Foreground(style.Blue).
 			Background(style.White).
 			Padding(0, 1)
 
@@ -107,7 +107,7 @@ func newFuzSelModel(choiceList []string) fuzzySelectorModel {
 	delegate := newItemDelegate(delegateKeys)
 	// itemStyles := newItemStyles()
 	delegate.Styles.NormalTitle = delegate.Styles.NormalTitle.Foreground(style.White)
-	delegate.Styles.SelectedTitle = delegate.Styles.SelectedTitle.Foreground(style.JrnyBlue).BorderLeftForeground(style.JrnyBlue)
+	delegate.Styles.SelectedTitle = delegate.Styles.SelectedTitle.Foreground(style.Blue).BorderLeftForeground(style.Blue)
 	delegate.Styles.NormalDesc.ColorWhitespace(false)
 	selList := list.New(items, delegate, 0, 0)
 	selList.Title = "jaws"

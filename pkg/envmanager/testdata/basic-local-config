@@ -6,13 +6,13 @@ profile = "default"
 // include = ["./basic-aws-config"]
 
 locals {
-	localVar = quote(env.VAR)
+	localVar = var.TEST
 }
 
 vars {
-	SH = quote(sh("jaws", "version"))
-	VAR_NORMAL = local.localVar
-	VAR_QUOTE = quote("02")
+	SH = sh("jaws", "version")
+	VAR_NORMAL = var.localVar
+	VAR_QUOTE = "02"
 	BASE64 = decode(encode("test"))
 	RESOLVE = resolve("gmail.com")
 	ESCAPE = escape("$", "$100")
