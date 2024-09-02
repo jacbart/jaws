@@ -9,8 +9,8 @@ rec {
       else self.sourceInfo.lastModifiedDate;
 
     year = builtins.substring 0 4 date;
-    month = builtins.substring 5 2 date;
-    day = builtins.substring 8 2 date;
+    month = builtins.substring 4 2 date;
+    day = builtins.substring 6 2 date;
   in
     "${year}-${month}-${day}";
 
@@ -35,15 +35,15 @@ rec {
       then lib.head version'
       else if input ? lastModifiedDate && input ? shortRev
       then (
-        "${lib.substring 0 8 (getLastModifiedDate input)}_${input.shortRev}"
+        "${lib.substring 0 10 (getLastModifiedDate input)}_${input.shortRev}"
       ) else (
-        "${lib.substring 0 8 (getLastModifiedDate self.sourceInfo)}_rc"
+        "${lib.substring 0 10 (getLastModifiedDate self.sourceInfo)}_rc"
       );
   in
     version;
 
   # build docker image
-  mkDocker = name: tag: mainPkg: let 
+  mkDocker = name: tag: mainPkg: let
     pkgImage = buildImage {
       name = name;
       tag = tag;
@@ -53,8 +53,9 @@ rec {
         pathsToLink = [ "/bin" ];
       };
       config = {
-        Cmd = "/bin/${name}";
+        Entrypoint = "/bin/${name}";
       };
+      created = "now";
     };
   in
     pkgImage;

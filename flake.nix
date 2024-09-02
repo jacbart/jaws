@@ -1,10 +1,10 @@
 {
-  description = "JAWS is a cli tool for managing secrets on major cloud providors.";
+  description = "JAWS a cli tool for managing secrets on major cloud providors.";
 
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
     flake-utils.url = "github:numtide/flake-utils";
-    jaws-stable.url = "git+ssh://git@github.com/jacbart/jaws.git";
+    jaws-stable.url = "git+ssh://git@github.com/jacbart/jaws";
   };
 
   outputs = { self, nixpkgs, flake-utils, jaws-stable, ... }:
@@ -29,7 +29,7 @@
 
           meta = with pkgs.lib; {
             mainProgram = "jaws";
-            description = "JAWS is a cli tool for managing secrets on major cloud providors.";
+            description = "JAWS a cli tool for managing secrets on major cloud providors.";
             longDescription = ''
               JAWS was insired by AWS's bad UX for their secrets manager. The tool
               utilizes a fuzzy finder to make filtering and selecting multiple
@@ -43,7 +43,9 @@
           };
         };
 
-        # Packages
+        ################
+        ### Packages ###
+        ################
         stable = jaws-stable;
         rc = jaws { source = lib.cleanSource self; };
         docker = utils.mkDocker "jaws" "latest" rc;

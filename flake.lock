@@ -29,11 +29,11 @@
         "rev": "337f1cd07ffb60f2b76bdfd2860fbc058ccf78b6",
         "revCount": 39,
         "type": "git",
-        "url": "ssh://git@github.com/jacbart/jaws.git"
+        "url": "ssh://git@github.com/jacbart/jaws"
       },
       "original": {
         "type": "git",
-        "url": "ssh://git@github.com/jacbart/jaws.git"
+        "url": "ssh://git@github.com/jacbart/jaws"
       }
     },
     "nixpkgs": {
@@ -54,11 +54,11 @@
     },
     "nixpkgs_2": {
       "locked": {
-        "lastModified": 1723362943,
-        "narHash": "sha256-dFZRVSgmJkyM0bkPpaYRtG/kRMRTorUIDj8BxoOt1T4=",
+        "lastModified": 1725103162,
+        "narHash": "sha256-Ym04C5+qovuQDYL/rKWSR+WESseQBbNAe5DsXNx5trY=",
         "owner": "nixos",
         "repo": "nixpkgs",
-        "rev": "a58bc8ad779655e790115244571758e8de055e3d",
+        "rev": "12228ff1752d7b7624a54e9c1af4b222b3c1073b",
         "type": "github"
       },
       "original": {
