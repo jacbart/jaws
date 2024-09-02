@@ -1,35 +1,35 @@
 {
-  description = "jaws flake";
+  description = "JAWS a cli tool for managing secrets on major cloud providors.";
 
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
+    flake-utils.url = "github:numtide/flake-utils";
+    jaws-stable.url = "git+ssh://git@github.com/jacbart/jaws";
   };
 
-  outputs = { self, nixpkgs }: 
-  let
-    supportedSystems = [ "x86_64-linux" "x86_64-darwin" "aarch64-linux" "aarch64-darwin" ];
-    forAllSystems = nixpkgs.lib.genAttrs supportedSystems;
-    nixpkgsFor = forAllSystems (system: import nixpkgs { inherit system; });
-  in {
-    packages = forAllSystems (system:
-      let
-        pkgs = nixpkgsFor.${system};
-      in {
-        jaws = pkgs.buildGoModule rec {
+  outputs = { self, nixpkgs, flake-utils, jaws-stable, ... }:
+    flake-utils.lib.eachDefaultSystem (system:
+    let
+      inherit (nixpkgs) lib;
+      pkgs = nixpkgs.legacyPackages.${system};
+
+      utils = import ./nix/utils.nix { inherit pkgs lib self; };
+    in {
+      packages = rec {
+        jaws = { source }: pkgs.buildGoModule rec {
           pname = "jaws";
-          src = pkgs.lib.cleanSource ./.;
-          version = "1.0.6-rc";
+          src = source;
+          version = utils.mkVersion pname source;
           ldflags = [
             "-s" "-w"
             "-X 'main.Version=${version}'"
-            "-X 'main.Date=20xx-xx-xx'"
+            "-X 'main.Date=${utils.getLastModifiedDate source}'"
           ];
-          # vendorHash = "";
-          vendorHash = pkgs.lib.fakeHash;
+          vendorHash = null;
 
           meta = with pkgs.lib; {
             mainProgram = "jaws";
-            description = "JAWS is a cli tool for managing secrets on major cloud providors.";
+            description = "JAWS a cli tool for managing secrets on major cloud providors.";
             longDescription = ''
               JAWS was insired by AWS's bad UX for their secrets manager. The tool
               utilizes a fuzzy finder to make filtering and selecting multiple
@@ -42,26 +42,30 @@
             platforms = platforms.all;
           };
         };
-    });
-    devShells = forAllSystems (system:
-      let
-        pkgs = nixpkgsFor.${system};
-      in {
-        default = pkgs.mkShell {
-          name = "jaws";
-          buildInputs = with pkgs; [
-            go
-            gopls
-            gotools
-            go-tools
-            goreleaser
-            just
-            bitwarden-cli
-            vhs
-          ];
-        };
-    });
 
-    defaultPackage = forAllSystems (system: self.packages.${system}.jaws);
-  };
+        ################
+        ### Packages ###
+        ################
+        stable = jaws-stable;
+        rc = jaws { source = lib.cleanSource self; };
+        docker = utils.mkDocker "jaws" "latest" rc;
+    };
+    devShells = {
+      default = pkgs.mkShell {
+        name = "jaws";
+        buildInputs = with pkgs; [
+          go
+          gopls
+          gotools
+          go-tools
+          goreleaser
+          just
+          bitwarden-cli
+          vhs
+        ];
+      };
+    };
+
+    defaultPackage = self.packages.${system}.rc;
+  });
 }

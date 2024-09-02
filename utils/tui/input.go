@@ -12,7 +12,7 @@ type (
 )
 
 var (
-	inputStyle = lipgloss.NewStyle().Foreground(style.JrnyBlue)
+	inputStyle = lipgloss.NewStyle().Foreground(style.Blue)
 )
 
 type inputModel struct {

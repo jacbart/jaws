@@ -27,9 +27,9 @@ import (
 )
 
 const (
-	gitEmail         = "jaws@local.com"
+	gitEmail         = "secrets.manager@jaws.cli"
 	gitUser          = "Secrets Manager"
-	gitInitCommitMsg = "JAWS Inital Secret Commit"
+	gitInitCommitMsg = "initial commit of secrets"
 	gitOrg           = "jacbart"
 	gitRepo          = "jaws"
 	gitRepoPath      = "jacbart/jaws"
@@ -160,6 +160,7 @@ func GitCheckForUpdate(tc *http.Client, parentCtx context.Context, currentVersio
 		if v.GreaterThan(nv) {
 			nv = v
 		}
+		log.Default().Printf("release: %s\n", v.String())
 	}
 
 	if nv.Equal(cv) {
@@ -221,6 +222,7 @@ func GitLatestRelease(currentVersion, token string) error {
 
 		// search filter for downloading the right release
 		dlAssetFilter := fmt.Sprintf("%s_%s", osName, arch)
+		log.Default().Printf("release filter: %s\n", dlAssetFilter)
 
 		// download assets
 		c := make(chan int)
@@ -268,7 +270,7 @@ func GitLatestRelease(currentVersion, token string) error {
 			return err
 		}
 		dlVersion = strings.TrimSuffix(dlVersion, "\n")
-		// fmt.Printf("version %s downloaded\n", style.SuccessString(dlVersion))
+		log.Default().Printf("version %s downloaded\n", style.SuccessString(dlVersion))
 
 		// clean up tar file
 		err = os.Remove(tarFile)

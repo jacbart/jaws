@@ -16,5 +16,4 @@ dist/
 
 # nix
 result
-vendor/
 .direnv/

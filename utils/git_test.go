@@ -14,7 +14,7 @@ import (
 
 var (
 	token          = ""
-	currentVersion = "0.1.7"
+	currentVersion = "1.0.0"
 )
 
 func TestGitCheckForUpdate(t *testing.T) {
