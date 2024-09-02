@@ -6,18 +6,25 @@
 
 - git (optional for `jaws diff` and `jaws status` command)
 
-<!-- ## Install latest released binary - CURRENTLY NOT WORKING
-
-This script will download the latest released jaws binary for your system and move it into `~/.local/bin`.
-
-```sh
-curl -sfL https://raw.githubusercontent.com/jacbart/jaws/main/install.sh?token= | sh
-``` -->
-
 ## Install Nix
 
 ```sh
 nix profile install 'github:jacbart/jaws'
+```
+
+## Install Brew
+
+```sh
+brew tap jacbart/homebrew-taps
+brew install jaws
+```
+
+## Install latest released binary
+
+This script will download the latest released jaws binary for your system and move it into `~/.local/bin`.
+
+```sh
+curl -sfL https://raw.githubusercontent.com/jacbart/jaws/main/install.sh | sh
 ```
 
 ## Install manually
@@ -40,14 +47,14 @@ rm -rf $TMPDIR
 - golang >=1.22
 
 ```sh
-GOPRIVATE=github.com/jacbart go install github.com/jacbart/jaws/cmd/jaws@latest
+go install github.com/jacbart/jaws/cmd/jaws@latest
 ```
 
 ## Build from source
 
 ```sh
 git clone git@github.com:jacbart/jaws.git && cd jaws
-CGO_ENABLED=0 go build -ldflags "-s -w -X 'main.Version=0.1.6-rc' -X 'main.Date=today'" ./cmd/jaws
+CGO_ENABLED=0 go build -ldflags "-s -w -X 'main.Version=0.1.9-rc' -X 'main.Date=YYYY-MM-DD'" ./cmd/jaws
 ```
 
 or with the `just` cli tool

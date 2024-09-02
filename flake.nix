@@ -16,10 +16,10 @@
       utils = import ./nix/utils.nix { inherit pkgs lib self; };
     in {
       packages = rec {
-        jaws = { source }: pkgs.buildGoModule rec {
+        jaws = { source, version ? (utils.mkVersion "jaws" source) }: pkgs.buildGoModule rec {
           pname = "jaws";
           src = source;
-          version = utils.mkVersion pname source;
+          inherit version;
           ldflags = [
             "-s" "-w"
             "-X 'main.Version=${version}'"
