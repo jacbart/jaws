@@ -4,7 +4,7 @@
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
     flake-utils.url = "github:numtide/flake-utils";
-    jaws-stable.url = "git+ssh://git@github.com/jacbart/jaws";
+    jaws-stable.url = "git+https://github.com/jacbart/jaws";
   };
 
   outputs = { self, nixpkgs, flake-utils, jaws-stable, ... }:
@@ -28,7 +28,7 @@
           vendorHash = null;
 
           meta = with pkgs.lib; {
-            mainProgram = "jaws";
+            mainProgram = pname;
             description = "JAWS a cli tool for managing secrets on major cloud providors.";
             longDescription = ''
               JAWS was insired by AWS's bad UX for their secrets manager. The tool
@@ -36,10 +36,10 @@
               secrets easy. Once you have the secrets downloaded just edit them
               and run the push command to update them.
             '';
-            homepage = "https://github.com/jacbart/jaws";
+            homepage = "https://github.com/jacbart/${pname}";
             license = licenses.mpl20;
             maintainers = with maintainers; [ jacbart ];
-            platforms = platforms.all;
+            platforms = platforms.unix;
           };
         };
 
@@ -48,21 +48,25 @@
         ################
         stable = jaws-stable;
         rc = jaws { source = lib.cleanSource self; };
-        docker = utils.mkDocker "jaws" "latest" rc;
+        docker = utils.mkContainerImage "jaws" "latest" rc;
     };
     devShells = {
       default = pkgs.mkShell {
         name = "jaws";
         buildInputs = with pkgs; [
+          bitwarden-cli
+          figlet
           go
           gopls
           gotools
           go-tools
           goreleaser
           just
-          bitwarden-cli
           vhs
         ];
+        shellHook = ''
+          figlet -k "JAWS env"
+        '';
       };
     };
 

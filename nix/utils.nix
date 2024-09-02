@@ -43,8 +43,8 @@ rec {
     version;
 
   # build docker image
-  mkDocker = name: tag: mainPkg: let
-    pkgImage = buildImage {
+  mkContainerImage = name: tag: mainPkg: let
+    container = buildImage {
       name = name;
       tag = tag;
       copyToRoot = pkgs.buildEnv {
@@ -58,5 +58,5 @@ rec {
       created = "now";
     };
   in
-    pkgImage;
+    container;
 }
