@@ -3,18 +3,22 @@
 
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
-    flake-utils.url = "github:numtide/flake-utils";
   };
 
-  outputs = { self, nixpkgs, flake-utils, ... }:
-    flake-utils.lib.eachDefaultSystem (system:
+  outputs = { self, nixpkgs, ... }:
     let
       inherit (nixpkgs) lib;
-      pkgs = nixpkgs.legacyPackages.${system};
 
-      utils = import ./nix/utils.nix { inherit pkgs lib self; };
+      allSystems = [ "x86_64-linux" "aarch64-linux" "x86_64-darwin" "aarch64-darwin" ];
+
+      # A function that provides a system-specific Nixpkgs for the desired systems
+      forAllSystems = f: nixpkgs.lib.genAttrs allSystems (system: f {
+        pkgs = import nixpkgs { inherit system; };
+      });
+
     in {
-      packages = rec {
+      packages = forAllSystems ({ pkgs }: let
+        utils = import ./nix/utils.nix { inherit pkgs lib self; };
         jaws = { source, version ? (utils.mkVersion "jaws" source) }: pkgs.buildGoModule rec {
           pname = "jaws";
           src = source;
@@ -41,14 +45,14 @@
             platforms = platforms.unix;
           };
         };
-
+      in {
         ################
         ### Packages ###
         ################
         bin = jaws { source = lib.cleanSource self; };
-        docker = utils.mkContainerImage "jaws" "latest" bin;
-      };
-      devShells = {
+        # docker = utils.mkContainerImage "jaws" "latest" bin;
+      });
+      devShells = forAllSystems ({ pkgs }: {
         default = pkgs.mkShell {
           name = "jaws";
           buildInputs = with pkgs; [
@@ -66,9 +70,8 @@
             figlet -k "JAWS env"
           '';
         };
-      };
-      # Default package
-      defaultPackage = self.packages.${system}.bin;
-    }
-  );
+      });
+      defaultPackage = forAllSystems ({ pkgs }: self.packages.${pkgs.stdenv.system}.bin);
+      hydraJobs."jaws-binary" = self.defaultPackage;
+    };
 }
