@@ -70,8 +70,8 @@
     # Default package
     defaultPackage = self.packages.${system}.bin;
     # Hydra Builds
-    hydraJobs = {
-      inherit (self) packages;
-    };
+    hydraJobs.packages = [
+      self.packages.${system}.bin
+    ];
   });
 }
