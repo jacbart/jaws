@@ -69,7 +69,13 @@
         '';
       };
     };
-
+    # Default package
     defaultPackage = self.packages.${system}.rc;
+    # Hydra Builds
+    hydraJobs = {
+      packages = [
+        self.packages.${system}.rc
+      ];
+    };
   });
 }
