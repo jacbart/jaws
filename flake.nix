@@ -70,7 +70,7 @@
     # Default package
     defaultPackage = self.packages.${system}.bin;
     # Hydra jobs
-    hydraJobs."jaws-binary" = self.packages.aarch64-linux.bin;
+    hydraJobs."jaws-binary" = self.packages.bin;
     # hydraJobs."jaws-docker" = self.packages.${system}.docker;
   });
 }
