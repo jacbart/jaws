@@ -28,7 +28,7 @@
 
           meta = with pkgs.lib; {
             mainProgram = pname;
-            description = "JAWS a cli tool for managing secrets on major cloud providors.";
+            description = "JAWS a cli tool for managing secrets on major cloud providers.";
             longDescription = ''
               JAWS was insired by AWS's bad UX for their secrets manager. The tool
               utilizes a fuzzy finder to make filtering and selecting multiple
@@ -47,30 +47,28 @@
         ################
         bin = jaws { source = lib.cleanSource self; };
         docker = utils.mkContainerImage "jaws" "latest" bin;
-    };
-    devShells = {
-      default = pkgs.mkShell {
-        name = "jaws";
-        buildInputs = with pkgs; [
-          bitwarden-cli
-          figlet
-          go
-          gopls
-          gotools
-          go-tools
-          goreleaser
-          just
-          vhs
-        ];
-        shellHook = ''
-          figlet -k "JAWS env"
-        '';
       };
-    };
-    # Default package
-    defaultPackage = self.packages.${system}.bin;
-    # Hydra jobs
-    hydraJobs."jaws-binary" = self.packages.bin;
-    # hydraJobs."jaws-docker" = self.packages.${system}.docker;
-  });
+      devShells = {
+        default = pkgs.mkShell {
+          name = "jaws";
+          buildInputs = with pkgs; [
+            bitwarden-cli
+            figlet
+            go
+            gopls
+            gotools
+            go-tools
+            goreleaser
+            just
+            vhs
+          ];
+          shellHook = ''
+            figlet -k "JAWS env"
+          '';
+        };
+      };
+      # Default package
+      defaultPackage = self.packages.${system}.bin;
+    }
+  );
 }
