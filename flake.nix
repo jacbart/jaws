@@ -73,9 +73,7 @@
     defaultPackage = self.packages.${system}.rc;
     # Hydra Builds
     hydraJobs = {
-      packages = [
-        self.packages.${system}.rc
-      ];
+      packages = [ self.packages.aarch64-linux.rc ];
     };
   });
 }
