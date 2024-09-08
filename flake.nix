@@ -69,9 +69,8 @@
     };
     # Default package
     defaultPackage = self.packages.${system}.bin;
-    # Hydra Builds
-    hydraJobs.packages = [
-      self.packages.${system}.bin
-    ];
+    # Hydra jobs
+    hydraJobs."jaws-bin" = self.defaultPackage;
+    hydraJobs."jaws-docker" = self.packages.${system}.docker;
   });
 }
