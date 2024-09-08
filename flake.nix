@@ -4,10 +4,9 @@
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
     flake-utils.url = "github:numtide/flake-utils";
-    jaws-stable.url = "git+https://github.com/jacbart/jaws";
   };
 
-  outputs = { self, nixpkgs, flake-utils, jaws-stable, ... }:
+  outputs = { self, nixpkgs, flake-utils, ... }:
     flake-utils.lib.eachDefaultSystem (system:
     let
       inherit (nixpkgs) lib;
@@ -46,9 +45,8 @@
         ################
         ### Packages ###
         ################
-        stable = jaws-stable;
-        rc = jaws { source = lib.cleanSource self; };
-        docker = utils.mkContainerImage "jaws" "latest" rc;
+        bin = jaws { source = lib.cleanSource self; };
+        docker = utils.mkContainerImage "jaws" "latest" bin;
     };
     devShells = {
       default = pkgs.mkShell {
@@ -70,7 +68,7 @@
       };
     };
     # Default package
-    defaultPackage = self.packages.${system}.rc;
+    defaultPackage = self.packages.${system}.bin;
     # Hydra Builds
     hydraJobs = {
       inherit (self) packages;
