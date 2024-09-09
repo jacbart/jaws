@@ -56,7 +56,6 @@
         default = pkgs.mkShell {
           name = "jaws";
           buildInputs = with pkgs; [
-            bitwarden-cli
             figlet
             go
             gopls
@@ -65,7 +64,7 @@
             goreleaser
             just
             vhs
-          ];
+          ] ++ lib.optional pkgs.stdenv.isLinux bitwarden-cli;
           shellHook = ''
             figlet -k "JAWS env"
           '';
