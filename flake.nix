@@ -45,12 +45,12 @@
             platforms = platforms.unix;
           };
         };
-      in {
+      in rec {
         ################
         ### Packages ###
         ################
         bin = jaws { source = lib.cleanSource self; };
-        # docker = utils.mkContainerImage "jaws" "latest" bin;
+        docker = utils.mkContainerImage "jaws" "latest" bin;
       });
       devShells = forAllSystems ({ pkgs }: {
         default = pkgs.mkShell {
@@ -71,6 +71,6 @@
         };
       });
       defaultPackage = forAllSystems ({ pkgs }: self.packages.${pkgs.stdenv.system}.bin);
-      hydraJobs."jaws-binary" = self.defaultPackage;
+      hydraJobs."jaws-binary" = forAllSystems ({ pkgs }: self.packages.${pkgs.stdenv.system}.bin);
     };
 }
