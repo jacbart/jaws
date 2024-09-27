@@ -17,7 +17,8 @@
       });
 
     in {
-      packages = forAllSystems ({ pkgs }: let
+      packages = forAllSystems ({ pkgs }:
+      let
         utils = import ./nix/utils.nix { inherit pkgs lib self; };
         jaws = { source, version ? (utils.mkVersion "jaws" source) }: pkgs.buildGoModule rec {
           pname = "jaws";
@@ -29,6 +30,7 @@
             "-X 'main.Date=${utils.getLastModifiedDate source}'"
           ];
           vendorHash = null;
+          CGO_ENABLED = 1;
 
           meta = with pkgs.lib; {
             mainProgram = pname;
@@ -65,6 +67,7 @@
             just
             vhs
           ] ++ lib.optional pkgs.stdenv.isLinux bitwarden-cli;
+          CGO_ENABLED = 1;
           shellHook = ''
             figlet -k "JAWS env"
           '';

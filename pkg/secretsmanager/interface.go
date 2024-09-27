@@ -56,17 +56,10 @@ type GCPManager struct {
 	APIKey         string `hcl:"api_key,optional"`
 }
 
-// func InitManager(platform string) Manager {
-// 	var m Manager
-// 	switch platform {
-// 	case "aws":
-// 		a := AWSManager{}
-// 		m = Manager(a)
-// 	case "gcp":
-// 		g := &GCPManager{}
-// 		m = Manager(g)
-// 	default:
-// 		m = nil
-// 	}
-// 	return m
-// }
+// BWSManager
+type BWSManager struct {
+	Secrets      []Secret
+	ProfileLabel string
+	StateFile    string `hcl:"state_file,optional"`
+	AccessToken  string `hcl:"access_token,optional"`
+}
