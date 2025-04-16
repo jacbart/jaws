@@ -31,7 +31,7 @@ grab all secrets with that prefix`,
 		Example: "jaws pull testing/app/default/key --print",
 		Aliases: []string{"get"},
 		RunE: func(cmd *cobra.Command, args []string) error {
-			var noSelErr = errors.New("no secrets selected")
+			noSelErr := errors.New("no secrets selected")
 			var secretIds []string
 			var err error
 			var noOutFileErr *NoOutputFileSet
@@ -210,23 +210,31 @@ grab all secrets with that prefix`,
 					} else { // if no print flag was set, download the secrets
 						for _, s := range secrets {
 							log.Default().Println("Downloading:", s.ID)
-							err = utils.DownloadSecret(s.ID, s.Content, secretsPath+"/"+secretManager.Platform(), "/")
+							err = utils.DownloadSecret(
+								s.ID,
+								s.Content,
+								fmt.Sprintf("%s/%s", secretsPath, secretManager.Platform()),
+								"/",
+							)
 							if err != nil {
 								return err
 							}
 							secretIds = append(secretIds, s.ID)
-							fmt.Printf("%s/%s\n", secretsPath+"/"+secretManager.Platform(), s.ID)
+							fmt.Printf("%s/%s/%s\n", secretsPath, secretManager.Platform(), s.ID)
 						}
-						f, err := filepath.Abs(secretsPath + "/" + secretManager.Platform())
+						f, err := filepath.Abs(fmt.Sprintf("%s/%s", secretsPath, secretManager.Platform()))
 						if err != nil {
 							return err
 						}
 						baseOfPath := fmt.Sprintf("/%s", filepath.Base(f))
 						parentPath := strings.TrimSuffix(f, baseOfPath)
 						_ = utils.CheckIfGitRepo(parentPath, jawsConf.Conf.General.RepoWarn)
-						utils.GitControlSecrets(secretIds, secretsPath+"/"+secretManager.Platform())
+						utils.GitControlSecrets(secretIds, fmt.Sprintf("%s/%s", secretsPath, secretManager.Platform()))
 						if useEditor {
-							if err = utils.OpenWithEditor(secretIds, secretsPath+"/"+secretManager.Platform()); err != nil {
+							if err = utils.OpenWithEditor(
+								secretIds,
+								fmt.Sprintf("%s/%s", secretsPath, secretManager.Platform()),
+							); err != nil {
 								if err.Error() != noSelErr.Error() {
 									return err
 								}

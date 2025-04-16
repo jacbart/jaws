@@ -45,8 +45,10 @@
                 "-X 'main.Version=${version}'"
                 "-X 'main.Date=${utils.getLastModifiedDate source}'"
               ];
-              vendorHash = null;
-              CGO_ENABLED = 1;
+              vendorHash = "sha256-7KVFerrbZ/omNsLXlskX3x0DRtM7hWa9hX06gYeBaP0=";
+              env = {
+                CGO_ENABLED = 1;
+              };
 
               meta = with pkgs.lib; {
                 mainProgram = pname;
@@ -68,15 +70,15 @@
           ################
           ### Packages ###
           ################
-          bin = jaws { source = lib.cleanSource self; };
+          bin = jaws { source = lib.cleanSource ./.; };
           docker = utils.mkContainerImage "jaws" "latest" bin;
+          default = bin;
         });
       devShells = forAllSystems ({ pkgs }: {
         default = pkgs.mkShell {
           name = "jaws";
           buildInputs = with pkgs;
             [
-              figlet
               go
               gopls
               gotools
@@ -87,12 +89,8 @@
             ]
             ++ lib.optional pkgs.stdenv.isLinux bitwarden-cli;
           CGO_ENABLED = 1;
-          shellHook = ''
-            figlet -k "JAWS env"
-          '';
         };
       });
-      defaultPackage = forAllSystems ({ pkgs }: self.packages.${pkgs.stdenv.system}.bin);
 
       # sh: nix fmt
       formatter = allSystems (
