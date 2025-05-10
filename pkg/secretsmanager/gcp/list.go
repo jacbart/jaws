@@ -1,4 +1,4 @@
-package secretsmanager
+package gcp
 
 import (
 	"context"
@@ -13,12 +13,12 @@ import (
 	"github.com/ktr0731/go-fuzzyfinder"
 )
 
-// GCPManager - SecretSelect takes in a slice of args and returns the values to g.Secrets
-func (g *GCPManager) SecretSelect(args []string) error {
+// GCP Manager - SecretSelect takes in a slice of args and returns the values to g.Secrets
+func (m *Manager) SecretSelect(args []string) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	// load the service to find the default project
-	_, err := LoadGCPClient(g, ctx)
+	_, err := LoadGCPClient(m, ctx)
 	if err != nil {
 		return err
 	}
@@ -27,16 +27,16 @@ func (g *GCPManager) SecretSelect(args []string) error {
 
 	log.Default().Println("provided Args:", args)
 
-	var exitErr = errors.New("exit status 130")
+	exitErr := errors.New("exit status 130")
 
 	if len(args) > 0 {
 		for _, arg := range args {
-			if !strings.HasPrefix(arg, g.DefaultProject) {
-				arg = g.DefaultProject + "/secrets/" + arg
+			if !strings.HasPrefix(arg, m.DefaultProject) {
+				arg = m.DefaultProject + "/secrets/" + arg
 				log.Default().Println("adding prefix:", arg)
 			}
 			if utils.CheckIfPrefix(arg) {
-				idList := g.ListAll(strings.TrimSuffix(arg, "/*"))
+				idList := m.ListAll(strings.TrimSuffix(arg, "/*"))
 				for _, id := range idList {
 					secrets = append(secrets, Secret{ID: id})
 				}
@@ -45,14 +45,14 @@ func (g *GCPManager) SecretSelect(args []string) error {
 			}
 		}
 	} else {
-		sIds, err := g.FuzzyFind(ctx, "")
+		sIds, err := m.FuzzyFind(ctx, "")
 		if err != nil {
 			if err.Error() != exitErr.Error() {
 				return fmt.Errorf("iterating and printing secret names: %v", err)
 			}
 		}
 		l := len(sIds)
-		for i := 0; i < l; i++ {
+		for i := range l {
 			if sIds[i] != "" {
 				secrets = append(secrets, Secret{ID: sIds[i]})
 			}
@@ -60,22 +60,22 @@ func (g *GCPManager) SecretSelect(args []string) error {
 	}
 	for _, s := range secrets {
 		if s.ID != "" {
-			g.Secrets = append(g.Secrets, s)
+			m.Secrets = append(m.Secrets, s)
 		}
 	}
-	log.Default().Println("selected secrets:", g.Secrets)
+	log.Default().Println("selected secrets:", m.Secrets)
 	return nil
 }
 
 // GCPManager FuzzyFind
-func (g GCPManager) FuzzyFind(parentCtx context.Context, prefix string) ([]string, error) {
+func (m Manager) FuzzyFind(parentCtx context.Context, prefix string) ([]string, error) {
 	var selectedIDs []string
 	var allIDs []string
 
 	ctx, cancel := context.WithCancel(parentCtx)
 	defer cancel()
 
-	go g.listPager(&allIDs, prefix, ctx)
+	go m.listPager(&allIDs, prefix, ctx)
 
 	rw := sync.RWMutex{}
 	l := rw.RLocker()
@@ -89,19 +89,19 @@ func (g GCPManager) FuzzyFind(parentCtx context.Context, prefix string) ([]strin
 	return selectedIDs, nil
 }
 
-// GCPManager listPager
-func (g GCPManager) listPager(list *[]string, prefix string, parentCtx context.Context) {
+// GCP Manager listPager
+func (m Manager) listPager(list *[]string, prefix string, parentCtx context.Context) {
 	ctx, cancel := context.WithCancel(parentCtx)
 	defer cancel()
 
 	// gcp secrets service
-	service, err := LoadGCPClient(&g, ctx)
+	service, err := LoadGCPClient(&m, ctx)
 	if err != nil {
 		log.Default().Fatal(err)
 	}
 
 	// loop through listed projects and secrets appending them to the list
-	for _, project := range g.Projects {
+	for _, project := range m.Projects {
 		// optional filter if prefix is passed
 		res, err := gcp.PullSecretsList(ctx, service, prefix, project.Name, "")
 		if err != nil {
@@ -125,12 +125,12 @@ func (g GCPManager) listPager(list *[]string, prefix string, parentCtx context.C
 	}
 }
 
-// GCPManager ListAll
-func (g GCPManager) ListAll(prefix string) []string {
+// GCP Manager ListAll
+func (m Manager) ListAll(prefix string) []string {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	var list []string
 
-	g.listPager(&list, prefix, ctx)
+	m.listPager(&list, prefix, ctx)
 	return list
 }

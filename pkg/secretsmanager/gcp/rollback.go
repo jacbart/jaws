@@ -1,4 +1,4 @@
-package secretsmanager
+package gcp
 
 import (
 	"context"
@@ -12,17 +12,17 @@ import (
 	gcpSM "google.golang.org/api/secretmanager/v1"
 )
 
-// GCPManager Rollback
-func (g GCPManager) Rollback() error {
+// GCP Manager Rollback
+func (m Manager) Rollback() error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	service, err := LoadGCPClient(&g, ctx)
+	service, err := LoadGCPClient(&m, ctx)
 	if err != nil {
 		return err
 	}
 
-	for _, secret := range g.Secrets {
+	for _, secret := range m.Secrets {
 		versions := gcpVersionList(ctx, service, secret.ID)
 		versionSel, err := tui.SelectorTUI(versions)
 		if err != nil {
@@ -41,7 +41,7 @@ func (g GCPManager) Rollback() error {
 			return err
 		}
 		// push as an updated version
-		err = gcp.AddSecretVersion(ctx, service, g.DefaultProject, strings.TrimPrefix(secret.ID, g.DefaultProject+"/secrets/"), string(decodedBytes))
+		err = gcp.AddSecretVersion(ctx, service, m.DefaultProject, strings.TrimPrefix(secret.ID, m.DefaultProject+"/secrets/"), string(decodedBytes))
 		if err != nil {
 			return err
 		}

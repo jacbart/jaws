@@ -1,4 +1,4 @@
-package secretsmanager
+package aws
 
 import (
 	"context"
@@ -11,18 +11,18 @@ const (
 )
 
 // AWSManager Delete - takes an int indicating the number of days before a secret is deleted
-func (a AWSManager) Delete() error {
+func (m Manager) Delete() error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	client, err := LoadAWSClient(a, ctx)
+	client, err := LoadAWSClient(m, ctx)
 	if err != nil {
 		return err
 	}
 
-	l := len(a.Secrets)
-	for i := 0; i < l; i++ {
-		if err = aws.ScheduleDeletion(ctx, client, a.Secrets[i].ID, DELETE_IN_DAYS); err != nil {
+	l := len(m.Secrets)
+	for i := range l {
+		if err = aws.ScheduleDeletion(ctx, client, m.Secrets[i].ID, DELETE_IN_DAYS); err != nil {
 			return err
 		}
 	}
@@ -30,16 +30,16 @@ func (a AWSManager) Delete() error {
 }
 
 // AWSManager CancelDelete - cancel a secret deletion in progress
-func (a AWSManager) CancelDelete() error {
+func (m Manager) CancelDelete() error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	client, err := LoadAWSClient(a, ctx)
+	client, err := LoadAWSClient(m, ctx)
 	if err != nil {
 		return err
 	}
 
-	for _, secret := range a.Secrets {
+	for _, secret := range m.Secrets {
 		if err = aws.CancelDeletion(ctx, client, secret.ID); err != nil {
 			return err
 		}

@@ -1,4 +1,4 @@
-package secretsmanager
+package gcp
 
 import (
 	"context"
@@ -12,11 +12,11 @@ import (
 	"github.com/jacbart/jaws/utils/style"
 )
 
-func (g GCPManager) Push(secretsPath string, createPrompt bool) error {
+func (m Manager) Push(secretsPath string, createPrompt bool) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	service, err := LoadGCPClient(&g, ctx)
+	service, err := LoadGCPClient(&m, ctx)
 	if err != nil {
 		return err
 	}
@@ -29,8 +29,8 @@ func (g GCPManager) Push(secretsPath string, createPrompt bool) error {
 
 	l := len(sIDs)
 	var secretUpdate []byte
-	for i := 0; i < l; i++ {
-		f := secretsPath + "/" + g.DefaultProject + "/secrets/" + sIDs[i]
+	for i := range l {
+		f := secretsPath + "/" + m.DefaultProject + "/secrets/" + sIDs[i]
 		if _, err := os.Stat(f); err == nil {
 			secretUpdate, err = os.ReadFile(f)
 			if err != nil {
@@ -38,18 +38,18 @@ func (g GCPManager) Push(secretsPath string, createPrompt bool) error {
 			}
 
 			// check if there is an update and only push if there is one
-			shouldSecretUpdate, err := gcp.CheckIfUpdate(ctx, service, g.DefaultProject, sIDs[i], string(secretUpdate))
+			shouldSecretUpdate, err := gcp.CheckIfUpdate(ctx, service, m.DefaultProject, sIDs[i], string(secretUpdate))
 			if err != nil {
 				return err
 			}
 
 			// handler for updating or creating a new secret
 			if shouldSecretUpdate {
-				if err = gcp.HandleUpdateCreate(ctx, service, g.DefaultProject, sIDs[i], string(secretUpdate), createPrompt); err != nil {
+				if err = gcp.HandleUpdateCreate(ctx, service, m.DefaultProject, sIDs[i], string(secretUpdate), createPrompt); err != nil {
 					return err
 				}
 			} else {
-				fmt.Printf("%s %s\n", g.DefaultProject+"/secrets/"+sIDs[i], style.InfoString("skipped"))
+				fmt.Printf("%s %s\n", m.DefaultProject+"/secrets/"+sIDs[i], style.InfoString("skipped"))
 			}
 
 		} else if errors.Is(err, os.ErrNotExist) {

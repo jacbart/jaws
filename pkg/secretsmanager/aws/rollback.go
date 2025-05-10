@@ -1,4 +1,4 @@
-package secretsmanager
+package aws
 
 import (
 	"context"
@@ -6,17 +6,17 @@ import (
 	"github.com/jacbart/jaws/integration/aws"
 )
 
-// AWSManager Rollback
-func (a AWSManager) Rollback() error {
+// AWS Manager Rollback
+func (m Manager) Rollback() error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	client, err := LoadAWSClient(a, ctx)
+	client, err := LoadAWSClient(m, ctx)
 	if err != nil {
 		return err
 	}
 
-	for _, secret := range a.Secrets {
+	for _, secret := range m.Secrets {
 		if err = aws.RollbackSecret(ctx, client, secret.ID); err != nil {
 			return err
 		}

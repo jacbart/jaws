@@ -1,4 +1,4 @@
-package secretsmanager
+package gcp
 
 import (
 	"context"
@@ -15,28 +15,28 @@ import (
 )
 
 // LoadGCPClient returns a GCP service client
-func LoadGCPClient(g *GCPManager, ctx context.Context) (*gcpSM.ProjectsSecretsService, error) {
+func LoadGCPClient(m *Manager, ctx context.Context) (*gcpSM.ProjectsSecretsService, error) {
 	var secretService *gcpSM.Service
 	var secretClient *gcpSM.ProjectsSecretsService
 	var projService *cloudresourcemanager.Service
 	var err error
-	if g.CredFile != "" { // use creds file
-		secretService, err = gcpSM.NewService(ctx, option.WithCredentialsFile(g.CredFile))
+	if m.CredFile != "" { // use creds file
+		secretService, err = gcpSM.NewService(ctx, option.WithCredentialsFile(m.CredFile))
 		if err != nil {
 			return nil, err
 		}
 
-		projService, err = cloudresourcemanager.NewService(ctx, option.WithCredentialsFile(g.CredFile))
+		projService, err = cloudresourcemanager.NewService(ctx, option.WithCredentialsFile(m.CredFile))
 		if err != nil {
 			return nil, err
 		}
-	} else if g.APIKey != "" { // use API key
-		secretService, err = gcpSM.NewService(ctx, option.WithAPIKey(g.APIKey))
+	} else if m.APIKey != "" { // use API key
+		secretService, err = gcpSM.NewService(ctx, option.WithAPIKey(m.APIKey))
 		if err != nil {
 			return nil, err
 		}
 
-		projService, err = cloudresourcemanager.NewService(ctx, option.WithAPIKey(g.APIKey))
+		projService, err = cloudresourcemanager.NewService(ctx, option.WithAPIKey(m.APIKey))
 		if err != nil {
 			return nil, err
 		}
@@ -53,8 +53,8 @@ func LoadGCPClient(g *GCPManager, ctx context.Context) (*gcpSM.ProjectsSecretsSe
 
 	}
 	// get list of available projects and add to the GCPManager
-	if g.Projects == nil {
-		err = g.getProjects(projService, ctx)
+	if m.Projects == nil {
+		err = m.getProjects(projService)
 		if err != nil {
 			return nil, err
 		}
@@ -64,7 +64,7 @@ func LoadGCPClient(g *GCPManager, ctx context.Context) (*gcpSM.ProjectsSecretsSe
 }
 
 // GCPManager getProjects lists out all available projects the user/service account has access to
-func (g *GCPManager) getProjects(service *cloudresourcemanager.Service, ctx context.Context) error {
+func (m *Manager) getProjects(service *cloudresourcemanager.Service) error {
 	var projs []*cloudresourcemanager.Project
 	projService := cloudresourcemanager.NewProjectsService(service)
 
@@ -77,11 +77,7 @@ func (g *GCPManager) getProjects(service *cloudresourcemanager.Service, ctx cont
 	projs = append(projs, res.Projects...)
 
 	// continue looping till all projects are appended to projs
-	for {
-		if res.NextPageToken == "" {
-			break
-		}
-
+	for res.NextPageToken != "" {
 		searchCall.PageToken(res.NextPageToken)
 		res, err = searchCall.Do()
 		if err != nil {
@@ -95,7 +91,7 @@ func (g *GCPManager) getProjects(service *cloudresourcemanager.Service, ctx cont
 	if l <= 0 {
 		return errors.New("account has no projects to access")
 	} else if l == 1 {
-		if g.DefaultProject != projs[0].Name && g.DefaultProject != "" {
+		if m.DefaultProject != projs[0].Name && m.DefaultProject != "" {
 			var userResponse string
 			fmt.Printf("gcp default project is not found or is unavailable\ncontinue with %s? [y/N] ", projs[0].Name)
 			fmt.Scanln(&userResponse)
@@ -104,28 +100,28 @@ func (g *GCPManager) getProjects(service *cloudresourcemanager.Service, ctx cont
 			userResponse = strings.ToLower(userResponse)
 
 			if userResponse == "y" || userResponse == "yes" {
-				g.DefaultProject = projs[0].Name
-				fmt.Println("gcp project:", style.SuccessString(g.DefaultProject))
+				m.DefaultProject = projs[0].Name
+				fmt.Println("gcp project:", style.SuccessString(m.DefaultProject))
 			} else {
 				fmt.Println("quitting...")
 				os.Exit(0)
 			}
 		}
-		if g.DefaultProject == "" {
-			g.DefaultProject = projs[0].Name
+		if m.DefaultProject == "" {
+			m.DefaultProject = projs[0].Name
 		}
 	} else {
 		var projNames []string
 		for _, proj := range projs {
 			projNames = append(projNames, proj.Name)
 		}
-		g.DefaultProject, err = tui.SelectorTUI(projNames)
+		m.DefaultProject, err = tui.SelectorTUI(projNames)
 		if err != nil {
 			return err
 		}
-		fmt.Println("gcp project:", style.SuccessString(g.DefaultProject))
+		fmt.Println("gcp project:", style.SuccessString(m.DefaultProject))
 	}
 
-	g.Projects = append(g.Projects, projs...)
+	m.Projects = append(m.Projects, projs...)
 	return nil
 }

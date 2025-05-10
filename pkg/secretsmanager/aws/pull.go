@@ -1,4 +1,4 @@
-package secretsmanager
+package aws
 
 import (
 	"context"
@@ -17,22 +17,22 @@ const (
 	PERCENTAGE_THRESHOLD = 75.0
 )
 
-// AWSManager Pull
-func (a AWSManager) Pull(prefix string) ([]Secret, error) {
-	log.Default().Println("pull:", a.Secrets)
+// AWS Manager Pull
+func (m Manager) Pull(prefix string) (map[string]string, error) {
+	log.Default().Println("pull:", m.Secrets)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	client, err := LoadAWSClient(a, ctx)
+	client, err := LoadAWSClient(m, ctx)
 	if err != nil {
-		return []Secret{}, err
+		return nil, err
 	}
 
 	var rnfErr *types.ResourceNotFoundException
 
 	var idList []string
 
-	for i, secret := range a.Secrets {
+	for i, secret := range m.Secrets {
 		vin := &secretsmanager.GetSecretValueInput{
 			SecretId: aws.String(secret.ID),
 		}
@@ -41,7 +41,7 @@ func (a AWSManager) Pull(prefix string) ([]Secret, error) {
 			if errors.As(err, &rnfErr) {
 				// get all secrets that contain the string, then let the user choose one
 				if len(idList) == 0 {
-					idList = a.ListAll(prefix)
+					idList = m.ListAll(prefix)
 				}
 				searchStr := secret.ID
 				var strSuggestions []string
@@ -59,10 +59,10 @@ func (a AWSManager) Pull(prefix string) ([]Secret, error) {
 					fmt.Println("did you mean?")
 					secretId, err := tui.SelectorTUI(strSuggestions)
 					if err != nil {
-						return []Secret{}, err
+						return nil, err
 					}
 					if secretId == "" {
-						return []Secret{}, errors.New("no secret found")
+						return nil, errors.New("no secret found")
 					}
 					secret.ID = secretId
 					vin = &secretsmanager.GetSecretValueInput{
@@ -70,7 +70,7 @@ func (a AWSManager) Pull(prefix string) ([]Secret, error) {
 					}
 					vout, err = client.GetSecretValue(ctx, vin)
 					if err != nil {
-						return []Secret{}, err
+						return nil, err
 					}
 				} else if len(strSuggestions) == 1 {
 					secret.ID = strSuggestions[0]
@@ -79,20 +79,20 @@ func (a AWSManager) Pull(prefix string) ([]Secret, error) {
 					}
 					vout, err = client.GetSecretValue(ctx, vin)
 					if err != nil {
-						return []Secret{}, err
+						return nil, err
 					}
 				} else {
-					return []Secret{}, errors.New("no secret found")
+					return nil, errors.New("no secret found")
 				}
 			} else {
-				return []Secret{}, err
+				return nil, err
 			}
 		}
-		a.Secrets[i] = Secret{
+		m.Secrets[i] = Secret{
 			ID:      secret.ID,
 			Content: *vout.SecretString,
 		}
 	}
 
-	return a.Secrets, nil
+	return m.mapSecrets(), nil
 }

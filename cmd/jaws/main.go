@@ -8,6 +8,8 @@ import (
 	"strings"
 
 	"github.com/jacbart/jaws/pkg/secretsmanager"
+	"github.com/jacbart/jaws/pkg/secretsmanager/aws"
+	"github.com/jacbart/jaws/pkg/secretsmanager/gcp"
 	"github.com/jacbart/jaws/utils/style"
 	"github.com/spf13/cobra"
 )
@@ -112,15 +114,16 @@ func InitConfig() {
 		switch err.(type) {
 		case *secretsmanager.NoConfigFileFound:
 			// 	log.Default().Println("no config found, defaulting to aws")
-			secretManager = &secretsmanager.AWSManager{
-				Profile: "default",
+			secretManager = &aws.Manager{
+				Profile:      "default",
+				ProfileLabel: "default",
 			}
 			jawsConf.Conf.General = secretsmanager.GeneralHCL{
 				DefaultProfile: "default",
 			}
 		case *secretsmanager.DecodeConfigFailed:
-			secretManager = &secretsmanager.AWSManager{
-				Profile: "default",
+			secretManager = &gcp.Manager{
+				ProfileLabel: "default",
 			}
 			jawsConf.Conf.General = secretsmanager.GeneralHCL{
 				DefaultProfile: "default",

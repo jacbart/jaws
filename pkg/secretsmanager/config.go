@@ -13,6 +13,8 @@ import (
 	"github.com/hashicorp/hcl/v2/gohcl"
 	"github.com/hashicorp/hcl/v2/hclparse"
 	"github.com/jacbart/jaws/pkg/lockandload"
+	"github.com/jacbart/jaws/pkg/secretsmanager/aws"
+	"github.com/jacbart/jaws/pkg/secretsmanager/gcp"
 	"github.com/jacbart/jaws/utils"
 	"github.com/jacbart/jaws/utils/tui"
 	"github.com/zclconf/go-cty/cty/function"
@@ -226,21 +228,21 @@ func (c *CliConfig) ReadInConfig() ([]Manager, error) {
 	for _, m := range configHCL.Managers {
 		switch managerPlatform := m.Platform; managerPlatform {
 		case "aws":
-			aws := &AWSManager{ProfileLabel: m.ProfileLabel}
+			manager := &aws.Manager{ProfileLabel: m.ProfileLabel}
 			if m.Auth != nil {
-				if diag := gohcl.DecodeBody(m.Auth, evalContext, aws); diag.HasErrors() {
+				if diag := gohcl.DecodeBody(m.Auth, evalContext, manager); diag.HasErrors() {
 					return nil, &DecodeConfigFailed{File: c.CurrentConfig}
 				}
 			}
-			managers = append(managers, aws)
+			managers = append(managers, manager)
 		case "gcp":
-			gcp := &GCPManager{ProfileLabel: m.ProfileLabel}
+			manager := &gcp.Manager{ProfileLabel: m.ProfileLabel}
 			if m.Auth != nil {
-				if diag := gohcl.DecodeBody(m.Auth, evalContext, gcp); diag.HasErrors() {
+				if diag := gohcl.DecodeBody(m.Auth, evalContext, manager); diag.HasErrors() {
 					return nil, &DecodeConfigFailed{File: c.CurrentConfig}
 				}
 			}
-			managers = append(managers, gcp)
+			managers = append(managers, manager)
 		default:
 			return nil, fmt.Errorf("error in ReadInConfig: unknown platform `%s`", managerPlatform)
 		}

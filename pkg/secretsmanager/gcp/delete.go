@@ -1,4 +1,4 @@
-package secretsmanager
+package gcp
 
 import (
 	"context"
@@ -7,17 +7,17 @@ import (
 	"github.com/jacbart/jaws/utils/style"
 )
 
-// GCPManager Delete takes a slice of Secret and deletes them from the gcp secrets manager
-func (g GCPManager) Delete() error {
+// GCP Manager Delete takes a slice of Secret and deletes them from the gcp secrets manager
+func (m Manager) Delete() error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	service, err := LoadGCPClient(&g, ctx)
+	service, err := LoadGCPClient(&m, ctx)
 	if err != nil {
 		return err
 	}
 
-	for _, secret := range g.Secrets {
+	for _, secret := range m.Secrets {
 		deleteCall := service.Delete(secret.ID)
 		_, err = deleteCall.Do()
 		if err != nil {
@@ -28,7 +28,7 @@ func (g GCPManager) Delete() error {
 	return nil
 }
 
-func (g GCPManager) CancelDelete() error {
+func (m Manager) CancelDelete() error {
 	fmt.Println("use the delete command for GCP")
 	return nil
 }

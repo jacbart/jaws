@@ -1,4 +1,4 @@
-package secretsmanager
+package aws
 
 import (
 	"context"
@@ -11,29 +11,29 @@ import (
 )
 
 // LoadAWSClient returns a secrets manager client for aws and an error
-func LoadAWSClient(a AWSManager, ctx context.Context) (*awsSM.Client, error) {
+func LoadAWSClient(m Manager, ctx context.Context) (*awsSM.Client, error) {
 	var client *awsSM.Client
 	var cfg aws.Config
 	var err error
 
-	if a.Profile != "" { // if profile is set in jaws.conf load it from the ~/.aws folder
+	if m.Profile != "" { // if profile is set in jaws.conf load it from the ~/.aws folder
 		region := ""
-		if a.Region != "" {
-			region = a.Region
+		if m.Region != "" {
+			region = m.Region
 		} else {
 			region = "us-east-1"
 		}
 		cfg, err = config.LoadDefaultConfig(ctx,
-			config.WithSharedConfigProfile(a.Profile),
+			config.WithSharedConfigProfile(m.Profile),
 			config.WithRegion(region),
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed loading config, %v", err)
 		}
-	} else if a.AccessID != "" { // if an access id is passed then load config from jaws.conf
+	} else if m.AccessID != "" { // if an access id is passed then load config from jaws.conf
 		cfg, err = config.LoadDefaultConfig(ctx,
-			config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(a.AccessID, a.SecretKey, "")),
-			config.WithDefaultRegion(a.Region),
+			config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(m.AccessID, m.SecretKey, "")),
+			config.WithDefaultRegion(m.Region),
 		)
 	} else { // if no jaws.conf then attempt to load from boto config
 		cfg, err = config.LoadDefaultConfig(ctx)

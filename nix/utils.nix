@@ -25,16 +25,9 @@ rec {
       inputs = (builtins.fromJSON (builtins.readFile ../flake.lock)).nodes;
 
       ref =
-        builtins.trace "ref value: ${
-        if lib.hasAttrByPath [name "original" "ref"] inputs
+        if lib.hasAttrByPath [ name "original" "ref" ] inputs
         then inputs.${name}.original.ref
-        else ""
-      }"
-          (
-            if lib.hasAttrByPath [ name "original" "ref" ] inputs
-            then inputs.${name}.original.ref
-            else ""
-          );
+        else "";
 
       version =
         let

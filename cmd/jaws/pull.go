@@ -81,11 +81,16 @@ grab all secrets with that prefix`,
 						return err
 					}
 					for _, e := range env.Env {
-						newSecrets, err := secretManager.Pull(e.Filter)
+						mapSecrets, err := secretManager.Pull(e.Filter)
 						if err != nil {
 							return err
 						}
-						secrets = append(secrets, newSecrets...)
+						for k, v := range mapSecrets {
+							secrets = append(secrets, secretsmanager.Secret{
+								ID:      k,
+								Content: v,
+							})
+						}
 					}
 				}
 
@@ -151,11 +156,16 @@ grab all secrets with that prefix`,
 							return err
 						}
 						for _, e := range env.Env {
-							newSecrets, err := secretManager.Pull(e.Filter)
+							mapSecrets, err := secretManager.Pull(e.Filter)
 							if err != nil {
 								return err
 							}
-							secrets = append(secrets, newSecrets...)
+							for k, v := range mapSecrets {
+								secrets = append(secrets, secretsmanager.Secret{
+									ID:      k,
+									Content: v,
+								})
+							}
 						}
 					}
 
@@ -191,18 +201,28 @@ grab all secrets with that prefix`,
 								prefix = arg
 							}
 
-							newSecrets, err := secretManager.Pull(prefix)
+							mapSecrets, err := secretManager.Pull(prefix)
 							if err != nil {
 								return err
 							}
-							secrets = append(secrets, newSecrets...)
+							for k, v := range mapSecrets {
+								secrets = append(secrets, secretsmanager.Secret{
+									ID:      k,
+									Content: v,
+								})
+							}
 						}
 					} else {
-						newSecrets, err := secretManager.Pull("")
+						mapSecrets, err := secretManager.Pull("")
 						if err != nil {
-							return nil
+							return err
 						}
-						secrets = append(secrets, newSecrets...)
+						for k, v := range mapSecrets {
+							secrets = append(secrets, secretsmanager.Secret{
+								ID:      k,
+								Content: v,
+							})
+						}
 					}
 
 					if print { // if the print flag is set

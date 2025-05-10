@@ -1,4 +1,4 @@
-package secretsmanager
+package aws
 
 import (
 	"context"
@@ -15,15 +15,15 @@ import (
 )
 
 // AWSManager - SecretSelect takes in a slice of args and returns the secretID's to a.Secrets
-func (a *AWSManager) SecretSelect(args []string) error {
+func (m *Manager) SecretSelect(args []string) error {
 	var secrets []Secret
 
-	var exitErr = errors.New("exit status 130")
+	exitErr := errors.New("exit status 130")
 
 	if len(args) > 0 {
 		for _, arg := range args {
 			if utils.CheckIfPrefix(arg) {
-				idList := a.ListAll(strings.TrimSuffix(arg, "/*"))
+				idList := m.ListAll(strings.TrimSuffix(arg, "/*"))
 				for _, id := range idList {
 					secrets = append(secrets, Secret{ID: id})
 				}
@@ -32,14 +32,14 @@ func (a *AWSManager) SecretSelect(args []string) error {
 			}
 		}
 	} else {
-		sIds, err := a.FuzzyFind(context.Background(), "")
+		sIds, err := m.FuzzyFind(context.Background(), "")
 		if err != nil {
 			if err.Error() != exitErr.Error() {
 				return fmt.Errorf("iterating and printing secret names: %v", err)
 			}
 		}
 		l := len(sIds)
-		for i := 0; i < l; i++ {
+		for i := range l {
 			if sIds[i] != "" {
 				secrets = append(secrets, Secret{ID: sIds[i]})
 			}
@@ -47,22 +47,22 @@ func (a *AWSManager) SecretSelect(args []string) error {
 	}
 	for _, s := range secrets {
 		if s.ID != "" {
-			a.Secrets = append(a.Secrets, s)
+			m.Secrets = append(m.Secrets, s)
 		}
 	}
-	log.Default().Println("selected secrets:", a.Secrets)
+	log.Default().Println("selected secrets:", m.Secrets)
 	return nil
 }
 
 // AWSManager FuzzyFind -
-func (a AWSManager) FuzzyFind(parentCtx context.Context, prefix string) ([]string, error) {
+func (m Manager) FuzzyFind(parentCtx context.Context, prefix string) ([]string, error) {
 	var selectedIDs []string
 	var allIDs []string
 
 	ctx, cancel := context.WithCancel(parentCtx)
 	defer cancel()
 
-	go a.listPager(&allIDs, prefix, ctx)
+	go m.listPager(&allIDs, prefix, ctx)
 
 	rw := sync.RWMutex{}
 	l := rw.RLocker()
@@ -77,7 +77,7 @@ func (a AWSManager) FuzzyFind(parentCtx context.Context, prefix string) ([]strin
 }
 
 // AWSManager listPager - takes a pointer to a string slice, a prefix for a filter and the partent context. The list of secrets is then appended to the list pointer
-func (a AWSManager) listPager(list *[]string, prefix string, parentCtx context.Context) {
+func (m Manager) listPager(list *[]string, prefix string, parentCtx context.Context) {
 	ctx, cancel := context.WithCancel(parentCtx)
 	defer cancel()
 
@@ -93,7 +93,7 @@ func (a AWSManager) listPager(list *[]string, prefix string, parentCtx context.C
 	} else {
 		prefixFilter = nil
 	}
-	awsClient, err := LoadAWSClient(a, ctx)
+	awsClient, err := LoadAWSClient(m, ctx)
 	if err != nil {
 		log.Default().Fatalln(err)
 	}
@@ -104,7 +104,7 @@ func (a AWSManager) listPager(list *[]string, prefix string, parentCtx context.C
 		log.Default().Fatalln(err)
 	}
 	l = len(listSecretsOutput.SecretList)
-	for i := 0; i < l; i++ {
+	for i := range l {
 		*list = append(*list, *listSecretsOutput.SecretList[i].Name)
 	}
 	for listSecretsOutput.NextToken != nil {
@@ -113,18 +113,18 @@ func (a AWSManager) listPager(list *[]string, prefix string, parentCtx context.C
 			log.Default().Fatalln(err)
 		}
 		l = len(listSecretsOutput.SecretList)
-		for i := 0; i < l; i++ {
+		for i := range l {
 			*list = append(*list, *listSecretsOutput.SecretList[i].Name)
 		}
 	}
 }
 
-// AWSManager ListAll - grabs and returns the entire list of secrets with an error
-func (a AWSManager) ListAll(prefix string) []string {
+// Manager ListAll - grabs and returns the entire list of secrets with an error
+func (m Manager) ListAll(prefix string) []string {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	var list []string
 
-	a.listPager(&list, prefix, ctx)
+	m.listPager(&list, prefix, ctx)
 	return list
 }

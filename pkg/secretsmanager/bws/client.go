@@ -1,11 +1,11 @@
-package secretsmanager
+package bws
 
 import (
 	sdk "github.com/bitwarden/sdk-go"
 )
 
 // LoadBWSClient returns a Bitwarden Client
-func LoadBWSClient(b BWSManager) (sdk.BitwardenClientInterface, error) {
+func LoadBWSClient(m Manager) (sdk.BitwardenClientInterface, error) {
 	apiURL := "https://api.bitwarden.com"
 	identityURL := "https://identity.bitwarden.com/connect/token"
 	bitwardenClient, err := sdk.NewBitwardenClient(&apiURL, &identityURL)
@@ -13,7 +13,7 @@ func LoadBWSClient(b BWSManager) (sdk.BitwardenClientInterface, error) {
 		return nil, err
 	}
 
-	err = bitwardenClient.AccessTokenLogin(b.AccessToken, &b.StateFile)
+	err = bitwardenClient.AccessTokenLogin(m.AccessToken, &m.StateFile)
 	if err != nil {
 		return nil, err
 	}

@@ -1,4 +1,4 @@
-package secretsmanager
+package aws
 
 import (
 	"context"
@@ -12,12 +12,12 @@ import (
 )
 
 // AWSManager Push
-func (a AWSManager) Push(secretsPath string, createPrompt bool) error {
+func (m Manager) Push(secretsPath string, createPrompt bool) error {
 	log.Default().Println("searching", secretsPath, "for secrets to push")
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	client, err := LoadAWSClient(a, ctx)
+	client, err := LoadAWSClient(m, ctx)
 	if err != nil {
 		return err
 	}
@@ -30,7 +30,7 @@ func (a AWSManager) Push(secretsPath string, createPrompt bool) error {
 
 	l := len(sIds)
 	var secretUpdate []byte
-	for i := 0; i < l; i++ {
+	for i := range l {
 		log.Default().Println("reading", secretsPath+"/"+sIds[i])
 		secretUpdate, err = os.ReadFile(secretsPath + "/" + sIds[i])
 		if err != nil {
