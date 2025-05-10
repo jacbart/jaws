@@ -23,10 +23,17 @@
       forAllSystems = f:
         allSystems (system:
           f {
-            pkgs = import nixpkgs { inherit system; };
+            pkgs = import nixpkgs {
+              inherit system;
+              config.allowUnfreePredicate = pkg:
+                builtins.elem (lib.getName pkg) [
+                  "bws"
+                ];
+            };
           });
     in
     {
+      # nix build .#bin
       packages = forAllSystems ({ pkgs }:
         let
           utils = import ./nix/utils.nix { inherit pkgs lib self; };
@@ -74,6 +81,7 @@
           docker = utils.mkContainerImage "jaws" "latest" bin;
           default = bin;
         });
+      # nix develop -c $SHELL
       devShells = forAllSystems ({ pkgs }: {
         default = pkgs.mkShell {
           name = "jaws";
@@ -87,12 +95,14 @@
               just
               vhs
             ]
-            ++ lib.optional pkgs.stdenv.isLinux bitwarden-cli;
+            ++ lib.optionals pkgs.stdenv.isLinux [
+              bitwarden-cli
+              bws
+            ];
           CGO_ENABLED = 1;
         };
       });
-
-      # sh: nix fmt
+      # nix fmt
       formatter = allSystems (
         system:
         nix-formatter-pack.lib.mkFormatter {
@@ -105,7 +115,6 @@
           };
         }
       );
-
-      hydraJobs."jaws-binary" = forAllSystems ({ pkgs }: self.packages.${pkgs.stdenv.system}.bin);
+      # hydraJobs."jaws" = forAllSystems ({ pkgs }: self.packages.${pkgs.stdenv.system}.bin);
     };
 }
