@@ -14,8 +14,8 @@ import (
 	gcpSM "google.golang.org/api/secretmanager/v1"
 )
 
-// LoadGCPClient returns a GCP service client
-func LoadGCPClient(m *Manager, ctx context.Context) (*gcpSM.ProjectsSecretsService, error) {
+// GCP Manager LoadClient returns a GCP service client
+func (m Manager) LoadClient(ctx context.Context) (*gcpSM.ProjectsSecretsService, error) {
 	var secretService *gcpSM.Service
 	var secretClient *gcpSM.ProjectsSecretsService
 	var projService *cloudresourcemanager.Service
@@ -64,7 +64,7 @@ func LoadGCPClient(m *Manager, ctx context.Context) (*gcpSM.ProjectsSecretsServi
 }
 
 // GCPManager getProjects lists out all available projects the user/service account has access to
-func (m *Manager) getProjects(service *cloudresourcemanager.Service) error {
+func (m Manager) getProjects(service *cloudresourcemanager.Service) error {
 	var projs []*cloudresourcemanager.Project
 	projService := cloudresourcemanager.NewProjectsService(service)
 

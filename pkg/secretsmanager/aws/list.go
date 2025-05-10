@@ -14,7 +14,7 @@ import (
 	"github.com/ktr0731/go-fuzzyfinder"
 )
 
-// AWSManager - SecretSelect takes in a slice of args and returns the secretID's to a.Secrets
+// AWS Manager - SecretSelect takes in a slice of args and returns the secretID's to a.Secrets
 func (m *Manager) SecretSelect(args []string) error {
 	var secrets []Secret
 
@@ -54,7 +54,7 @@ func (m *Manager) SecretSelect(args []string) error {
 	return nil
 }
 
-// AWSManager FuzzyFind -
+// AWS Manager FuzzyFind -
 func (m Manager) FuzzyFind(parentCtx context.Context, prefix string) ([]string, error) {
 	var selectedIDs []string
 	var allIDs []string
@@ -76,7 +76,7 @@ func (m Manager) FuzzyFind(parentCtx context.Context, prefix string) ([]string, 
 	return selectedIDs, nil
 }
 
-// AWSManager listPager - takes a pointer to a string slice, a prefix for a filter and the partent context. The list of secrets is then appended to the list pointer
+// AWS Manager listPager - takes a pointer to a string slice, a prefix for a filter and the partent context. The list of secrets is then appended to the list pointer
 func (m Manager) listPager(list *[]string, prefix string, parentCtx context.Context) {
 	ctx, cancel := context.WithCancel(parentCtx)
 	defer cancel()
@@ -93,7 +93,7 @@ func (m Manager) listPager(list *[]string, prefix string, parentCtx context.Cont
 	} else {
 		prefixFilter = nil
 	}
-	awsClient, err := LoadAWSClient(m, ctx)
+	awsClient, err := m.LoadClient(ctx)
 	if err != nil {
 		log.Default().Fatalln(err)
 	}
@@ -119,7 +119,7 @@ func (m Manager) listPager(list *[]string, prefix string, parentCtx context.Cont
 	}
 }
 
-// Manager ListAll - grabs and returns the entire list of secrets with an error
+// AWS Manager ListAll - grabs and returns the entire list of secrets with an error
 func (m Manager) ListAll(prefix string) []string {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

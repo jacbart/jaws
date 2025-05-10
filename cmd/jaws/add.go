@@ -37,7 +37,7 @@ func AddCmd() *cobra.Command {
 			case "gcp":
 				log.Default().Println("type is GCPManager")
 				g := secretManager.(*gcp.Manager)
-				_, err := gcp.LoadGCPClient(g, context.Background())
+				_, err := g.LoadClient(context.Background())
 				if err != nil {
 					return err
 				}

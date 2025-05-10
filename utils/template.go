@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-var TemplateFuncs = map[string]interface{}{
+var TemplateFuncs = map[string]any{
 	"default": dfault,
 	"quote":   quote,
 }
@@ -21,7 +21,7 @@ var TemplateFuncs = map[string]interface{}{
 // Structs are never considered unset.
 //
 // For everything else, including pointers, a nil value is unset.
-func dfault(d interface{}, given ...interface{}) interface{} {
+func dfault(d any, given ...any) any {
 	if empty(given) || empty(given[0]) {
 		return d
 	}
@@ -29,7 +29,7 @@ func dfault(d interface{}, given ...interface{}) interface{} {
 }
 
 // empty returns true if the given value has the zero value for its type.
-func empty(given interface{}) bool {
+func empty(given any) bool {
 	g := reflect.ValueOf(given)
 	if !g.IsValid() {
 		return true
@@ -56,7 +56,7 @@ func empty(given interface{}) bool {
 	}
 }
 
-func strval(v interface{}) string {
+func strval(v any) string {
 	switch v := v.(type) {
 	case string:
 		return v
@@ -71,7 +71,7 @@ func strval(v interface{}) string {
 	}
 }
 
-func quote(str ...interface{}) string {
+func quote(str ...any) string {
 	out := make([]string, 0, len(str))
 	for _, s := range str {
 		if s != nil {

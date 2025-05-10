@@ -99,7 +99,7 @@ func GitControlSecrets(secretIDs []string, secretsPath string) error {
 	l := len(secretIDs)
 	var addOptions *git.AddOptions
 
-	for i := 0; i < l-1; i++ {
+	for i := range l - 1 {
 		addOptions = &git.AddOptions{
 			All:  false,
 			Path: secretIDs[i],
@@ -204,13 +204,13 @@ func GitLatestRelease(currentVersion, token string) error {
 		}
 
 		// prepare result
-		result := make(map[string]interface{})
+		result := make(map[string]any)
 		json.Unmarshal(bodyText, &result)
 
-		results := make([]interface{}, 0)
+		results := make([]any, 0)
 
-		for _, asset := range result["assets"].([]interface{}) {
-			results = append(results, asset.(map[string]interface{})["id"])
+		for _, asset := range result["assets"].([]any) {
+			results = append(results, asset.(map[string]any)["id"])
 		}
 
 		// get runtime OS and capitalize the first letter
@@ -327,7 +327,7 @@ func downloadGitAsset(id float64, token, dlAssetFilter string, c chan int) {
 
 	disp = matches[0][1]
 	if strings.Contains(disp, dlAssetFilter) {
-		f, err := os.OpenFile(disp, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0664)
+		f, err := os.OpenFile(disp, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o664)
 		if err != nil {
 			log.Default().Fatal(err)
 		}

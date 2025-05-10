@@ -24,12 +24,3 @@ type Secret struct {
 	ID      string
 	Content string
 }
-
-// CliConfig
-type CliConfig struct {
-	Conf          ConfigHCL
-	FileName      string
-	FilePaths     []string
-	CurrentConfig string
-	Key           string
-}

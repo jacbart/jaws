@@ -4,11 +4,11 @@ import (
 	"log"
 )
 
-// BWSManager Pull
+// BWS Manager Pull
 func (m Manager) Pull(prefix string) (map[string]string, error) {
 	log.Default().Println("pull:", m.Secrets)
 
-	client, err := LoadBWSClient(m)
+	client, err := m.LoadClient()
 	if err != nil {
 		return nil, err
 	}

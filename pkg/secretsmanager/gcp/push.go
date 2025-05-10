@@ -16,7 +16,7 @@ func (m Manager) Push(secretsPath string, createPrompt bool) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	service, err := LoadGCPClient(&m, ctx)
+	service, err := m.LoadClient(ctx)
 	if err != nil {
 		return err
 	}

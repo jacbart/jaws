@@ -11,13 +11,13 @@ import (
 	"github.com/jacbart/jaws/utils/style"
 )
 
-// AWSManager Push
+// AWS Manager Push
 func (m Manager) Push(secretsPath string, createPrompt bool) error {
 	log.Default().Println("searching", secretsPath, "for secrets to push")
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	client, err := LoadAWSClient(m, ctx)
+	client, err := m.LoadClient(ctx)
 	if err != nil {
 		return err
 	}

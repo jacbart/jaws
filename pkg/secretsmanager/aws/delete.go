@@ -10,12 +10,12 @@ const (
 	DELETE_IN_DAYS = 30
 )
 
-// AWSManager Delete - takes an int indicating the number of days before a secret is deleted
+// AWS Manager Delete - takes an int indicating the number of days before a secret is deleted
 func (m Manager) Delete() error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	client, err := LoadAWSClient(m, ctx)
+	client, err := m.LoadClient(ctx)
 	if err != nil {
 		return err
 	}
@@ -29,12 +29,12 @@ func (m Manager) Delete() error {
 	return nil
 }
 
-// AWSManager CancelDelete - cancel a secret deletion in progress
+// AWS Manager CancelDelete - cancel a secret deletion in progress
 func (m Manager) CancelDelete() error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	client, err := LoadAWSClient(m, ctx)
+	client, err := m.LoadClient(ctx)
 	if err != nil {
 		return err
 	}

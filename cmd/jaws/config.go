@@ -5,8 +5,8 @@ import (
 	"io"
 	"os"
 
+	. "github.com/jacbart/jaws/cmd/jaws/config"
 	"github.com/jacbart/jaws/pkg/lockandload"
-	"github.com/jacbart/jaws/pkg/secretsmanager"
 	"github.com/jacbart/jaws/utils"
 	"github.com/jacbart/jaws/utils/style"
 	"github.com/spf13/cobra"
@@ -67,14 +67,14 @@ func ConfigCreateCmd() *cobra.Command {
 		Aliases: []string{"add", "gen", "generate"},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if cicdMode {
-				return secretsmanager.CreateConfig(nil)
+				return CreateConfig(nil)
 			}
-			c, err := secretsmanager.SetupWizard()
+			c, err := SetupWizard()
 			if err != nil {
 				return err
 			}
 
-			return secretsmanager.CreateConfig(&c)
+			return CreateConfig(&c)
 		},
 	}
 }

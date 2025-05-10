@@ -21,7 +21,7 @@ func (m Manager) Pull(prefix string) (map[string]string, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	service, err := LoadGCPClient(&m, ctx)
+	service, err := m.LoadClient(ctx)
 	if err != nil {
 		return nil, err
 	}

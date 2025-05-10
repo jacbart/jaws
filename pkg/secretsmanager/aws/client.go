@@ -10,8 +10,8 @@ import (
 	awsSM "github.com/aws/aws-sdk-go-v2/service/secretsmanager"
 )
 
-// LoadAWSClient returns a secrets manager client for aws and an error
-func LoadAWSClient(m Manager, ctx context.Context) (*awsSM.Client, error) {
+// AWS Manager LoadClient returns a secrets manager client for aws and an error
+func (m Manager) LoadClient(ctx context.Context) (*awsSM.Client, error) {
 	var client *awsSM.Client
 	var cfg aws.Config
 	var err error
@@ -32,7 +32,9 @@ func LoadAWSClient(m Manager, ctx context.Context) (*awsSM.Client, error) {
 		}
 	} else if m.AccessID != "" { // if an access id is passed then load config from jaws.conf
 		cfg, err = config.LoadDefaultConfig(ctx,
-			config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(m.AccessID, m.SecretKey, "")),
+			config.WithCredentialsProvider(
+				credentials.NewStaticCredentialsProvider(m.AccessID, m.SecretKey, ""),
+			),
 			config.WithDefaultRegion(m.Region),
 		)
 	} else { // if no jaws.conf then attempt to load from boto config

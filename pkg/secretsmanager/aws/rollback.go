@@ -11,7 +11,7 @@ func (m Manager) Rollback() error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	client, err := LoadAWSClient(m, ctx)
+	client, err := m.LoadClient(ctx)
 	if err != nil {
 		return err
 	}

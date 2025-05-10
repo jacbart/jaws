@@ -14,11 +14,11 @@ import (
 )
 
 // GCP Manager - SecretSelect takes in a slice of args and returns the values to g.Secrets
-func (m *Manager) SecretSelect(args []string) error {
+func (m Manager) SecretSelect(args []string) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	// load the service to find the default project
-	_, err := LoadGCPClient(m, ctx)
+	_, err := m.LoadClient(ctx)
 	if err != nil {
 		return err
 	}
@@ -95,7 +95,7 @@ func (m Manager) listPager(list *[]string, prefix string, parentCtx context.Cont
 	defer cancel()
 
 	// gcp secrets service
-	service, err := LoadGCPClient(&m, ctx)
+	service, err := m.LoadClient(ctx)
 	if err != nil {
 		log.Default().Fatal(err)
 	}
