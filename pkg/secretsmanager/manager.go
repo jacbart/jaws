@@ -19,7 +19,7 @@ type Manager interface {
 	Push(string, bool) error
 }
 
-// Secret holds the ID and content of a secret
+// holds the ID and content of a secret
 type Secret struct {
 	ID      string
 	Content string
