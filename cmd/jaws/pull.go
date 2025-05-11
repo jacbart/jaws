@@ -31,7 +31,7 @@ grab all secrets with that prefix`,
 		Example: "jaws pull testing/app/default/key --print",
 		Aliases: []string{"get"},
 		RunE: func(cmd *cobra.Command, args []string) error {
-			var noSelErr = errors.New("no secrets selected")
+			noSelErr := errors.New("no secrets selected")
 			var secretIds []string
 			var err error
 			var noOutFileErr *NoOutputFileSet
@@ -81,11 +81,16 @@ grab all secrets with that prefix`,
 						return err
 					}
 					for _, e := range env.Env {
-						newSecrets, err := secretManager.Pull(e.Filter)
+						mapSecrets, err := secretManager.Pull(e.Filter)
 						if err != nil {
 							return err
 						}
-						secrets = append(secrets, newSecrets...)
+						for k, v := range mapSecrets {
+							secrets = append(secrets, secretsmanager.Secret{
+								ID:      k,
+								Content: v,
+							})
+						}
 					}
 				}
 
@@ -151,11 +156,16 @@ grab all secrets with that prefix`,
 							return err
 						}
 						for _, e := range env.Env {
-							newSecrets, err := secretManager.Pull(e.Filter)
+							mapSecrets, err := secretManager.Pull(e.Filter)
 							if err != nil {
 								return err
 							}
-							secrets = append(secrets, newSecrets...)
+							for k, v := range mapSecrets {
+								secrets = append(secrets, secretsmanager.Secret{
+									ID:      k,
+									Content: v,
+								})
+							}
 						}
 					}
 
@@ -191,18 +201,28 @@ grab all secrets with that prefix`,
 								prefix = arg
 							}
 
-							newSecrets, err := secretManager.Pull(prefix)
+							mapSecrets, err := secretManager.Pull(prefix)
 							if err != nil {
 								return err
 							}
-							secrets = append(secrets, newSecrets...)
+							for k, v := range mapSecrets {
+								secrets = append(secrets, secretsmanager.Secret{
+									ID:      k,
+									Content: v,
+								})
+							}
 						}
 					} else {
-						newSecrets, err := secretManager.Pull("")
+						mapSecrets, err := secretManager.Pull("")
 						if err != nil {
-							return nil
+							return err
 						}
-						secrets = append(secrets, newSecrets...)
+						for k, v := range mapSecrets {
+							secrets = append(secrets, secretsmanager.Secret{
+								ID:      k,
+								Content: v,
+							})
+						}
 					}
 
 					if print { // if the print flag is set
@@ -210,23 +230,31 @@ grab all secrets with that prefix`,
 					} else { // if no print flag was set, download the secrets
 						for _, s := range secrets {
 							log.Default().Println("Downloading:", s.ID)
-							err = utils.DownloadSecret(s.ID, s.Content, secretsPath+"/"+secretManager.Platform(), "/")
+							err = utils.DownloadSecret(
+								s.ID,
+								s.Content,
+								fmt.Sprintf("%s/%s", secretsPath, secretManager.Platform()),
+								"/",
+							)
 							if err != nil {
 								return err
 							}
 							secretIds = append(secretIds, s.ID)
-							fmt.Printf("%s/%s\n", secretsPath+"/"+secretManager.Platform(), s.ID)
+							fmt.Printf("%s/%s/%s\n", secretsPath, secretManager.Platform(), s.ID)
 						}
-						f, err := filepath.Abs(secretsPath + "/" + secretManager.Platform())
+						f, err := filepath.Abs(fmt.Sprintf("%s/%s", secretsPath, secretManager.Platform()))
 						if err != nil {
 							return err
 						}
 						baseOfPath := fmt.Sprintf("/%s", filepath.Base(f))
 						parentPath := strings.TrimSuffix(f, baseOfPath)
 						_ = utils.CheckIfGitRepo(parentPath, jawsConf.Conf.General.RepoWarn)
-						utils.GitControlSecrets(secretIds, secretsPath+"/"+secretManager.Platform())
+						utils.GitControlSecrets(secretIds, fmt.Sprintf("%s/%s", secretsPath, secretManager.Platform()))
 						if useEditor {
-							if err = utils.OpenWithEditor(secretIds, secretsPath+"/"+secretManager.Platform()); err != nil {
+							if err = utils.OpenWithEditor(
+								secretIds,
+								fmt.Sprintf("%s/%s", secretsPath, secretManager.Platform()),
+							); err != nil {
 								if err.Error() != noSelErr.Error() {
 									return err
 								}

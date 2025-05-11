@@ -7,7 +7,10 @@ import (
 	"os"
 	"strings"
 
+	. "github.com/jacbart/jaws/cmd/jaws/config"
 	"github.com/jacbart/jaws/pkg/secretsmanager"
+	"github.com/jacbart/jaws/pkg/secretsmanager/aws"
+	"github.com/jacbart/jaws/pkg/secretsmanager/gcp"
 	"github.com/jacbart/jaws/utils/style"
 	"github.com/spf13/cobra"
 )
@@ -25,7 +28,7 @@ func init() {
 // CMD Variables
 var (
 	secretManager          secretsmanager.Manager
-	jawsConf               secretsmanager.CliConfig
+	jawsConf               CliConfig
 	cfgFile                string
 	secretsPath            string
 	profile                string
@@ -96,7 +99,7 @@ When downloading secrets jaws will create a path using the secret's name.`,
 
 // InitConfig reads in config file and ENV variables if set.
 func InitConfig() {
-	jawsConf = secretsmanager.InitCliConfig()
+	jawsConf = InitCliConfig()
 
 	if cfgFile != "" {
 		jawsConf.SetConfigName(cfgFile)
@@ -110,19 +113,20 @@ func InitConfig() {
 	managers, err := jawsConf.ReadInConfig()
 	if err != nil {
 		switch err.(type) {
-		case *secretsmanager.NoConfigFileFound:
+		case *NoConfigFileFound:
 			// 	log.Default().Println("no config found, defaulting to aws")
-			secretManager = &secretsmanager.AWSManager{
-				Profile: "default",
+			secretManager = &aws.Manager{
+				Profile:      "default",
+				ProfileLabel: "default",
 			}
-			jawsConf.Conf.General = secretsmanager.GeneralHCL{
+			jawsConf.Conf.General = GeneralHCL{
 				DefaultProfile: "default",
 			}
-		case *secretsmanager.DecodeConfigFailed:
-			secretManager = &secretsmanager.AWSManager{
-				Profile: "default",
+		case *DecodeConfigFailed:
+			secretManager = &gcp.Manager{
+				ProfileLabel: "default",
 			}
-			jawsConf.Conf.General = secretsmanager.GeneralHCL{
+			jawsConf.Conf.General = GeneralHCL{
 				DefaultProfile: "default",
 			}
 		default:

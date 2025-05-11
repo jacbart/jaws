@@ -17,3 +17,6 @@ dist/
 # nix
 result
 .direnv/
+
+!.envrc
+.env
