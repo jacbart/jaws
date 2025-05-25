@@ -1,12 +1,69 @@
 { pkgs
 , lib
 , self
-,
+, ...
 }:
 let
   inherit (pkgs.dockerTools) buildImage;
+  inherit
+    (lib.types)
+    oneOf
+    listOf
+    attrsOf
+    ;
+  inherit
+    (lib.types)
+    bool
+    int
+    float
+    str
+    path
+    ;
+  inherit (pkgs.formats) json;
 in
 rec {
+  # generate hcl file
+  hcl = _:
+    json { }
+    // {
+      type =
+        let
+          valueType =
+            oneOf [
+              bool
+              int
+              float
+              str
+              path
+              (attrsOf valueType)
+              (listOf valueType)
+            ]
+            // {
+              description = "HCL value";
+            };
+        in
+        valueType;
+      generate = name: value:
+        pkgs.callPackage
+          (
+            { runCommand
+            , json2hcl
+            , ...
+            }:
+            runCommand name
+              {
+                nativeBuildInputs = [ json2hcl ];
+                value = builtins.toJSON value;
+                passAsFile = [ "value" ];
+                preferLocalBuild = true;
+              }
+              ''
+                json2hcl < "$valuePath" > "$out"
+              ''
+          )
+          { };
+    };
+
   # get last modifidated date
   getLastModifiedDate = input:
     let
