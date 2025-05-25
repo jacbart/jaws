@@ -52,7 +52,7 @@
                 "-X 'main.Version=${version}'"
                 "-X 'main.Date=${utils.getLastModifiedDate source}'"
               ];
-              vendorHash = "sha256-/bY9ZeC7fwKUoYHoVpxnAyhnc0PCqlSQdJojaxtEkgc=";
+              vendorHash = "sha256-BsTuAa9mXbG3Dbtu94mx/7+CzHRO92LM9ymQXxSaVpE=";
               env = {
                 CGO_ENABLED = 1;
               };
