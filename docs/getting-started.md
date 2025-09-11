@@ -4,6 +4,12 @@
 
 ## Install jaws  
 
+### Using go
+
+`go install github.com/jacbart/jaws/cmd/jaws@latest`
+
+### Using Github Release
+
 go to the releases page of [jaws](https://github.com/jacbart/jaws/releases) and download the tar file for your computer. Then install the binary using the commands below. Or just open the archive and move the jaws binary to your PATH.  
 
 ```sh
