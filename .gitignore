@@ -20,3 +20,8 @@ result
 
 !.envrc
 .env
+
+
+# Added by cargo
+
+/target
