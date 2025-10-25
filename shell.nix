@@ -1,8 +1,10 @@
-{ pkgs ? import <nixpkgs> {}
-, pname
-, rustVersion
-, version
-, ... }:
+{
+  pkgs ? import <nixpkgs> { },
+  pname,
+  rustVersion,
+  version,
+  ...
+}:
 
 pkgs.mkShell {
   name = "${pname}-${version}";

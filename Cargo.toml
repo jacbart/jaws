@@ -4,3 +4,8 @@ version = "1.1.0"
 edition = "2024"
 
 [dependencies]
+aws-config = { version = "1.8.6", features = ["behavior-version-latest"] }
+aws-sdk-secretsmanager = "1.88.0"
+tokio = { version = "1", features = ["full"] }
+ff = { git = "https://github.com/jacbart/ff.git", branch = "main" }
+aws-smithy-async = "1.2.5"

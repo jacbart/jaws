@@ -1,9 +1,11 @@
-{ pkgs ? import <nixpkgs> {}
-, rustVersion
-, self
-, version
-, pname
-, ... }:
+{
+  pkgs ? import <nixpkgs> { },
+  rustVersion,
+  self,
+  version,
+  pname,
+  ...
+}:
 let
   inherit (pkgs) lib;
   # outputHashes = { "package-version" = "sha256-xxx"; };
@@ -21,7 +23,7 @@ rustPlatform.buildRustPackage {
   };
   meta = with lib; {
     description = "flake for ${pname} version ${version}";
-    homepage = "https://github.com/jacbart/";
+    homepage = "https://github.com/jacbart/jaws";
     license = with licenses; [ mpl20 ];
     maintainers = with maintainers; [ jacbart ];
   };
