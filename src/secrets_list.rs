@@ -5,7 +5,6 @@ pub async fn _list_all(
     client: &Client,
     filters: Option<Vec<Filter>>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    // let mut secrets_list = Vec::new();
     let builder = client.list_secrets().set_filters(filters).into_paginator();
     let mut stream = builder.send();
 
