@@ -9,3 +9,9 @@ aws-sdk-secretsmanager = "1.88.0"
 tokio = { version = "1", features = ["full"] }
 ff = { git = "https://github.com/jacbart/ff.git", branch = "main" }
 aws-smithy-async = "1.2.5"
+clap = { version = "4", features = ["derive"] }
+serde = { version = "1", features = ["derive"] }
+toml = "0.8"
+async-trait = "0.1"
+dirs = "5"
+futures = "0.3"

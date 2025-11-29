@@ -6,10 +6,9 @@ jaws
 !cmd/jaws
 
 # secrets
-secrets
+.secrets
 **/*service-account.json
-!pkg/secrets
-!internal/aws/secrets
+!src/secrets
 
 # goreleaser builds
 dist/
