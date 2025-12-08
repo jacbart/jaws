@@ -1,6 +1,8 @@
 pub mod file;
 pub mod flags;
 
+use crate::cli::Cli;
+
 use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
 
@@ -22,8 +24,8 @@ impl Default for Config {
 }
 
 impl Config {
-    pub fn load() -> Result<Self, Box<dyn std::error::Error>> {
-        let flags = flags::parse_flags();
+    pub fn load_from_cli(cli: &Cli) -> Result<Self, Box<dyn std::error::Error>> {
+        let flags = flags::Flags::from(cli);
         let file_config = file::load_config_file()?;
         let mut config = Config::default();
 
