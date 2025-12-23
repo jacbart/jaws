@@ -5,6 +5,10 @@ use std::path::PathBuf;
 #[command(name = "jaws")]
 #[command(about = "A CLI tool for managing secrets", long_about = None)]
 pub struct Cli {
+    /// Provider (aws)
+    #[arg(long, global = true)]
+    pub provider: Option<String>,
+
     /// AWS region
     #[arg(long, global = true)]
     pub region: Option<String>,

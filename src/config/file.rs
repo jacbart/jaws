@@ -1,21 +1,20 @@
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
 use std::fs;
+use std::path::PathBuf;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct FileConfig {
+    pub provider: Option<String>,
     pub region: Option<String>,
     pub editor: Option<String>,
     pub secrets_path: Option<PathBuf>,
 }
 
 pub fn load_config_file() -> Result<Option<FileConfig>, Box<dyn std::error::Error>> {
-    let mut config_paths = vec![
-        PathBuf::from("./jaws.toml"),
-        PathBuf::from("./.jaws.toml"),
-    ];
-    
+    let mut config_paths = vec![PathBuf::from("./jaws.toml"), PathBuf::from("./.jaws.toml")];
+
     if let Some(home) = dirs::home_dir() {
+        config_paths.push(home.join(".jaws.toml"));
         config_paths.push(home.join(".config/jaws.toml"));
     }
 
