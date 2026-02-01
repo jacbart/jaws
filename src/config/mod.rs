@@ -70,22 +70,54 @@ impl ProviderConfig {
 }
 
 impl Config {
-    /// Load configuration from jaws.kdl
-    pub fn load() -> Result<Self, Box<dyn std::error::Error>> {
-        let path = PathBuf::from("jaws.kdl");
+    /// Get the list of config file search paths in priority order
+    fn get_config_search_paths() -> Vec<PathBuf> {
+        let mut paths = Vec::new();
 
-        if !path.exists() {
-            // Return default config if file doesn't exist
-            return Ok(Config {
-                defaults: None,
-                providers: Vec::new(),
-            });
+        // 1. ~/.config/jaws/jaws.kdl (XDG config directory)
+        if let Some(config_dir) = dirs::config_dir() {
+            paths.push(config_dir.join("jaws/jaws.kdl"));
         }
 
-        let content = std::fs::read_to_string(&path)?;
-        let config = knuffel::parse::<Config>("jaws.kdl", &content)?;
+        // 2. ~/.local/share/jaws/jaws.kdl (XDG data directory)
+        if let Some(data_dir) = dirs::data_dir() {
+            paths.push(data_dir.join("jaws/jaws.kdl"));
+        }
 
+        // 3. ~/jaws/jaws.kdl (home directory)
+        if let Some(home_dir) = dirs::home_dir() {
+            paths.push(home_dir.join("jaws/jaws.kdl"));
+        }
+
+        // 4. ./jaws.kdl (current directory)
+        paths.push(PathBuf::from("jaws.kdl"));
+
+        paths
+    }
+
+    /// Load configuration from a specific path
+    fn load_from_path(path: &Path) -> Result<Self, Box<dyn std::error::Error>> {
+        let content = std::fs::read_to_string(path)?;
+        let config = knuffel::parse::<Config>("jaws.kdl", &content)?;
         Ok(config)
+    }
+
+    /// Load configuration from jaws.kdl, searching multiple locations
+    pub fn load() -> Result<Self, Box<dyn std::error::Error>> {
+        let search_paths = Self::get_config_search_paths();
+
+        // Try each path in priority order
+        for path in &search_paths {
+            if path.exists() {
+                return Self::load_from_path(path);
+            }
+        }
+
+        // Return default config if no file found
+        Ok(Config {
+            defaults: None,
+            providers: Vec::new(),
+        })
     }
 
     /// Get the editor, defaulting to EDITOR env var or "vi"
