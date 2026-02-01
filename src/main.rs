@@ -101,16 +101,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 return Ok(());
             }
             cli::ConfigCommands::Set { key, value } => {
-                let config_path = std::path::PathBuf::from("jaws.kdl");
-                if !config_path.exists() {
-                    eprintln!("Config file not found. Run 'jaws config generate' first.");
-                    return Ok(());
-                }
+                let config_path = match Config::find_existing_config() {
+                    Some(path) => path,
+                    None => {
+                        eprintln!("Config file not found. Run 'jaws config generate' first.");
+                        return Ok(());
+                    }
+                };
                 let mut config = config;
                 match config.set_default(key, value) {
                     Ok(()) => {
                         config.save(&config_path)?;
-                        println!("Updated {} = {}", key, value);
+                        println!("Updated {} = {} in {}", key, value, config_path.display());
                     }
                     Err(e) => eprintln!("{}", e),
                 }
@@ -872,7 +874,50 @@ async fn handle_interactive_generate(
     use ff::{FuzzyFinderSession, TuiConfig};
     use std::io::{self, Write};
 
-    let config_path = path.unwrap_or_else(|| std::path::PathBuf::from("./jaws.kdl"));
+    println!("Interactive Configuration Setup");
+    println!("================================\n");
+
+    // Determine config path - either from --path flag or interactive selection
+    let config_path = if let Some(p) = path {
+        p
+    } else {
+        // Show location picker
+        println!("Select where to save the config file:\n");
+
+        let options = Config::get_config_location_options();
+        let items: Vec<String> = options
+            .iter()
+            .map(|(path, desc)| format!("{} — {}", path.display(), desc))
+            .collect();
+
+        let mut tui_config = TuiConfig::with_height((items.len() as u16 + 3).min(10));
+        tui_config.show_help_text = false;
+
+        let (session, tui_future) = FuzzyFinderSession::with_config(false, tui_config);
+
+        for item in &items {
+            let _ = session.add(item).await;
+        }
+        drop(session);
+
+        let selected = tui_future.await.unwrap_or_default();
+
+        if selected.is_empty() {
+            println!("No location selected. Cancelled.");
+            return Ok(());
+        }
+
+        // Find the selected path
+        let selected_str = &selected[0];
+        options
+            .into_iter()
+            .find(|(path, desc)| {
+                let display = format!("{} — {}", path.display(), desc);
+                &display == selected_str
+            })
+            .map(|(path, _)| path)
+            .unwrap_or_else(Config::default_config_path)
+    };
 
     // Check if file exists and overwrite flag
     if config_path.exists() && !overwrite {
@@ -883,8 +928,7 @@ async fn handle_interactive_generate(
         .into());
     }
 
-    println!("Interactive Configuration Setup");
-    println!("================================\n");
+    println!();
 
     // Helper function to read input with a default
     fn prompt(message: &str, default: &str) -> String {
@@ -1049,6 +1093,13 @@ async fn handle_interactive_generate(
     }
 
     println!();
+
+    // Create parent directories if they don't exist
+    if let Some(parent) = config_path.parent() {
+        if !parent.exists() {
+            std::fs::create_dir_all(parent)?;
+        }
+    }
 
     // Save config
     config.save(&config_path)?;

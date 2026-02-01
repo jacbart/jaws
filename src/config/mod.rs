@@ -70,29 +70,91 @@ impl ProviderConfig {
 }
 
 impl Config {
+    /// Get the explicit ~/.config/jaws/jaws.kdl path (XDG-style, cross-platform)
+    fn xdg_config_path() -> Option<PathBuf> {
+        dirs::home_dir().map(|h| h.join(".config/jaws/jaws.kdl"))
+    }
+
     /// Get the list of config file search paths in priority order
     fn get_config_search_paths() -> Vec<PathBuf> {
         let mut paths = Vec::new();
 
-        // 1. ~/.config/jaws/jaws.kdl (XDG config directory)
-        if let Some(config_dir) = dirs::config_dir() {
-            paths.push(config_dir.join("jaws/jaws.kdl"));
+        // 1. ./jaws.kdl (current directory - highest priority for project-local config)
+        paths.push(PathBuf::from("jaws.kdl"));
+
+        // 2. ~/.config/jaws/jaws.kdl (XDG-style, explicit cross-platform support)
+        if let Some(xdg_path) = Self::xdg_config_path() {
+            paths.push(xdg_path);
         }
 
-        // 2. ~/.local/share/jaws/jaws.kdl (XDG data directory)
+        // 3. Platform-native config directory (~/Library/Application Support/ on macOS)
+        // Skip if it's the same as the XDG path (e.g., on Linux where they're identical)
+        if let Some(config_dir) = dirs::config_dir() {
+            let native_path = config_dir.join("jaws/jaws.kdl");
+            if Self::xdg_config_path().as_ref() != Some(&native_path) {
+                paths.push(native_path);
+            }
+        }
+
+        // 4. ~/.local/share/jaws/jaws.kdl (XDG data directory)
         if let Some(data_dir) = dirs::data_dir() {
             paths.push(data_dir.join("jaws/jaws.kdl"));
         }
 
-        // 3. ~/jaws/jaws.kdl (home directory)
+        // 5. ~/jaws/jaws.kdl (home directory)
         if let Some(home_dir) = dirs::home_dir() {
             paths.push(home_dir.join("jaws/jaws.kdl"));
         }
 
-        // 4. ./jaws.kdl (current directory)
-        paths.push(PathBuf::from("jaws.kdl"));
-
         paths
+    }
+
+    /// Get config location options with human-readable descriptions for interactive selection
+    /// Returns tuples of (PathBuf, description) - ordered with recommended first
+    pub fn get_config_location_options() -> Vec<(PathBuf, &'static str)> {
+        let mut options = Vec::new();
+
+        // ~/.config/jaws/ (XDG-style, cross-platform - recommended)
+        if let Some(xdg_path) = Self::xdg_config_path() {
+            options.push((xdg_path, "~/.config/jaws/ (Recommended)"));
+        }
+
+        // Platform-native config directory (e.g., ~/Library/Application Support/ on macOS)
+        // Skip if it's the same as the XDG path
+        if let Some(config_dir) = dirs::config_dir() {
+            let native_path = config_dir.join("jaws/jaws.kdl");
+            if Self::xdg_config_path().as_ref() != Some(&native_path) {
+                options.push((native_path, "Platform config directory"));
+            }
+        }
+
+        // XDG data directory
+        if let Some(data_dir) = dirs::data_dir() {
+            options.push((data_dir.join("jaws/jaws.kdl"), "XDG data directory"));
+        }
+
+        // Home directory
+        if let Some(home_dir) = dirs::home_dir() {
+            options.push((home_dir.join("jaws/jaws.kdl"), "Home directory"));
+        }
+
+        // Current directory
+        options.push((PathBuf::from("jaws.kdl"), "Current directory"));
+
+        options
+    }
+
+    /// Find existing config file by searching all standard locations
+    /// Returns the path to the first existing config file found, or None
+    pub fn find_existing_config() -> Option<PathBuf> {
+        Self::get_config_search_paths()
+            .into_iter()
+            .find(|path| path.exists())
+    }
+
+    /// Get the default config path (~/.config/jaws/jaws.kdl)
+    pub fn default_config_path() -> PathBuf {
+        Self::xdg_config_path().unwrap_or_else(|| PathBuf::from("jaws.kdl"))
     }
 
     /// Load configuration from a specific path
@@ -155,7 +217,7 @@ impl Config {
         path: Option<PathBuf>,
         overwrite: bool,
     ) -> Result<PathBuf, Box<dyn std::error::Error>> {
-        let config_path = path.unwrap_or_else(|| PathBuf::from("./jaws.kdl"));
+        let config_path = path.unwrap_or_else(Self::default_config_path);
 
         // Check if file exists and overwrite flag
         if config_path.exists() && !overwrite {
@@ -164,6 +226,13 @@ impl Config {
                 config_path.display()
             )
             .into());
+        }
+
+        // Create parent directories if they don't exist
+        if let Some(parent) = config_path.parent() {
+            if !parent.exists() {
+                std::fs::create_dir_all(parent)?;
+            }
         }
 
         let kdl_content = r#"// Global defaults
