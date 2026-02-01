@@ -1,6 +1,21 @@
 use knuffel::Decode;
 use std::path::{Path, PathBuf};
 
+/// Expand tilde (~) prefix to the user's home directory.
+/// Handles both "~" alone and "~/path/to/something" patterns.
+fn expand_tilde(path: &str) -> PathBuf {
+    if path == "~" {
+        if let Some(home) = dirs::home_dir() {
+            return home;
+        }
+    } else if let Some(rest) = path.strip_prefix("~/") {
+        if let Some(home) = dirs::home_dir() {
+            return home.join(rest);
+        }
+    }
+    PathBuf::from(path)
+}
+
 #[derive(Debug, Decode, Clone)]
 pub struct Config {
     #[knuffel(child)]
@@ -191,11 +206,12 @@ impl Config {
     }
 
     /// Get the secrets path, defaulting to "./.secrets"
+    /// Expands ~ to the user's home directory if present.
     pub fn secrets_path(&self) -> PathBuf {
         self.defaults
             .as_ref()
             .and_then(|d| d.secrets_path.clone())
-            .map(PathBuf::from)
+            .map(|p| expand_tilde(&p))
             .unwrap_or_else(|| PathBuf::from("./.secrets"))
     }
 
@@ -423,5 +439,48 @@ defaults editor="vim" secrets_path="./.secrets" cache_ttl=900
         }
 
         None
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_expand_tilde_with_path() {
+        let expanded = expand_tilde("~/some/path");
+        // Should not start with ~ anymore
+        assert!(!expanded.to_string_lossy().starts_with('~'));
+        // Should end with the rest of the path
+        assert!(expanded.to_string_lossy().ends_with("some/path"));
+    }
+
+    #[test]
+    fn test_expand_tilde_alone() {
+        let expanded = expand_tilde("~");
+        // Should be the home directory (not ~)
+        assert!(!expanded.to_string_lossy().starts_with('~'));
+        // Should be an absolute path
+        assert!(expanded.is_absolute());
+    }
+
+    #[test]
+    fn test_expand_tilde_no_tilde() {
+        // Paths without ~ should be unchanged
+        let expanded = expand_tilde("/some/absolute/path");
+        assert_eq!(expanded, PathBuf::from("/some/absolute/path"));
+
+        let expanded = expand_tilde("relative/path");
+        assert_eq!(expanded, PathBuf::from("relative/path"));
+
+        let expanded = expand_tilde("./local/path");
+        assert_eq!(expanded, PathBuf::from("./local/path"));
+    }
+
+    #[test]
+    fn test_expand_tilde_not_at_start() {
+        // ~ in the middle of a path should not be expanded
+        let expanded = expand_tilde("/home/~user/path");
+        assert_eq!(expanded, PathBuf::from("/home/~user/path"));
     }
 }
