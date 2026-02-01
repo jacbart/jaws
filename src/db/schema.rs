@@ -3,7 +3,7 @@
 use rusqlite::{Connection, Result};
 use std::path::Path;
 
-const SCHEMA_VERSION: i32 = 1;
+const SCHEMA_VERSION: i32 = 2;
 
 /// Initialize the database at the given path, creating tables if needed.
 pub fn init_db(path: &Path) -> Result<Connection> {
@@ -74,6 +74,7 @@ fn create_tables(conn: &Connection) -> Result<()> {
             api_ref TEXT NOT NULL,
             display_name TEXT NOT NULL,
             hash TEXT NOT NULL,
+            description TEXT,
             remote_updated_at TEXT,
             created_at TEXT NOT NULL DEFAULT (datetime('now')),
             UNIQUE(provider_id, api_ref)
@@ -94,19 +95,51 @@ fn create_tables(conn: &Connection) -> Result<()> {
         CREATE INDEX idx_secrets_hash ON secrets(hash);
         CREATE INDEX idx_secrets_provider ON secrets(provider_id);
         CREATE INDEX idx_downloads_secret ON downloads(secret_id);
+
+        -- Operation log for tracking all secret operations
+        CREATE TABLE operations (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            operation_type TEXT NOT NULL,
+            provider_id TEXT NOT NULL,
+            secret_name TEXT NOT NULL,
+            details TEXT,
+            created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+
+        CREATE INDEX idx_operations_created ON operations(created_at DESC);
+        CREATE INDEX idx_operations_provider ON operations(provider_id);
         "#,
     )?;
     Ok(())
 }
 
 fn migrate(conn: &Connection, from_version: i32, to_version: i32) -> Result<()> {
-    // Future migrations go here
-    // For now, we only have version 1
     for version in from_version..to_version {
         match version {
             0 => {
                 // Initial schema - handled by create_tables
                 create_tables(conn)?;
+            }
+            1 => {
+                // Migration from v1 to v2:
+                // - Add description column to secrets
+                // - Add operations table
+                conn.execute("ALTER TABLE secrets ADD COLUMN description TEXT", [])?;
+                conn.execute_batch(
+                    r#"
+                    CREATE TABLE IF NOT EXISTS operations (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        operation_type TEXT NOT NULL,
+                        provider_id TEXT NOT NULL,
+                        secret_name TEXT NOT NULL,
+                        details TEXT,
+                        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+                    );
+
+                    CREATE INDEX IF NOT EXISTS idx_operations_created ON operations(created_at DESC);
+                    CREATE INDEX IF NOT EXISTS idx_operations_provider ON operations(provider_id);
+                    "#,
+                )?;
             }
             _ => {
                 // Unknown version, skip

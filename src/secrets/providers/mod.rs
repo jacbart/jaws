@@ -1,16 +1,25 @@
-use super::manager::SecretManager;
-use super::onepassword::SecretRef;
-use super::{AwsSecretManager, OnePasswordSecretManager};
-use aws_config::meta::region::RegionProviderChain;
-use aws_sdk_secretsmanager::{Client, config::Region};
-use futures::StreamExt;
-use futures::stream::Stream;
+//! Provider enumeration and detection.
+
+mod aws;
+mod jaws;
+pub mod onepassword;
+
+pub use aws::AwsSecretManager;
+pub use jaws::JawsSecretManager;
+pub use onepassword::{OnePasswordSecretManager, SecretRef};
 
 use crate::config::{Config, ProviderConfig};
+use crate::secrets::manager::SecretManager;
+
+use aws_config::meta::region::RegionProviderChain;
+use aws_sdk_secretsmanager::{config::Region, Client};
+use futures::stream::Stream;
+use futures::StreamExt;
 
 pub enum Provider {
     Aws(AwsSecretManager, String),                 // Manager + Provider ID
     OnePassword(OnePasswordSecretManager, String), // Manager + Provider ID
+    Jaws(JawsSecretManager, String),               // Manager + Provider ID
 }
 
 impl Provider {
@@ -18,6 +27,7 @@ impl Provider {
         match self {
             Provider::Aws(_, id) => id,
             Provider::OnePassword(_, id) => id,
+            Provider::Jaws(_, id) => id,
         }
     }
 
@@ -25,6 +35,7 @@ impl Provider {
         match self {
             Provider::Aws(_, _) => "aws",
             Provider::OnePassword(_, _) => "onepassword",
+            Provider::Jaws(_, _) => "jaws",
         }
     }
 
@@ -35,6 +46,7 @@ impl Provider {
         match self {
             Provider::Aws(m, _) => m.list_secrets_stream(None),
             Provider::OnePassword(m, _) => m.list_secrets_stream(None),
+            Provider::Jaws(m, _) => m.list_secrets_stream(None),
         }
     }
 
@@ -43,6 +55,7 @@ impl Provider {
         match self {
             Provider::Aws(m, _) => m.get_secret(api_ref).await,
             Provider::OnePassword(m, _) => m.get_secret(api_ref).await,
+            Provider::Jaws(m, _) => m.get_secret(api_ref).await,
         }
     }
 
@@ -55,6 +68,7 @@ impl Provider {
         match self {
             Provider::Aws(m, _) => m.create(name, value, description).await,
             Provider::OnePassword(_, _) => Err("1Password SDK does not support creating secrets. Please use the 1Password app or CLI.".into()),
+            Provider::Jaws(m, _) => m.create(name, value, description).await,
         }
     }
 
@@ -66,6 +80,7 @@ impl Provider {
         match self {
             Provider::Aws(m, _) => m.update(name, value).await,
             Provider::OnePassword(m, _) => m.update(name, value).await,
+            Provider::Jaws(m, _) => m.update(name, value).await,
         }
     }
 
@@ -73,6 +88,7 @@ impl Provider {
         match self {
             Provider::Aws(m, _) => m.delete(name, force).await,
             Provider::OnePassword(m, _) => m.delete(name, force).await,
+            Provider::Jaws(m, _) => m.delete(name, force).await,
         }
     }
 
@@ -84,6 +100,7 @@ impl Provider {
         match self {
             Provider::Aws(m, _) => m.rollback(name, version_id).await,
             Provider::OnePassword(m, _) => m.rollback(name, version_id).await,
+            Provider::Jaws(m, _) => m.rollback(name, version_id).await,
         }
     }
 }
@@ -162,12 +179,18 @@ pub async fn select_from_all_providers(
     Ok(result)
 }
 
-/// Detect and initialize all available providers
+/// Detect and initialize all available providers.
+/// The jaws provider is always available and is added first.
 pub async fn detect_providers(
     config: &Config,
 ) -> Result<Vec<Provider>, Box<dyn std::error::Error>> {
     let mut providers = Vec::new();
 
+    // Jaws provider is ALWAYS first and always available
+    let jaws = JawsSecretManager::new(config.secrets_path());
+    providers.push(Provider::Jaws(jaws, "jaws".to_string()));
+
+    // Process configured remote providers
     for provider_config in &config.providers {
         match provider_config.kind.as_str() {
             "aws" => {
@@ -181,7 +204,7 @@ pub async fn detect_providers(
                             for profile_name in profiles {
                                 // Get region for this profile if available
                                 let region = Config::get_aws_profile_region(&profile_name);
-                                
+
                                 let expanded_config = ProviderConfig {
                                     id: format!("aws-{}", profile_name),
                                     kind: "aws".to_string(),
@@ -193,7 +216,8 @@ pub async fn detect_providers(
 
                                 match init_aws_provider(&expanded_config).await {
                                     Ok(aws_provider) => {
-                                        providers.push(Provider::Aws(aws_provider, expanded_config.id));
+                                        providers
+                                            .push(Provider::Aws(aws_provider, expanded_config.id));
                                     }
                                     Err(e) => eprintln!(
                                         "Failed to init AWS profile '{}': {}",
@@ -226,10 +250,7 @@ pub async fn detect_providers(
                                 providers.push(Provider::OnePassword(op_provider, vault_id));
                             }
                         }
-                        Err(e) => eprintln!(
-                            "Failed to discover 1Password vaults: {}",
-                            e
-                        ),
+                        Err(e) => eprintln!("Failed to discover 1Password vaults: {}", e),
                     }
                 } else {
                     // Normal single vault
@@ -247,14 +268,18 @@ pub async fn detect_providers(
                     }
                 }
             }
+            "jaws" => {
+                // Future: remote jaws instance
+                eprintln!(
+                    "Remote jaws providers not yet implemented. \
+                     Future: Configure 'url' to connect to jaws serve."
+                );
+            }
             _ => eprintln!("Unknown provider kind: {}", provider_config.kind),
         }
     }
 
-    if providers.is_empty() {
-        return Err("No providers available. Please configure providers in jaws.kdl.".into());
-    }
-
+    // Always succeeds since jaws provider is always available
     Ok(providers)
 }
 

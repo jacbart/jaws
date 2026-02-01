@@ -472,11 +472,9 @@ impl OnePasswordSdkClient {
 
         // Store function pointers with 'static lifetime
         // SAFETY: Library is kept alive in Arc, so pointers remain valid
-        let invoke_sync_fn: InvokeSyncFn = unsafe { std::mem::transmute(*invoke_sync_fn) };
-        let rustbuffer_free_fn: RustBufferFreeFn =
-            unsafe { std::mem::transmute(*rustbuffer_free_fn) };
-        let rustbuffer_from_bytes_fn: RustBufferFromBytesFn =
-            unsafe { std::mem::transmute(*rustbuffer_from_bytes_fn) };
+        let invoke_sync_fn: InvokeSyncFn = *invoke_sync_fn;
+        let rustbuffer_free_fn: RustBufferFreeFn = *rustbuffer_free_fn;
+        let rustbuffer_from_bytes_fn: RustBufferFromBytesFn = *rustbuffer_from_bytes_fn;
 
         Ok(Self {
             client_id,

@@ -90,7 +90,6 @@ pub fn save_secret_file(
 }
 
 /// Load a secret from the filesystem.
-#[allow(dead_code)]
 pub fn load_secret_file(
     secrets_path: &Path,
     filename: &str,

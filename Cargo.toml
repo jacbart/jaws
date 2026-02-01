@@ -1,7 +1,17 @@
 [package]
 name = "jaws"
-version = "1.1.4"
+version = "1.2.0"
 edition = "2024"
+description = "A CLI tool and library for managing secrets from multiple providers"
+license = "MIT"
+
+[lib]
+name = "jaws"
+path = "src/lib.rs"
+
+[[bin]]
+name = "jaws"
+path = "src/main.rs"
 
 [dependencies]
 aws-config = { version = "1.8.6", features = ["behavior-version-latest"] }
@@ -25,7 +35,7 @@ age = { version = "0.11", features = ["ssh"] }
 tar = "0.4"
 rpassword = "7.4.0"
 chrono-humanize = "0.2.3"
-jj-lib = "0.37"
 hostname = "0.4.2"
 thiserror = "2.0.18"
-pollster = "0.4.0"
+uuid = { version = "1", features = ["v4"] }
+regex = "1"

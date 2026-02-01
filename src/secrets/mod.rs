@@ -1,12 +1,12 @@
-pub mod aws;
+//! Secrets management module.
+
 pub mod manager;
-pub mod onepassword;
-pub mod onepassword_ffi;
 pub mod providers;
 pub mod secret;
 pub mod storage;
 
-pub use aws::AwsSecretManager;
-pub use onepassword::{OnePasswordSecretManager, SecretRef};
-pub use providers::{detect_providers, select_from_all_providers, Provider};
-pub use storage::{hash_api_ref, save_secret_file, get_secret_path};
+pub use providers::{
+    detect_providers, select_from_all_providers, OnePasswordSecretManager, Provider, SecretRef,
+};
+#[allow(unused_imports)]
+pub use storage::{get_secret_path, hash_api_ref, load_secret_file, save_secret_file};

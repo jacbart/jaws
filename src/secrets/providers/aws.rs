@@ -1,5 +1,5 @@
-use super::manager::SecretManager;
-use super::secret::{download_secret, get_secret};
+use crate::secrets::manager::SecretManager;
+use crate::secrets::secret::{download_secret, get_secret};
 use async_trait::async_trait;
 use aws_sdk_secretsmanager::{Client, types::Filter};
 use futures::stream::{self, Stream};

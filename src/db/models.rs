@@ -21,6 +21,8 @@ pub struct DbSecret {
     pub display_name: String,
     pub hash: String,
     #[allow(dead_code)]
+    pub description: Option<String>,
+    #[allow(dead_code)]
     pub remote_updated_at: Option<DateTime<Utc>>,
     #[allow(dead_code)]
     pub created_at: DateTime<Utc>,
@@ -35,9 +37,7 @@ pub struct DbDownload {
     pub secret_id: i64,
     pub version: i32,
     pub filename: String,
-    #[allow(dead_code)]
     pub downloaded_at: DateTime<Utc>,
-    #[allow(dead_code)]
     pub file_hash: Option<String>,
 }
 
@@ -48,5 +48,18 @@ pub struct SecretInput {
     pub api_ref: String,
     pub display_name: String,
     pub hash: String,
+    pub description: Option<String>,
     pub remote_updated_at: Option<DateTime<Utc>>,
+}
+
+/// An operation log entry
+#[derive(Debug, Clone)]
+pub struct DbOperation {
+    #[allow(dead_code)]
+    pub id: i64,
+    pub operation_type: String,
+    pub provider_id: String,
+    pub secret_name: String,
+    pub details: Option<String>,
+    pub created_at: DateTime<Utc>,
 }

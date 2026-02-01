@@ -1,6 +1,6 @@
 //! Repository for database CRUD operations.
 
-use super::models::{DbDownload, DbProvider, DbSecret, SecretInput};
+use super::models::{DbDownload, DbOperation, DbProvider, DbSecret, SecretInput};
 use chrono::{DateTime, Utc};
 use rusqlite::{params, Connection, OptionalExtension};
 use std::sync::{Arc, Mutex};
@@ -87,11 +87,12 @@ impl SecretRepository {
         let conn = self.conn.lock().map_err(|e| e.to_string())?;
         conn.execute(
             r#"
-            INSERT INTO secrets (provider_id, api_ref, display_name, hash, remote_updated_at)
-            VALUES (?1, ?2, ?3, ?4, ?5)
+            INSERT INTO secrets (provider_id, api_ref, display_name, hash, description, remote_updated_at)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6)
             ON CONFLICT(provider_id, api_ref) DO UPDATE SET
                 display_name = excluded.display_name,
                 hash = excluded.hash,
+                description = COALESCE(excluded.description, secrets.description),
                 remote_updated_at = excluded.remote_updated_at
             "#,
             params![
@@ -99,6 +100,7 @@ impl SecretRepository {
                 secret.api_ref,
                 secret.display_name,
                 secret.hash,
+                secret.description,
                 secret.remote_updated_at.map(|dt| dt.to_rfc3339()),
             ],
         )?;
@@ -123,18 +125,17 @@ impl SecretRepository {
         let result = conn
             .query_row(
                 r#"
-                SELECT id, provider_id, api_ref, display_name, hash, remote_updated_at, created_at
+                SELECT id, provider_id, api_ref, display_name, hash, description, remote_updated_at, created_at
                 FROM secrets WHERE hash = ?
                 "#,
                 [hash],
-                |row| Self::row_to_secret(row),
+                Self::row_to_secret,
             )
             .optional()?;
         Ok(result)
     }
 
     /// Get a secret by provider ID and API reference.
-    #[allow(dead_code)]
     pub fn get_secret_by_api_ref(
         &self,
         provider_id: &str,
@@ -144,11 +145,11 @@ impl SecretRepository {
         let result = conn
             .query_row(
                 r#"
-                SELECT id, provider_id, api_ref, display_name, hash, remote_updated_at, created_at
+                SELECT id, provider_id, api_ref, display_name, hash, description, remote_updated_at, created_at
                 FROM secrets WHERE provider_id = ? AND api_ref = ?
                 "#,
                 params![provider_id, api_ref],
-                |row| Self::row_to_secret(row),
+                Self::row_to_secret,
             )
             .optional()?;
         Ok(result)
@@ -162,15 +163,68 @@ impl SecretRepository {
         let conn = self.conn.lock().map_err(|e| e.to_string())?;
         let mut stmt = conn.prepare(
             r#"
-            SELECT id, provider_id, api_ref, display_name, hash, remote_updated_at, created_at
+            SELECT id, provider_id, api_ref, display_name, hash, description, remote_updated_at, created_at
             FROM secrets WHERE provider_id = ?
             ORDER BY display_name
             "#,
         )?;
 
         let secrets = stmt
-            .query_map([provider_id], |row| Self::row_to_secret(row))?
+            .query_map([provider_id], Self::row_to_secret)?
             .collect::<Result<Vec<_>, _>>()?;
+
+        Ok(secrets)
+    }
+
+    /// Find a secret by provider ID and display_name.
+    pub fn find_secret_by_provider_and_name(
+        &self,
+        provider_id: &str,
+        display_name: &str,
+    ) -> Result<Option<DbSecret>, Box<dyn std::error::Error>> {
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        let result = conn
+            .query_row(
+                r#"
+                SELECT id, provider_id, api_ref, display_name, hash, description, remote_updated_at, created_at
+                FROM secrets WHERE provider_id = ? AND display_name = ?
+                "#,
+                params![provider_id, display_name],
+                Self::row_to_secret,
+            )
+            .optional()?;
+        Ok(result)
+    }
+
+    /// List all known secrets, optionally filtered by provider.
+    /// Returns all secrets from the database regardless of download status.
+    pub fn list_all_secrets(
+        &self,
+        provider_id: Option<&str>,
+    ) -> Result<Vec<DbSecret>, Box<dyn std::error::Error>> {
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+
+        let secrets = if let Some(provider) = provider_id {
+            let mut stmt = conn.prepare(
+                r#"
+                SELECT id, provider_id, api_ref, display_name, hash, description, remote_updated_at, created_at
+                FROM secrets WHERE provider_id = ?
+                ORDER BY provider_id, display_name
+                "#,
+            )?;
+            stmt.query_map([provider], Self::row_to_secret)?
+                .collect::<Result<Vec<_>, _>>()?
+        } else {
+            let mut stmt = conn.prepare(
+                r#"
+                SELECT id, provider_id, api_ref, display_name, hash, description, remote_updated_at, created_at
+                FROM secrets
+                ORDER BY provider_id, display_name
+                "#,
+            )?;
+            stmt.query_map([], Self::row_to_secret)?
+                .collect::<Result<Vec<_>, _>>()?
+        };
 
         Ok(secrets)
     }
@@ -183,7 +237,7 @@ impl SecretRepository {
         let mut stmt = conn.prepare(
             r#"
             SELECT 
-                s.id, s.provider_id, s.api_ref, s.display_name, s.hash, s.remote_updated_at, s.created_at,
+                s.id, s.provider_id, s.api_ref, s.display_name, s.hash, s.description, s.remote_updated_at, s.created_at,
                 d.id, d.secret_id, d.version, d.filename, d.downloaded_at, d.file_hash
             FROM secrets s
             INNER JOIN downloads d ON s.id = d.secret_id
@@ -200,35 +254,77 @@ impl SecretRepository {
                     api_ref: row.get(2)?,
                     display_name: row.get(3)?,
                     hash: row.get(4)?,
+                    description: row.get(5)?,
                     remote_updated_at: row
-                        .get::<_, Option<String>>(5)?
+                        .get::<_, Option<String>>(6)?
                         .and_then(|s| DateTime::parse_from_rfc3339(&s).ok())
                         .map(|dt| dt.with_timezone(&Utc)),
                     created_at: row
-                        .get::<_, String>(6)
+                        .get::<_, String>(7)
                         .ok()
                         .and_then(|s| DateTime::parse_from_rfc3339(&s).ok())
                         .map(|dt| dt.with_timezone(&Utc))
                         .unwrap_or_else(Utc::now),
                 };
                 let download = DbDownload {
-                    id: row.get(7)?,
-                    secret_id: row.get(8)?,
-                    version: row.get(9)?,
-                    filename: row.get(10)?,
+                    id: row.get(8)?,
+                    secret_id: row.get(9)?,
+                    version: row.get(10)?,
+                    filename: row.get(11)?,
                     downloaded_at: row
-                        .get::<_, String>(11)
+                        .get::<_, String>(12)
                         .ok()
                         .and_then(|s| DateTime::parse_from_rfc3339(&s).ok())
                         .map(|dt| dt.with_timezone(&Utc))
                         .unwrap_or_else(Utc::now),
-                    file_hash: row.get(12)?,
+                    file_hash: row.get(13)?,
                 };
                 Ok((secret, download))
             })?
             .collect::<Result<Vec<_>, _>>()?;
 
         Ok(results)
+    }
+
+    /// Delete all secrets and their downloads for a specific provider.
+    /// Returns the number of secrets deleted.
+    pub fn delete_secrets_by_provider(
+        &self,
+        provider_id: &str,
+    ) -> Result<usize, Box<dyn std::error::Error>> {
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+
+        // First delete all downloads for secrets of this provider
+        conn.execute(
+            r#"
+            DELETE FROM downloads WHERE secret_id IN (
+                SELECT id FROM secrets WHERE provider_id = ?
+            )
+            "#,
+            [provider_id],
+        )?;
+
+        // Then delete the secrets themselves
+        let deleted = conn.execute("DELETE FROM secrets WHERE provider_id = ?", [provider_id])?;
+
+        Ok(deleted)
+    }
+
+    /// Delete all secrets and downloads (full reset).
+    /// Returns the number of secrets deleted.
+    pub fn delete_all_secrets(&self) -> Result<usize, Box<dyn std::error::Error>> {
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+
+        // Delete all downloads first (foreign key constraint)
+        conn.execute("DELETE FROM downloads", [])?;
+
+        // Delete all secrets
+        let deleted = conn.execute("DELETE FROM secrets", [])?;
+
+        // Delete all operations
+        conn.execute("DELETE FROM operations", [])?;
+
+        Ok(deleted)
     }
 
     // ========================================================================
@@ -296,7 +392,7 @@ impl SecretRepository {
                 LIMIT 1
                 "#,
                 [secret_id],
-                |row| Self::row_to_download(row),
+                Self::row_to_download,
             )
             .optional()?;
         Ok(result)
@@ -317,7 +413,7 @@ impl SecretRepository {
         )?;
 
         let downloads = stmt
-            .query_map([secret_id], |row| Self::row_to_download(row))?
+            .query_map([secret_id], Self::row_to_download)?
             .collect::<Result<Vec<_>, _>>()?;
 
         Ok(downloads)
@@ -338,13 +434,14 @@ impl SecretRepository {
                 WHERE secret_id = ? AND version = ?
                 "#,
                 params![secret_id, version],
-                |row| Self::row_to_download(row),
+                Self::row_to_download,
             )
             .optional()?;
         Ok(result)
     }
 
     /// Get a secret by its ID.
+    #[allow(dead_code)]
     pub fn get_secret_by_id(
         &self,
         id: i64,
@@ -353,11 +450,11 @@ impl SecretRepository {
         let result = conn
             .query_row(
                 r#"
-                SELECT id, provider_id, api_ref, display_name, hash, remote_updated_at, created_at
+                SELECT id, provider_id, api_ref, display_name, hash, description, remote_updated_at, created_at
                 FROM secrets WHERE id = ?
                 "#,
                 [id],
-                |row| Self::row_to_secret(row),
+                Self::row_to_secret,
             )
             .optional()?;
         Ok(result)
@@ -372,6 +469,73 @@ impl SecretRepository {
     }
 
     // ========================================================================
+    // Operation log
+    // ========================================================================
+
+    /// Log an operation for auditing/history purposes.
+    pub fn log_operation(
+        &self,
+        operation_type: &str,
+        provider_id: &str,
+        secret_name: &str,
+        details: Option<&str>,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        conn.execute(
+            r#"
+            INSERT INTO operations (operation_type, provider_id, secret_name, details)
+            VALUES (?1, ?2, ?3, ?4)
+            "#,
+            params![operation_type, provider_id, secret_name, details],
+        )?;
+        Ok(())
+    }
+
+    /// List operations, optionally filtered by provider and limited.
+    pub fn list_operations(
+        &self,
+        limit: Option<usize>,
+        provider_filter: Option<&str>,
+    ) -> Result<Vec<DbOperation>, Box<dyn std::error::Error>> {
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+
+        let query = if provider_filter.is_some() {
+            format!(
+                r#"
+                SELECT id, operation_type, provider_id, secret_name, details, created_at
+                FROM operations
+                WHERE provider_id = ?1
+                ORDER BY created_at DESC
+                LIMIT {}
+                "#,
+                limit.unwrap_or(100)
+            )
+        } else {
+            format!(
+                r#"
+                SELECT id, operation_type, provider_id, secret_name, details, created_at
+                FROM operations
+                ORDER BY created_at DESC
+                LIMIT {}
+                "#,
+                limit.unwrap_or(100)
+            )
+        };
+
+        let mut stmt = conn.prepare(&query)?;
+
+        let operations = if let Some(provider) = provider_filter {
+            stmt.query_map([provider], Self::row_to_operation)?
+                .collect::<Result<Vec<_>, _>>()?
+        } else {
+            stmt.query_map([], Self::row_to_operation)?
+                .collect::<Result<Vec<_>, _>>()?
+        };
+
+        Ok(operations)
+    }
+
+    // ========================================================================
     // Helper functions
     // ========================================================================
 
@@ -382,12 +546,13 @@ impl SecretRepository {
             api_ref: row.get(2)?,
             display_name: row.get(3)?,
             hash: row.get(4)?,
+            description: row.get(5)?,
             remote_updated_at: row
-                .get::<_, Option<String>>(5)?
+                .get::<_, Option<String>>(6)?
                 .and_then(|s| DateTime::parse_from_rfc3339(&s).ok())
                 .map(|dt| dt.with_timezone(&Utc)),
             created_at: row
-                .get::<_, String>(6)
+                .get::<_, String>(7)
                 .ok()
                 .and_then(|s| DateTime::parse_from_rfc3339(&s).ok())
                 .map(|dt| dt.with_timezone(&Utc))
@@ -408,6 +573,22 @@ impl SecretRepository {
                 .map(|dt| dt.with_timezone(&Utc))
                 .unwrap_or_else(Utc::now),
             file_hash: row.get(5)?,
+        })
+    }
+
+    fn row_to_operation(row: &rusqlite::Row) -> rusqlite::Result<DbOperation> {
+        Ok(DbOperation {
+            id: row.get(0)?,
+            operation_type: row.get(1)?,
+            provider_id: row.get(2)?,
+            secret_name: row.get(3)?,
+            details: row.get(4)?,
+            created_at: row
+                .get::<_, String>(5)
+                .ok()
+                .and_then(|s| DateTime::parse_from_rfc3339(&s).ok())
+                .map(|dt| dt.with_timezone(&Utc))
+                .unwrap_or_else(Utc::now),
         })
     }
 }

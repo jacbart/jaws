@@ -1,38 +1,33 @@
-use clap::{Args, Parser, Subcommand};
+//! Command and subcommand definitions.
+
+use clap::Subcommand;
 use std::path::PathBuf;
 
-#[derive(Parser, Debug)]
-#[command(name = "jaws")]
-#[command(about = "A CLI tool for managing secrets", long_about = None)]
-pub struct Cli {
-    #[command(flatten)]
-    pub config: ConfigArgs,
-
-    #[command(subcommand)]
-    pub command: Option<Commands>,
-}
-
-#[derive(Debug, Default, Args)]
-pub struct ConfigArgs {
-    /// Editor to use for opening secrets
-    #[arg(long, global = true)]
-    pub editor: Option<String>,
-
-    /// Path where secrets will be downloaded
-    #[arg(long, global = true)]
-    pub secrets_path: Option<PathBuf>,
-}
-
+/// Top-level commands available in jaws.
 #[derive(Subcommand, Debug)]
 pub enum Commands {
     /// Pull secrets from your secrets manager
     Pull {
-        /// Name of the secret to pull (optional - if not provided, opens TUI selector)
+        /// Secret reference: PROVIDER://SECRET_NAME (e.g., jaws://my-secret, aws-dev://db-pass)
+        /// If default_provider is set in config, the prefix can be omitted.
+        /// If not provided, opens TUI selector.
         secret_name: Option<String>,
 
         /// Open secrets in editor after downloading
         #[arg(short, long)]
         edit: bool,
+
+        /// Print secret value to stdout (for use in scripts). Requires secret_name.
+        #[arg(short, long)]
+        print: bool,
+
+        /// Inject secrets into a template file. Replaces {{PROVIDER://SECRET}} patterns.
+        #[arg(short, long, value_name = "FILE")]
+        inject: Option<PathBuf>,
+
+        /// Output file for inject mode (default: stdout)
+        #[arg(short, long, value_name = "FILE")]
+        output: Option<PathBuf>,
     },
     /// Push secrets to your secrets manager
     Push {
@@ -50,6 +45,12 @@ pub enum Commands {
     },
     /// Refresh the local cache of remote secrets
     Sync,
+    /// List all known secrets (one per line, for scripting)
+    List {
+        /// Filter by provider (e.g., "jaws", "aws-dev")
+        #[arg(short, long)]
+        provider: Option<String>,
+    },
     /// View version history of downloaded secrets
     History {
         /// Name of the secret to show history for (optional - if not provided, opens TUI selector)
@@ -63,16 +64,16 @@ pub enum Commands {
         #[arg(short = 'n', long)]
         limit: Option<usize>,
     },
-    /// Restore a previous version of a secret
-    Restore {
-        /// Name of the secret to restore
+    /// Rollback a secret to a previous version
+    Rollback {
+        /// Name of the secret to rollback
         secret_name: Option<String>,
 
-        /// Version number to restore (optional - if not provided, shows version selector)
+        /// Version number to rollback to (optional - if not provided, shows version selector)
         #[arg(short, long)]
         version: Option<i32>,
 
-        /// Open the restored secret in editor
+        /// Open the rolled back secret in editor
         #[arg(short, long)]
         edit: bool,
     },
@@ -108,27 +109,51 @@ pub enum Commands {
         #[command(subcommand)]
         command: ConfigCommands,
     },
-    /// Undo the last VCS operation
-    Undo,
-    /// Show operation log (jj-style history)
+    /// Create a new local secret
+    Create {
+        /// Name for the secret
+        name: String,
+
+        /// Optional description
+        #[arg(short, long)]
+        description: Option<String>,
+
+        /// Read value from file instead of editor
+        #[arg(short, long)]
+        file: Option<PathBuf>,
+    },
+    /// Show operation log (all secret operations)
     Log {
         /// Maximum number of operations to show
         #[arg(short = 'n', long)]
         limit: Option<usize>,
-    },
-    /// Show diff between current state and a previous operation
-    Diff {
-        /// Operation ID to diff against (defaults to previous operation)
+
+        /// Filter by provider
         #[arg(short, long)]
-        operation: Option<String>,
+        provider: Option<String>,
     },
     /// Remote provider operations
     Remote {
         #[command(subcommand)]
         command: RemoteCommands,
     },
+    /// Clear local cache and secrets
+    Clean {
+        /// Delete without confirmation (dangerous for local jaws secrets)
+        #[arg(short, long)]
+        force: bool,
+
+        /// Show what would be deleted without actually deleting
+        #[arg(long)]
+        dry_run: bool,
+
+        /// Keep local jaws secrets, only delete cached remote secrets
+        #[arg(long)]
+        keep_local: bool,
+    },
 }
 
+/// Subcommands for remote provider operations.
 #[derive(Subcommand, Debug)]
 pub enum RemoteCommands {
     /// Delete a secret from the provider
@@ -156,6 +181,7 @@ pub enum RemoteCommands {
     },
 }
 
+/// Subcommands for configuration management.
 #[derive(Subcommand, Debug)]
 pub enum ConfigCommands {
     /// Generate a new config file

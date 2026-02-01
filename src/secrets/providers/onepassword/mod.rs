@@ -1,5 +1,7 @@
-use super::manager::SecretManager;
-use super::onepassword_ffi::{ItemCategory, OnePasswordSdkClient, SharedSdkClient, VaultOverview};
+mod ffi;
+
+use crate::secrets::manager::SecretManager;
+use ffi::{ItemCategory, OnePasswordSdkClient, SharedSdkClient, VaultOverview};
 use async_trait::async_trait;
 use futures::stream::{self, Stream, StreamExt};
 use std::fmt;
@@ -113,6 +115,7 @@ impl OnePasswordSecretManager {
     }
 
     /// Create a new 1Password secret manager with a specific vault ID
+    #[allow(dead_code)]
     pub async fn with_vault_id(
         vault_id: String,
         token_env: &str,
