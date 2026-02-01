@@ -1,7 +1,7 @@
 # jaws binary and configuration files
-jaws.conf
+jaws.kdl
 jaws
-*.jaws
+*.barrel
 !docker.jaws
 !cmd/jaws
 
@@ -19,6 +19,7 @@ result
 
 !.envrc
 .env
+.op_token
 
 
 # Added by cargo

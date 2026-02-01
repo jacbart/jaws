@@ -16,7 +16,7 @@
     let
       pname = "jaws";
       version = (builtins.fromTOML (builtins.readFile ./Cargo.toml)).package.version;
-      projectRustVersion = "1.91.1";
+      projectRustVersion = "1.92.0";
       inherit (nixpkgs) lib;
       allSystems = [
         "x86_64-linux"
@@ -69,6 +69,5 @@
           };
         }
       );
-      hydraJobs."${pname}" = forAllSystems ({ pkgs }: self.packages.${pkgs.stdenv.system}.default);
     };
 }

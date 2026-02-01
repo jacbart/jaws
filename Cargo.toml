@@ -1,6 +1,6 @@
 [package]
 name = "jaws"
-version = "1.1.0"
+version = "1.1.4"
 edition = "2024"
 
 [dependencies]
@@ -11,7 +11,21 @@ ff = { git = "https://github.com/jacbart/ff.git", branch = "main" }
 aws-smithy-async = "1.2.5"
 clap = { version = "4", features = ["derive"] }
 serde = { version = "1", features = ["derive"] }
-toml = "0.8"
 async-trait = "0.1"
 dirs = "5"
 futures = "0.3"
+serde_json = "1"
+libloading = "0.8"
+knuffel = { version = "3.2.0", features = ["derive"] }
+rusqlite = { version = "0.31", features = ["bundled"] }
+sha2 = "0.10"
+hex = "0.4"
+chrono = { version = "0.4", features = ["serde"] }
+age = { version = "0.11", features = ["ssh"] }
+tar = "0.4"
+rpassword = "7.4.0"
+chrono-humanize = "0.2.3"
+jj-lib = "0.37"
+hostname = "0.4.2"
+thiserror = "2.0.18"
+pollster = "0.4.0"

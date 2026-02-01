@@ -1,5 +1,5 @@
 use super::manager::SecretManager;
-use super::secrets::{download_secret, get_secret};
+use super::secret::{download_secret, get_secret};
 use async_trait::async_trait;
 use aws_sdk_secretsmanager::{Client, types::Filter};
 use futures::stream::{self, Stream};
@@ -12,35 +12,6 @@ pub struct AwsSecretManager {
 impl AwsSecretManager {
     pub fn new(client: Client) -> Self {
         Self { client }
-    }
-
-    /// Helper method for TUI selection using the stream
-    pub async fn select_secrets(
-        &self,
-        filters: Option<Vec<Filter>>,
-    ) -> Result<Vec<String>, Box<dyn std::error::Error>> {
-        use ff::{TuiConfig, create_items_channel, run_tui_with_config};
-        use futures::StreamExt as _;
-
-        let (tx, rx) = create_items_channel();
-        let mut stream = self.list_secrets_stream(filters);
-
-        let tx_clone = tx.clone();
-        tokio::spawn(async move {
-            while let Some(result) = stream.next().await {
-                match result {
-                    Ok(name) => {
-                        let _ = tx_clone.send(name).await;
-                    }
-                    Err(_) => break,
-                }
-            }
-        });
-
-        let mut config = TuiConfig::fullscreen();
-        config.show_help_text = false;
-        let sel = run_tui_with_config(rx, true, config).await?;
-        Ok(sel)
     }
 }
 
@@ -79,7 +50,8 @@ impl SecretManager for AwsSecretManager {
     fn list_secrets_stream(
         &self,
         filters: Option<Vec<Filter>>,
-    ) -> Box<dyn Stream<Item = Result<String, Box<dyn std::error::Error + Send>>> + Send + Unpin> {
+    ) -> Box<dyn Stream<Item = Result<String, Box<dyn std::error::Error + Send>>> + Send + Unpin>
+    {
         let client = self.client.clone();
         let builder = client.list_secrets().set_filters(filters).into_paginator();
         let paginator_stream = builder.send();
@@ -103,7 +75,7 @@ impl SecretManager for AwsSecretManager {
                             .iter()
                             .filter_map(|secret| secret.name().map(|s| s.to_string()))
                             .collect();
-                        
+
                         if names.is_empty() {
                             None
                         } else {
@@ -150,11 +122,7 @@ impl SecretManager for AwsSecretManager {
             .to_string())
     }
 
-    async fn update(
-        &self,
-        name: &str,
-        value: &str,
-    ) -> Result<String, Box<dyn std::error::Error>> {
+    async fn update(&self, name: &str, value: &str) -> Result<String, Box<dyn std::error::Error>> {
         let resp = self
             .client
             .update_secret()
@@ -169,11 +137,7 @@ impl SecretManager for AwsSecretManager {
             .to_string())
     }
 
-    async fn delete(
-        &self,
-        name: &str,
-        force: bool,
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    async fn delete(&self, name: &str, force: bool) -> Result<(), Box<dyn std::error::Error>> {
         let mut builder = self.client.delete_secret().secret_id(name);
 
         if force {
@@ -194,7 +158,10 @@ impl SecretManager for AwsSecretManager {
         if let Some(vid) = version_id {
             get_builder = get_builder.version_id(vid);
         }
-        let secret_value = get_builder.send().await?.secret_string()
+        let secret_value = get_builder
+            .send()
+            .await?
+            .secret_string()
             .ok_or("Missing secret value in rollback")?
             .to_string();
 

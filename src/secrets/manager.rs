@@ -41,18 +41,10 @@ pub trait SecretManager {
     ) -> Result<String, Box<dyn std::error::Error>>;
 
     /// Update an existing secret's value
-    async fn update(
-        &self,
-        name: &str,
-        value: &str,
-    ) -> Result<String, Box<dyn std::error::Error>>;
+    async fn update(&self, name: &str, value: &str) -> Result<String, Box<dyn std::error::Error>>;
 
     /// Delete a secret
-    async fn delete(
-        &self,
-        name: &str,
-        force: bool,
-    ) -> Result<(), Box<dyn std::error::Error>>;
+    async fn delete(&self, name: &str, force: bool) -> Result<(), Box<dyn std::error::Error>>;
 
     /// Rollback a secret to a previous version
     /// Returns the version ID that was restored

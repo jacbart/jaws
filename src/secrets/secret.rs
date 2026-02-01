@@ -20,6 +20,7 @@ pub async fn _print_secret(client: &Client, name: &str) -> Result<(), Box<dyn st
 }
 
 /// download_secret gets a secret's value and saves it to a file locally, returning the file path
+#[allow(dead_code)]
 pub async fn download_secret(
     client: &Client,
     name: &str,
