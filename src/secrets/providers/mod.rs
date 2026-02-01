@@ -1,0 +1,354 @@
+//! Provider enumeration and detection.
+
+mod aws;
+mod jaws;
+pub mod onepassword;
+
+pub use aws::AwsSecretManager;
+pub use jaws::JawsSecretManager;
+pub use onepassword::{OnePasswordSecretManager, SecretRef};
+
+use crate::config::{Config, ProviderConfig};
+use crate::secrets::manager::SecretManager;
+
+use aws_config::meta::region::RegionProviderChain;
+use aws_sdk_secretsmanager::{config::Region, Client};
+use futures::stream::Stream;
+use futures::StreamExt;
+
+pub enum Provider {
+    Aws(AwsSecretManager, String),                 // Manager + Provider ID
+    OnePassword(OnePasswordSecretManager, String), // Manager + Provider ID
+    Jaws(JawsSecretManager, String),               // Manager + Provider ID
+}
+
+impl Provider {
+    pub fn id(&self) -> &str {
+        match self {
+            Provider::Aws(_, id) => id,
+            Provider::OnePassword(_, id) => id,
+            Provider::Jaws(_, id) => id,
+        }
+    }
+
+    pub fn kind(&self) -> &'static str {
+        match self {
+            Provider::Aws(_, _) => "aws",
+            Provider::OnePassword(_, _) => "onepassword",
+            Provider::Jaws(_, _) => "jaws",
+        }
+    }
+
+    pub fn list_secrets_stream(
+        &self,
+    ) -> Box<dyn Stream<Item = Result<String, Box<dyn std::error::Error + Send>>> + Send + Unpin>
+    {
+        match self {
+            Provider::Aws(m, _) => m.list_secrets_stream(None),
+            Provider::OnePassword(m, _) => m.list_secrets_stream(None),
+            Provider::Jaws(m, _) => m.list_secrets_stream(None),
+        }
+    }
+
+    /// Get the value of a secret by its API reference
+    pub async fn get_secret(&self, api_ref: &str) -> Result<String, Box<dyn std::error::Error>> {
+        match self {
+            Provider::Aws(m, _) => m.get_secret(api_ref).await,
+            Provider::OnePassword(m, _) => m.get_secret(api_ref).await,
+            Provider::Jaws(m, _) => m.get_secret(api_ref).await,
+        }
+    }
+
+    pub async fn create(
+        &self,
+        name: &str,
+        value: &str,
+        description: Option<&str>,
+    ) -> Result<String, Box<dyn std::error::Error>> {
+        match self {
+            Provider::Aws(m, _) => m.create(name, value, description).await,
+            Provider::OnePassword(_, _) => Err("1Password SDK does not support creating secrets. Please use the 1Password app or CLI.".into()),
+            Provider::Jaws(m, _) => m.create(name, value, description).await,
+        }
+    }
+
+    pub async fn update(
+        &self,
+        name: &str,
+        value: &str,
+    ) -> Result<String, Box<dyn std::error::Error>> {
+        match self {
+            Provider::Aws(m, _) => m.update(name, value).await,
+            Provider::OnePassword(m, _) => m.update(name, value).await,
+            Provider::Jaws(m, _) => m.update(name, value).await,
+        }
+    }
+
+    pub async fn delete(&self, name: &str, force: bool) -> Result<(), Box<dyn std::error::Error>> {
+        match self {
+            Provider::Aws(m, _) => m.delete(name, force).await,
+            Provider::OnePassword(m, _) => m.delete(name, force).await,
+            Provider::Jaws(m, _) => m.delete(name, force).await,
+        }
+    }
+
+    pub async fn rollback(
+        &self,
+        name: &str,
+        version_id: Option<&str>,
+    ) -> Result<String, Box<dyn std::error::Error>> {
+        match self {
+            Provider::Aws(m, _) => m.rollback(name, version_id).await,
+            Provider::OnePassword(m, _) => m.rollback(name, version_id).await,
+            Provider::Jaws(m, _) => m.rollback(name, version_id).await,
+        }
+    }
+}
+
+/// Select secrets from all providers using a unified TUI
+pub async fn select_from_all_providers(
+    providers: &[Provider],
+) -> Result<Vec<(String, String)>, Box<dyn std::error::Error>> {
+    use ff::{TuiConfig, create_items_channel, run_tui_with_config};
+    use std::collections::HashMap;
+    use std::sync::Arc;
+    use tokio::sync::Mutex;
+
+    let (tx, rx) = create_items_channel();
+    
+    // Map from display string to full reference (for 1Password combined refs)
+    let display_to_full: Arc<Mutex<HashMap<String, String>>> = Arc::new(Mutex::new(HashMap::new()));
+
+    // Spawn tasks to fetch secrets from each provider
+    for provider in providers {
+        let tx_clone = tx.clone();
+        let provider_id = provider.id().to_string();
+        let provider_kind = provider.kind().to_string();
+        let mut stream = provider.list_secrets_stream();
+        let map_clone = Arc::clone(&display_to_full);
+
+        tokio::spawn(async move {
+            while let Some(result) = stream.next().await {
+                if let Ok(secret) = result {
+                    // For 1Password, secrets are in combined format "display_path|||api_ref"
+                    // For AWS, secrets are just the secret name
+                    let display_secret = if provider_kind == "onepassword" {
+                        let secret_ref = SecretRef::parse(&secret);
+                        // Store the mapping from display key to full reference
+                        let mut map = map_clone.lock().await;
+                        let display_key = format!("{} | {}", provider_id, secret_ref.display_path);
+                        map.insert(display_key, secret.clone());
+                        secret_ref.display_path
+                    } else {
+                        secret.clone()
+                    };
+
+                    // Format: "provider_id | secret_name"
+                    let item = format!("{} | {}", provider_id, display_secret);
+                    if tx_clone.send(item).await.is_err() {
+                        break;
+                    }
+                }
+            }
+        });
+    }
+
+    // Drop original tx so channel closes when tasks finish
+    drop(tx);
+
+    let mut tui_config = TuiConfig::fullscreen();
+    tui_config.show_help_text = false;
+
+    let selected_items = run_tui_with_config(rx, true, tui_config)
+        .await
+        .map_err(|e| e as Box<dyn std::error::Error>)?;
+
+    let map = display_to_full.lock().await;
+    let mut result = Vec::new();
+    for item in selected_items {
+        if let Some((prov_id, _secret_display)) = item.split_once(" | ") {
+            // Look up the full reference from our map
+            let full_ref = map.get(&item).cloned().unwrap_or_else(|| {
+                // Fallback for non-1Password providers
+                item.split_once(" | ").map(|(_, s)| s.to_string()).unwrap_or(item.clone())
+            });
+            result.push((prov_id.to_string(), full_ref));
+        }
+    }
+
+    Ok(result)
+}
+
+/// Detect and initialize all available providers.
+/// The jaws provider is always available and is added first.
+pub async fn detect_providers(
+    config: &Config,
+) -> Result<Vec<Provider>, Box<dyn std::error::Error>> {
+    let mut providers = Vec::new();
+
+    // Jaws provider is ALWAYS first and always available
+    let jaws = JawsSecretManager::new(config.secrets_path());
+    providers.push(Provider::Jaws(jaws, "jaws".to_string()));
+
+    // Process configured remote providers
+    for provider_config in &config.providers {
+        match provider_config.kind.as_str() {
+            "aws" => {
+                // Check if profile is "all" - discover all AWS profiles
+                if provider_config.profile.as_deref() == Some("all") {
+                    match Config::discover_aws_profiles() {
+                        Ok(profiles) => {
+                            if profiles.is_empty() {
+                                eprintln!("No AWS profiles found in ~/.aws/credentials");
+                            }
+                            for profile_name in profiles {
+                                // Get region for this profile if available
+                                let region = Config::get_aws_profile_region(&profile_name);
+
+                                let expanded_config = ProviderConfig {
+                                    id: format!("aws-{}", profile_name),
+                                    kind: "aws".to_string(),
+                                    profile: Some(profile_name.clone()),
+                                    region,
+                                    vault: None,
+                                    token_env: None,
+                                };
+
+                                match init_aws_provider(&expanded_config).await {
+                                    Ok(aws_provider) => {
+                                        providers
+                                            .push(Provider::Aws(aws_provider, expanded_config.id));
+                                    }
+                                    Err(e) => eprintln!(
+                                        "Failed to init AWS profile '{}': {}",
+                                        profile_name, e
+                                    ),
+                                }
+                            }
+                        }
+                        Err(e) => eprintln!("Failed to discover AWS profiles: {}", e),
+                    }
+                } else {
+                    // Normal single profile
+                    match init_aws_provider(provider_config).await {
+                        Ok(aws_provider) => {
+                            providers.push(Provider::Aws(aws_provider, provider_config.id.clone()));
+                        }
+                        Err(e) => eprintln!(
+                            "Failed to init AWS provider '{}': {}",
+                            provider_config.id, e
+                        ),
+                    }
+                }
+            }
+            "onepassword" | "1password" | "op" => {
+                // Check if vault is "all" - discover all 1Password vaults
+                if provider_config.vault.as_deref() == Some("all") {
+                    match init_onepassword_all_vaults(provider_config).await {
+                        Ok(vault_providers) => {
+                            for (op_provider, vault_id) in vault_providers {
+                                providers.push(Provider::OnePassword(op_provider, vault_id));
+                            }
+                        }
+                        Err(e) => eprintln!("Failed to discover 1Password vaults: {}", e),
+                    }
+                } else {
+                    // Normal single vault
+                    match init_onepassword_provider(provider_config).await {
+                        Ok(op_provider) => {
+                            providers.push(Provider::OnePassword(
+                                op_provider,
+                                provider_config.id.clone(),
+                            ));
+                        }
+                        Err(e) => eprintln!(
+                            "Failed to init 1Password provider '{}': {}",
+                            provider_config.id, e
+                        ),
+                    }
+                }
+            }
+            "jaws" => {
+                // Future: remote jaws instance
+                eprintln!(
+                    "Remote jaws providers not yet implemented. \
+                     Future: Configure 'url' to connect to jaws serve."
+                );
+            }
+            _ => eprintln!("Unknown provider kind: {}", provider_config.kind),
+        }
+    }
+
+    // Always succeeds since jaws provider is always available
+    Ok(providers)
+}
+
+/// Initialize 1Password providers for all accessible vaults
+async fn init_onepassword_all_vaults(
+    config: &ProviderConfig,
+) -> Result<Vec<(OnePasswordSecretManager, String)>, Box<dyn std::error::Error>> {
+    let token_env = config
+        .token_env
+        .as_deref()
+        .unwrap_or("OP_SERVICE_ACCOUNT_TOKEN");
+
+    // First, create a temporary manager to list vaults
+    let temp_manager = OnePasswordSecretManager::new(None, token_env).await?;
+    let vaults = temp_manager.list_vaults()?;
+
+    if vaults.is_empty() {
+        return Err("No 1Password vaults accessible with the current service account token".into());
+    }
+
+    let mut providers = Vec::new();
+    for vault in vaults {
+        let vault_id = vault.id.clone();
+        let provider_id = format!("op-{}", vault.title.to_lowercase().replace(' ', "-"));
+        
+        match OnePasswordSecretManager::new(Some(vault_id), token_env).await {
+            Ok(manager) => {
+                providers.push((manager, provider_id));
+            }
+            Err(e) => eprintln!("Failed to init 1Password vault '{}': {}", vault.title, e),
+        }
+    }
+
+    Ok(providers)
+}
+
+async fn init_aws_provider(
+    config: &ProviderConfig,
+) -> Result<AwsSecretManager, Box<dyn std::error::Error>> {
+    let region = config.region.clone();
+    let profile = config.profile.clone();
+
+    // Set up region
+    let region_provider = RegionProviderChain::first_try(region.map(Region::new))
+        .or_default_provider()
+        .or_else(Region::new("us-west-2"));
+
+    // Set up config loader
+    let mut config_loader = aws_config::from_env().region(region_provider);
+
+    // If profile is specified, use it
+    if let Some(profile_name) = profile {
+        config_loader = config_loader.profile_name(profile_name);
+    }
+
+    let shared_config = config_loader.load().await;
+    let client = Client::new(&shared_config);
+
+    Ok(AwsSecretManager::new(client))
+}
+
+async fn init_onepassword_provider(
+    config: &ProviderConfig,
+) -> Result<OnePasswordSecretManager, Box<dyn std::error::Error>> {
+    let vault = config.vault.clone();
+    let token_env = config
+        .token_env
+        .as_deref()
+        .unwrap_or("OP_SERVICE_ACCOUNT_TOKEN");
+
+    OnePasswordSecretManager::new(vault, token_env).await
+}

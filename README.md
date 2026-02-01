@@ -1,80 +1,250 @@
 # JAWS
 
-> work in progress
+Just A Working Secretsmanager
 
-This project was inspired by AWS not having the best UX for their secrets management. This tool uses a fuzzy finder to make filtering and selecting of multiple secrets easy. Once you have the secrets downloaded, edit the files with a text editor and run the `push` command to update any changed secrets on your cloud provider's secret manager.
+A CLI tool and library for managing secrets from multiple providers (AWS Secrets Manager, 1Password, and local storage) with local version tracking.
 
-# Guides
+## Features
 
-[Getting Started](./docs/getting-started.md)
+- **Multi-provider support** - AWS Secrets Manager, 1Password, and local "jaws" secrets
+- **Git-like workflow** - `jaws pull`, `jaws push`, familiar commands
+- **Local version tracking** - Full history of downloaded secrets with rollback support
+- **Template injection** - Inject secrets into config files with `--inject`
+- **Script-friendly** - Print secrets to stdout with `--print` for shell scripts
+- **Encrypted export/import** - Archive secrets with passphrase or SSH key encryption
+- **TUI picker** - Interactive fuzzy finder for secret selection
+- **Library support** - Use as a Rust library in your own projects
 
-[How to Install](./docs/install.md)
+## Installation
 
-[Configuring Jaws](./docs/configure.md)
+```bash
+cargo install --path .
+```
 
-[Managing Project Environment Files](./docs/manage-env.md)
+## Quick Start
 
-# Demo
+```bash
+# Generate a config file (interactive mode discovers providers)
+jaws config generate --interactive
 
-![demo](./docs/vhs/demo/pull_edit_push.gif)
+# Pull secrets from your providers (opens TUI picker)
+jaws pull
 
-# Commands
+# Pull a specific secret
+jaws pull aws://my-secret
 
-## Secrets Manager
+# Edit and push changes back
+jaws push
 
-- pull
-- push
-- list
-- add
-- delete
-- rollback
+# View local version history
+jaws history
 
-## Self
+# Rollback to a previous version
+jaws rollback
+```
 
-- config - displays basic info on the current config
-  - create - create a new config
-  - show - display the config contents
-  - path - show the current config path
-  - edit - open the current config using the `$EDITOR` env variable
-  - lock - Encrypt the current config with a password or using `$JAWS_CONFIG_KEY` env variable
-  - unlock - Decrypt the current config with a password or using `$JAWS_CONFIG_KEY` env variable
-- clean - clean local secrets by deleting the path
-- completion - shell completions
-- diff - git diff for downloaded secrets
-- path - display the current secrets download path
-  - command - prints a shell function to `popd` and `pushd` to and from the secrets path
-- status - git status for the downloaded secrets
-- update - self update command
-- version - display jaws version
+## Commands
 
-# Environment File Manager
+### Local Operations
 
-**purpose**: Using a config file, output a var file that can be consumed at runtime. Using an integration with aws or gcp's secret manager pull secrets and use them as values for keys set in `whatever.jaws`. Using this instead of a local `.env` can prevent secrets from being leaked or accidentally committed to a repo, it also lets a developer have multiple environments declared in the config i.e. dev, testing, or production.
+| Command | Description |
+|---------|-------------|
+| `jaws` | Open TUI to select and edit downloaded secrets |
+| `jaws pull [SECRET]` | Download secrets from providers |
+| `jaws pull -p SECRET` | Print secret value to stdout (for scripts) |
+| `jaws pull -i TPL -o OUT` | Inject secrets into a template file |
+| `jaws push` | Upload changed secrets to providers |
+| `jaws create NAME` | Create a new local secret |
+| `jaws delete` | Delete a local secret and all its versions |
+| `jaws list` | List all known secrets (one per line) |
+| `jaws history` | View local version history |
+| `jaws rollback` | Rollback to a previous local version |
+| `jaws log` | Show operation log |
+| `jaws clean` | Clear local cache and secrets |
 
-## Input
+### Remote/Provider Operations
 
-- config file in hcl format
-  - vars
-    - secrets - `secret`
-    - local and env variables - `var`
-      - an environment variable will override one set in the locals block
-  - functions
-    - quote
-    - encode
-    - decode
-    - file
-    - sh
-    - resolve
-    - escape
-    - input
-  - [operators](https://developer.hashicorp.com/terraform/language/expressions/operators)
-  - [conditionals](https://developer.hashicorp.com/terraform/language/expressions/conditionals)
+| Command | Description |
+|---------|-------------|
+| `jaws sync` | Refresh local cache of remote secrets |
+| `jaws remote delete` | Delete a secret from the provider |
+| `jaws remote rollback` | Rollback to a previous version on the provider |
+| `jaws remote history` | View provider version history (not yet implemented) |
 
-## Output
+### Archive Operations
 
-> output can print to stdout or to a file directly.
+| Command | Description |
+|---------|-------------|
+| `jaws export` | Export and encrypt secrets to a `.barrel` file |
+| `jaws import FILE` | Import and decrypt a `.barrel` archive |
 
-- shell variable file i.g. `.env`
-- json
-- yaml
-- tfvars
+### Configuration
+
+| Command | Description |
+|---------|-------------|
+| `jaws config generate` | Generate a new config file |
+| `jaws config generate -i` | Interactive config generation with provider discovery |
+| `jaws config list` | List all configuration settings |
+| `jaws config get <key>` | Get a specific config value |
+| `jaws config set <key> <value>` | Set a config value |
+| `jaws config providers` | List configured providers |
+
+## Configuration
+
+JAWS uses a `jaws.kdl` config file:
+
+```kdl
+defaults {
+    editor "nvim"
+    secrets_path "./.secrets"
+    cache_ttl 900
+    default_provider "jaws"  // Optional: allows omitting provider prefix
+}
+
+providers {
+    // AWS with auto-discovery of all profiles
+    aws id="aws" profile="all"
+    
+    // Or specific AWS profile
+    aws id="aws-prod" profile="production" region="us-east-1"
+    
+    // 1Password with auto-discovery of all vaults
+    onepassword id="op" vault="all"
+    
+    // Or specific 1Password vault
+    onepassword id="op-dev" vault="abc123"
+}
+```
+
+### AWS Setup
+
+Ensure your AWS credentials are configured in `~/.aws/credentials` and you have appropriate IAM permissions for Secrets Manager.
+
+### 1Password Setup
+
+Set the `OP_SERVICE_ACCOUNT_TOKEN` environment variable with your 1Password service account token.
+
+## Usage Examples
+
+### Scripting with `--print`
+
+```bash
+# Get a secret value for use in scripts
+export DB_PASSWORD=$(jaws pull aws://prod/db-password -p)
+
+# Use in a command
+mysql -u admin -p$(jaws pull aws://mysql-pass -p) mydb
+```
+
+### Template Injection with `--inject`
+
+Create a template file (e.g., `.env.tpl`):
+```
+DATABASE_URL=postgres://user:{{aws://db-password}}@localhost/mydb
+API_KEY={{jaws://api-key}}
+```
+
+Inject secrets:
+```bash
+# Output to stdout
+jaws pull -i .env.tpl
+
+# Output to file
+jaws pull -i .env.tpl -o .env.prod
+```
+
+### Local Secrets
+
+Create and manage secrets that stay local (not synced to any provider):
+
+```bash
+# Create a local secret
+jaws create my-local-secret
+
+# Create from a file
+jaws create my-cert -f ./certificate.pem
+
+# List all secrets including local ones
+jaws list --provider jaws
+```
+
+### Clean Up
+
+```bash
+# See what would be deleted
+jaws clean --dry-run
+
+# Delete remote caches but keep local jaws secrets
+jaws clean --keep-local
+
+# Full cleanup (with confirmation for local secrets)
+jaws clean
+```
+
+## Export/Import
+
+Securely archive your secrets directory:
+
+```bash
+# Export with passphrase
+jaws export
+
+# Export with SSH public key
+jaws export -K ~/.ssh/id_ed25519.pub
+
+# Export to specific file
+jaws export -o backup.barrel
+
+# Import with passphrase
+jaws import ./jaws.barrel
+
+# Import with SSH private key
+jaws import ./jaws.barrel -K ~/.ssh/id_ed25519
+```
+
+## Library Usage
+
+JAWS can be used as a Rust library:
+
+```rust
+use jaws::{Config, detect_providers};
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let config = Config::load()?;
+    let providers = detect_providers(&config).await?;
+    
+    for provider in &providers {
+        println!("Provider: {} ({})", provider.id(), provider.kind());
+    }
+    
+    Ok(())
+}
+```
+
+## Project Structure
+
+```
+src/
+├── main.rs          # CLI entry point
+├── lib.rs           # Library exports
+├── archive.rs       # Encryption/archiving
+├── cli/             # CLI definitions
+├── commands/        # Command handlers
+├── config/          # Configuration
+├── db/              # SQLite database
+├── secrets/         # Secret providers
+│   └── providers/   # AWS, 1Password, local
+└── utils/           # Utilities
+```
+
+## Roadmap
+
+- [ ] `jaws serve` - Self-hostable secrets management API
+- [ ] Remote version history from providers
+- [ ] Hardware key encryption support
+- [ ] Secret rotation scheduling
+
+## License
+
+MIT

@@ -1,15 +1,14 @@
 # jaws binary and configuration files
-jaws.conf
+jaws.kdl
 jaws
-*.jaws
+*.barrel
 !docker.jaws
 !cmd/jaws
 
 # secrets
-secrets
+.secrets
 **/*service-account.json
-!pkg/secrets
-!internal/aws/secrets
+!src/secrets
 
 # goreleaser builds
 dist/
@@ -20,3 +19,9 @@ result
 
 !.envrc
 .env
+.op_token
+
+
+# Added by cargo
+
+/target
