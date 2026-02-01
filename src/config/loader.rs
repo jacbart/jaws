@@ -117,6 +117,18 @@ impl Config {
         })
     }
 
+    /// Load configuration, optionally from a specific path
+    /// If path is provided but doesn't exist, returns an error
+    pub fn load_from(path: Option<&Path>) -> Result<Self, Box<dyn std::error::Error>> {
+        if let Some(p) = path {
+            if !p.exists() {
+                return Err(format!("Config file not found: {}", p.display()).into());
+            }
+            return Self::load_from_path(p);
+        }
+        Self::load()
+    }
+
     /// Generate a config file with default values
     pub fn generate_config_file(
         path: Option<PathBuf>,

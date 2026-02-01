@@ -20,11 +20,7 @@ pub struct Cli {
 /// Global configuration arguments available to all commands.
 #[derive(Debug, Default, Args)]
 pub struct ConfigArgs {
-    /// Editor to use for opening secrets
-    #[arg(long, global = true)]
-    pub editor: Option<String>,
-
-    /// Path where secrets will be downloaded
-    #[arg(long, global = true)]
-    pub secrets_path: Option<PathBuf>,
+    /// Path to config file (overrides default search paths)
+    #[arg(short = 'c', long = "config", global = true, value_name = "PATH")]
+    pub config_path: Option<PathBuf>,
 }

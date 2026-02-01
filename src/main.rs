@@ -19,8 +19,8 @@ use jaws::DbProvider;
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
 
-    // Load config from file
-    let config = Config::load()?;
+    // Load config from file (use CLI-specified path if provided)
+    let config = Config::load_from(cli.config.config_path.as_deref())?;
 
     // Handle Config command separately as it doesn't require providers or database
     if let Some(Commands::Config { command }) = &cli.command {
