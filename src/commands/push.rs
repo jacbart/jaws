@@ -5,7 +5,9 @@ use std::process::Command;
 
 use crate::config::Config;
 use crate::db::SecretRepository;
-use crate::secrets::{get_secret_path, Provider};
+use crate::secrets::{Provider, get_secret_path};
+
+use crate::utils::parse_secret_ref;
 
 /// Handle the push command
 pub async fn handle_push(
@@ -24,10 +26,17 @@ pub async fn handle_push(
 
     // Filter by name if provided
     let secrets_to_push: Vec<_> = if let Some(name) = &secret_name {
-        downloaded
-            .into_iter()
-            .filter(|(s, _)| s.display_name.contains(name) || s.hash.starts_with(name))
-            .collect()
+        if let Ok((provider, specific_name)) = parse_secret_ref(name, None) {
+            downloaded
+                .into_iter()
+                .filter(|(s, _)| s.provider_id == provider && s.display_name == specific_name)
+                .collect()
+        } else {
+            downloaded
+                .into_iter()
+                .filter(|(s, _)| s.display_name.contains(name) || s.hash.starts_with(name))
+                .collect()
+        }
     } else {
         downloaded
     };
@@ -112,12 +121,10 @@ pub async fn handle_push(
             }
             Err(e) => {
                 let error_msg = e.to_string();
-                if error_msg.contains("ResourceNotFoundException") || error_msg.contains("not found")
+                if error_msg.contains("ResourceNotFoundException")
+                    || error_msg.contains("not found")
                 {
-                    match provider
-                        .create(&secret.display_name, &content, None)
-                        .await
-                    {
+                    match provider.create(&secret.display_name, &content, None).await {
                         Ok(result) => {
                             println!(
                                 "{} [{}] -> {} (created)",

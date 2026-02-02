@@ -1,8 +1,11 @@
 mod ffi;
 
 use crate::secrets::manager::SecretManager;
-use ffi::{ItemCategory, OnePasswordSdkClient, SharedSdkClient, VaultOverview};
 use async_trait::async_trait;
+use ffi::{
+    Item, ItemCategory, ItemField, ItemFieldType, OnePasswordSdkClient, SharedSdkClient,
+    VaultOverview,
+};
 use futures::stream::{self, Stream, StreamExt};
 use std::fmt;
 use std::path::PathBuf;
@@ -115,7 +118,6 @@ impl OnePasswordSecretManager {
     }
 
     /// Create a new 1Password secret manager with a specific vault ID
-    #[allow(dead_code)]
     pub async fn with_vault_id(
         vault_id: String,
         token_env: &str,
@@ -148,7 +150,6 @@ impl OnePasswordSecretManager {
     }
 
     /// Download a secret to a local file
-    #[allow(dead_code)]
     async fn download_secret(
         &self,
         name: &str,
@@ -182,6 +183,70 @@ impl OnePasswordSecretManager {
         file.write_all(secret_value.as_bytes())?;
 
         Ok(path_string)
+    }
+
+    /// Resolve vault ID and item details from a path string
+    /// Returns (vault_id, item_title, optional_field_name)
+    async fn resolve_context(
+        &self,
+        path: &str,
+    ) -> Result<(String, String, Option<String>), Box<dyn std::error::Error>> {
+        let parts: Vec<&str> = path.split('/').collect();
+        match parts.len() {
+            1 => {
+                if self.vault_id.is_empty() {
+                    return Err(
+                        "No default vault configured. Please specify path as 'Vault/Item'".into(),
+                    );
+                }
+                Ok((self.vault_id.clone(), parts[0].to_string(), None))
+            }
+            2 | 3 => {
+                let vault_name = parts[0];
+                let item_title = parts[1];
+                let field_name = if parts.len() == 3 {
+                    Some(parts[2].to_string())
+                } else {
+                    None
+                };
+
+                // If the name matches current vault, use cached ID
+                if !self.vault_name.is_empty() && vault_name == self.vault_name {
+                    return Ok((self.vault_id.clone(), item_title.to_string(), field_name));
+                }
+
+                // Otherwise resolve vault ID
+                let vault = self
+                    .sdk_client
+                    .find_vault(vault_name)
+                    .await
+                    .map_err(|e| e as Box<dyn std::error::Error>)?;
+                Ok((vault.id, item_title.to_string(), field_name))
+            }
+            _ => Err(
+                "Invalid path format. Expected 'Item', 'Vault/Item', or 'Vault/Item/Field'".into(),
+            ),
+        }
+    }
+
+    /// Find an item ID by title in a specific vault
+    async fn find_item_id(
+        &self,
+        vault_id: &str,
+        title: &str,
+    ) -> Result<String, Box<dyn std::error::Error>> {
+        let items = self
+            .sdk_client
+            .list_items(vault_id)
+            .await
+            .map_err(|e| e as Box<dyn std::error::Error>)?;
+
+        for item in items {
+            if item.title == title {
+                return Ok(item.id);
+            }
+        }
+        Err(format!("Item '{}' not found in vault", title).into())
     }
 }
 
@@ -223,14 +288,16 @@ impl SecretManager for OnePasswordSecretManager {
             stream::once(Box::pin(async move {
                 list_items_for_stream(sdk_client, vault_id, vault_name).await
             }))
-            .flat_map(|result: Result<Vec<String>, Box<dyn std::error::Error + Send>>| match result {
-                Ok(items) => {
-                    let items_stream: Vec<Result<String, Box<dyn std::error::Error + Send>>> =
-                        items.into_iter().map(Ok).collect();
-                    stream::iter(items_stream)
-                }
-                Err(e) => stream::iter(vec![Err(e)]),
-            }),
+            .flat_map(
+                |result: Result<Vec<String>, Box<dyn std::error::Error + Send>>| match result {
+                    Ok(items) => {
+                        let items_stream: Vec<Result<String, Box<dyn std::error::Error + Send>>> =
+                            items.into_iter().map(Ok).collect();
+                        stream::iter(items_stream)
+                    }
+                    Err(e) => stream::iter(vec![Err(e)]),
+                },
+            ),
         )
     }
 
@@ -244,32 +311,133 @@ impl SecretManager for OnePasswordSecretManager {
 
     async fn create(
         &self,
-        _name: &str,
-        _value: &str,
-        _description: Option<&str>,
+        name: &str,
+        value: &str,
+        description: Option<&str>,
     ) -> Result<String, Box<dyn std::error::Error>> {
-        Err(
-            "1Password SDK does not support creating secrets. Please use the 1Password app or CLI."
-                .into(),
-        )
+        let (vault_id, item_title, _) = self.resolve_context(name).await?;
+
+        // Create a new item
+        // We create a "Login" item which is the most standard type for secrets
+        let item = Item {
+            id: String::new(), // ID is ignored on create
+            title: item_title.clone(),
+            category: ItemCategory::Login,
+            vault_id: vault_id.clone(),
+            fields: vec![
+                ItemField {
+                    id: "password".to_string(),
+                    title: "password".to_string(),
+                    section_id: None,
+                    field_type: ItemFieldType::Concealed,
+                    value: value.to_string(),
+                },
+                ItemField {
+                    id: "username".to_string(),
+                    title: "username".to_string(),
+                    section_id: None,
+                    field_type: ItemFieldType::Text,
+                    value: "jaws-generated".to_string(),
+                },
+            ],
+            sections: vec![],
+            notes: description.unwrap_or("").to_string(),
+            tags: vec!["jaws".to_string()],
+            websites: vec![],
+            version: 0,
+            files: vec![],
+            document: None,
+            created_at: String::new(),
+            updated_at: String::new(),
+        };
+
+        let created_item = self
+            .sdk_client
+            .create_item(&item)
+            .await
+            .map_err(|e| e as Box<dyn std::error::Error>)?;
+
+        Ok(format!(
+            "Created item '{}' ({}) in vault {}",
+            created_item.title, created_item.id, vault_id
+        ))
     }
 
-    async fn update(
-        &self,
-        _name: &str,
-        _value: &str,
-    ) -> Result<String, Box<dyn std::error::Error>> {
-        Err(
-            "1Password SDK does not support updating secrets. Please use the 1Password app or CLI."
-                .into(),
-        )
+    async fn update(&self, name: &str, value: &str) -> Result<String, Box<dyn std::error::Error>> {
+        let (vault_id, item_title, field_name) = self.resolve_context(name).await?;
+        let item_id = self.find_item_id(&vault_id, &item_title).await?;
+
+        // Get full item to update
+        let mut item = self
+            .sdk_client
+            .get_item(&vault_id, &item_id)
+            .await
+            .map_err(|e| e as Box<dyn std::error::Error>)?;
+
+        // Find the field to update
+        let target_field_id = field_name.unwrap_or_else(|| "password".to_string());
+        let mut updated = false;
+
+        for field in &mut item.fields {
+            // Check by ID or Title
+            if field.id == target_field_id || field.title == target_field_id {
+                field.value = value.to_string();
+                updated = true;
+                break;
+            }
+        }
+
+        // If not found and we were looking for "password", try to find any concealed field
+        if !updated && target_field_id == "password" {
+            for field in &mut item.fields {
+                if let ItemFieldType::Concealed = field.field_type {
+                    field.value = value.to_string();
+                    updated = true;
+                    break;
+                }
+            }
+        }
+
+        // If still not updated, add the field
+        if !updated {
+            item.fields.push(ItemField {
+                id: target_field_id.clone(),
+                title: target_field_id.clone(),
+                section_id: None,
+                field_type: ItemFieldType::Concealed,
+                value: value.to_string(),
+            });
+        }
+
+        let updated_item = self
+            .sdk_client
+            .put_item(&item)
+            .await
+            .map_err(|e| e as Box<dyn std::error::Error>)?;
+
+        Ok(format!(
+            "Updated item '{}' ({})",
+            updated_item.title, updated_item.id
+        ))
     }
 
-    async fn delete(&self, _name: &str, _force: bool) -> Result<(), Box<dyn std::error::Error>> {
-        Err(
-            "1Password SDK does not support deleting secrets. Please use the 1Password app or CLI."
-                .into(),
-        )
+    async fn delete(&self, name: &str, force: bool) -> Result<(), Box<dyn std::error::Error>> {
+        let (vault_id, item_title, _) = self.resolve_context(name).await?;
+        let item_id = self.find_item_id(&vault_id, &item_title).await?;
+
+        if force {
+            self.sdk_client
+                .delete_item(&vault_id, &item_id)
+                .await
+                .map_err(|e| e as Box<dyn std::error::Error>)?;
+        } else {
+            self.sdk_client
+                .archive_item(&vault_id, &item_id)
+                .await
+                .map_err(|e| e as Box<dyn std::error::Error>)?;
+        }
+
+        Ok(())
     }
 
     async fn rollback(
@@ -288,10 +456,9 @@ async fn list_items_for_stream(
     vault_id: String,
     vault_name: String,
 ) -> Result<Vec<String>, Box<dyn std::error::Error + Send>> {
-    let items = sdk_client
-        .list_items(&vault_id)
-        .await
-        .map_err(|e| Box::new(std::io::Error::other(e.to_string())) as Box<dyn std::error::Error + Send>)?;
+    let items = sdk_client.list_items(&vault_id).await.map_err(|e| {
+        Box::new(std::io::Error::other(e.to_string())) as Box<dyn std::error::Error + Send>
+    })?;
 
     let mut secret_refs = Vec::new();
 

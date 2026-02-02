@@ -5,7 +5,7 @@ use std::process::Command;
 
 use crate::config::Config;
 use crate::db::SecretRepository;
-use crate::secrets::{get_secret_path, save_secret_file, Provider};
+use crate::secrets::{Provider, get_secret_path, save_secret_file};
 
 /// Handle the rollback command - rollback a secret to a previous version
 pub async fn handle_rollback(
@@ -25,27 +25,32 @@ pub async fn handle_rollback(
 
     // If secret_name provided, filter; otherwise show picker
     let selected_secret = if let Some(name) = &secret_name {
-        let matches: Vec<_> = downloaded
-            .iter()
-            .filter(|(s, _)| {
-                s.display_name.to_lowercase().contains(&name.to_lowercase())
-                    || s.hash.starts_with(name)
-            })
-            .collect();
+        let matches: Vec<_> = if let Ok((provider, specific_name)) = parse_secret_ref(name, None) {
+            downloaded
+                .iter()
+                .filter(|(s, _)| s.provider_id == provider && s.display_name == specific_name)
+                .cloned()
+                .collect()
+        } else {
+            downloaded
+                .iter()
+                .filter(|(s, _)| {
+                    s.display_name.to_lowercase().contains(&name.to_lowercase())
+                        || s.hash.starts_with(name)
+                })
+                .cloned()
+                .collect()
+        };
 
         if matches.is_empty() {
             return Err(format!("No secret found matching '{}'", name).into());
         } else if matches.len() > 1 {
-            return Err(format!(
-                "Multiple secrets match '{}'. Be more specific.",
-                name
-            )
-            .into());
+            return Err(format!("Multiple secrets match '{}'. Be more specific.", name).into());
         }
         matches[0].clone()
     } else {
         // Show picker for selecting a secret
-        use ff::{create_items_channel, run_tui_with_config, TuiConfig};
+        use ff::{TuiConfig, create_items_channel, run_tui_with_config};
 
         let (tx, rx) = create_items_channel();
 
@@ -97,7 +102,7 @@ pub async fn handle_rollback(
     } else {
         // Show picker for version selection
         use chrono_humanize::HumanTime;
-        use ff::{create_items_channel, run_tui_with_config, TuiConfig};
+        use ff::{TuiConfig, create_items_channel, run_tui_with_config};
 
         let (tx, rx) = create_items_channel();
 
@@ -202,14 +207,21 @@ pub async fn handle_rollback(
     Ok(())
 }
 
+use crate::utils::parse_secret_ref;
+
 /// Handle the remote rollback command - rollback on provider
 pub async fn handle_remote_rollback(
+    config: &Config,
     providers: &[Provider],
     secret_name: Option<String>,
     version_id: Option<String>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let selected = if let Some(name) = secret_name {
-        vec![(providers[0].id().to_string(), name)]
+        // Parse the secret reference to identify provider
+        let (provider_id, secret) = parse_secret_ref(&name, config.default_provider().as_deref())
+            .map_err(|e| -> Box<dyn std::error::Error> { e.into() })?;
+
+        vec![(provider_id, secret)]
     } else {
         crate::secrets::select_from_all_providers(providers).await?
     };

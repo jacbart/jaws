@@ -109,9 +109,9 @@ pub enum Commands {
         #[command(subcommand)]
         command: ConfigCommands,
     },
-    /// Create a new local secret
+    /// Create a new secret (defaults to local jaws provider if not specified)
     Create {
-        /// Name for the secret
+        /// Name for the secret (e.g. "my-secret" or "aws://my-secret")
         name: String,
 
         /// Optional description

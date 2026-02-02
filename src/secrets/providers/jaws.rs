@@ -8,9 +8,9 @@ use futures::stream::{self, Stream};
 use std::path::{Path, PathBuf};
 use uuid::Uuid;
 
+use crate::db::{SecretInput, SecretRepository, init_db};
 use crate::secrets::manager::SecretManager;
 use crate::secrets::storage::{get_secret_path, hash_api_ref, load_secret_file, save_secret_file};
-use crate::db::{init_db, SecretInput, SecretRepository};
 
 /// Filter for jaws secrets (future use for pattern matching, tags, etc.)
 #[derive(Debug, Clone, Default)]
@@ -109,9 +109,7 @@ impl SecretManager for JawsSecretManager {
                     }
                 }
                 Err(e) => {
-                    vec![Err(
-                        Box::new(e) as Box<dyn std::error::Error + Send>
-                    )]
+                    vec![Err(Box::new(e) as Box<dyn std::error::Error + Send>)]
                 }
             };
 
@@ -148,8 +146,7 @@ impl SecretManager for JawsSecretManager {
         std::fs::create_dir_all(&self.secrets_path)?;
 
         // Save file
-        let (filename, content_hash) =
-            save_secret_file(&self.secrets_path, name, &hash, 1, value)?;
+        let (filename, content_hash) = save_secret_file(&self.secrets_path, name, &hash, 1, value)?;
 
         // Save to DB
         let repo = self.get_repo()?;
@@ -168,7 +165,11 @@ impl SecretManager for JawsSecretManager {
         Ok(api_ref)
     }
 
-    async fn update(&self, api_ref: &str, value: &str) -> Result<String, Box<dyn std::error::Error>> {
+    async fn update(
+        &self,
+        api_ref: &str,
+        value: &str,
+    ) -> Result<String, Box<dyn std::error::Error>> {
         let repo = self.get_repo()?;
         let secret = repo
             .get_secret_by_api_ref("jaws", api_ref)?

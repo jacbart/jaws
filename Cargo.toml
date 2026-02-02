@@ -1,6 +1,6 @@
 [package]
 name = "jaws"
-version = "1.2.0"
+version = "1.2.1"
 edition = "2024"
 description = "A CLI tool and library for managing secrets from multiple providers"
 license = "MIT"
@@ -39,3 +39,6 @@ hostname = "0.4.2"
 thiserror = "2.0.18"
 uuid = { version = "1", features = ["v4"] }
 regex = "1"
+bitwarden = { version = "1.0.0", features = ["secrets"] }
+rustls = { version = "0.23", features = ["ring"] }
+rustls-webpki = { version = "0.102.8", features = ["std"] }

@@ -61,8 +61,13 @@ pub struct ProviderConfig {
     #[knuffel(child, unwrap(argument))]
     pub region: Option<String>,
 
+    /// Vault ID for 1Password, or Project ID for Bitwarden
     #[knuffel(child, unwrap(argument))]
     pub vault: Option<String>,
+
+    /// Organization ID for Bitwarden (and potentially others)
+    #[knuffel(child, unwrap(argument))]
+    pub organization: Option<String>,
 
     #[knuffel(child, unwrap(argument))]
     pub token_env: Option<String>,
@@ -77,6 +82,7 @@ impl ProviderConfig {
             profile,
             region,
             vault: None,
+            organization: None,
             token_env: None,
         }
     }
@@ -89,6 +95,25 @@ impl ProviderConfig {
             profile: None,
             region: None,
             vault,
+            organization: None,
+            token_env,
+        }
+    }
+
+    /// Create a new Bitwarden provider config
+    pub fn new_bitwarden(
+        id: String,
+        project_id: Option<String>,
+        organization_id: Option<String>,
+        token_env: Option<String>,
+    ) -> Self {
+        Self {
+            id,
+            kind: "bw".to_string(),
+            profile: None,
+            region: None,
+            vault: project_id, // We map project_id to the 'vault' field
+            organization: organization_id,
             token_env,
         }
     }
@@ -149,7 +174,7 @@ impl Config {
                 return Err(format!(
                     "Unknown setting: {}. Valid settings: editor, secrets_path, cache_ttl, default_provider",
                     key
-                ))
+                ));
             }
         }
         Ok(())
@@ -161,9 +186,9 @@ impl Config {
             "editor" => Ok(self.editor()),
             "secrets_path" => Ok(self.secrets_path().to_string_lossy().to_string()),
             "cache_ttl" => Ok(self.cache_ttl().to_string()),
-            "default_provider" => {
-                Ok(self.default_provider().unwrap_or_else(|| "(not set)".to_string()))
-            }
+            "default_provider" => Ok(self
+                .default_provider()
+                .unwrap_or_else(|| "(not set)".to_string())),
             _ => Err(format!(
                 "Unknown setting: {}. Valid settings: editor, secrets_path, cache_ttl, default_provider",
                 key

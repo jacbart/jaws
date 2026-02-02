@@ -24,7 +24,7 @@ pub async fn handle_default_command(
     }
 
     // Build list of display names for the picker
-    use ff::{create_items_channel, run_tui_with_config, TuiConfig};
+    use ff::{TuiConfig, create_items_channel, run_tui_with_config};
 
     let (tx, rx) = create_items_channel();
 

@@ -2,8 +2,8 @@
 
 use std::collections::HashMap;
 use std::process::Command;
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use chrono::Utc;
 use futures::StreamExt;
@@ -12,7 +12,7 @@ use tokio::sync::Mutex;
 use crate::config::Config;
 use crate::db::{DbSecret, SecretInput, SecretRepository};
 use crate::secrets::{
-    get_secret_path, hash_api_ref, load_secret_file, save_secret_file, Provider, SecretRef,
+    Provider, SecretRef, get_secret_path, hash_api_ref, load_secret_file, save_secret_file,
 };
 use crate::utils::{format_error, parse_secret_ref};
 
@@ -142,13 +142,7 @@ pub async fn handle_pull(
                         if is_new {
                             map.lock().await.insert(
                                 display.clone(),
-                                (
-                                    provider_id.clone(),
-                                    secret_id,
-                                    api_ref,
-                                    display_name,
-                                    hash,
-                                ),
+                                (provider_id.clone(), secret_id, api_ref, display_name, hash),
                             );
                             // Clear the spinner now that sync is complete
                             let _ = session.clear_indicator(&display).await;
@@ -464,8 +458,7 @@ pub async fn handle_pull_inject(
 
     // Pattern to match {{PROVIDER://SECRET_NAME}}
     // Captures the full reference inside the braces
-    let pattern =
-        Regex::new(r"\{\{([a-zA-Z0-9_-]+://[^}]+)\}\}").expect("Invalid regex pattern");
+    let pattern = Regex::new(r"\{\{([a-zA-Z0-9_-]+://[^}]+)\}\}").expect("Invalid regex pattern");
 
     // Find all unique secret references
     let mut secret_refs: Vec<String> = pattern

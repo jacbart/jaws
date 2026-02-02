@@ -3,7 +3,7 @@
 use std::io::{self, Write};
 
 use crate::config::{Config, Defaults, ProviderConfig};
-use crate::secrets::OnePasswordSecretManager;
+use crate::secrets::{BitwardenSecretManager, OnePasswordSecretManager};
 
 /// Handle interactive config generation
 pub async fn handle_interactive_generate(
@@ -174,8 +174,16 @@ pub async fn handle_interactive_generate(
         println!("Found {}. Discovering vaults...", op_token_env);
 
         match OnePasswordSecretManager::new(None, op_token_env).await {
-            Ok(manager) => match manager.list_vaults() {
-                Ok(vaults) if !vaults.is_empty() => {
+            Ok(manager) => {
+                let vaults = match manager.list_vaults() {
+                    Ok(v) => v,
+                    Err(e) => {
+                        println!("Could not list 1Password vaults: {}", e);
+                        return Ok(()); // Continue to next provider check instead of aborting
+                    }
+                };
+
+                if !vaults.is_empty() {
                     println!(
                         "Found {} vault(s). Select which to add (or none to skip):",
                         vaults.len()
@@ -227,15 +235,102 @@ pub async fn handle_interactive_generate(
                     } else {
                         println!("No 1Password vaults selected");
                     }
+                } else {
+                    println!("No 1Password vaults accessible");
                 }
-                Ok(_) => println!("No 1Password vaults accessible"),
-                Err(e) => println!("Could not list 1Password vaults: {}", e),
-            },
+            }
             Err(e) => println!("Could not initialize 1Password: {}", e),
         }
     } else {
         println!("{} not set, skipping 1Password setup", op_token_env);
         println!("  Tip: Set this environment variable and re-run to add 1Password providers");
+    }
+
+    println!();
+
+    // Check for Bitwarden
+    println!("Checking for Bitwarden...");
+    let bw_token_env = "BWS_ACCESS_TOKEN";
+    if std::env::var(bw_token_env).is_ok() {
+        println!("Found {}. Discovering projects...", bw_token_env);
+
+        let mut manager = BitwardenSecretManager::new(None, bw_token_env, None).await?;
+        let mut projects_result = manager.list_projects().await;
+        let mut organization_id: Option<String> = None;
+
+        // If listing failed, try prompting for Organization ID
+        if projects_result.is_err() {
+            println!("Could not list Bitwarden projects.");
+            println!("This usually means your access token requires an explicit Organization ID.");
+
+            let org_input = prompt("Enter Organization ID (optional, press Enter to skip)", "");
+            if !org_input.is_empty() {
+                println!("Retrying with Organization ID: {}", org_input);
+                organization_id = Some(org_input.clone());
+
+                // Re-initialize manager with Org ID
+                manager = BitwardenSecretManager::new(None, bw_token_env, Some(org_input)).await?;
+                projects_result = manager.list_projects().await;
+            }
+        }
+
+        match projects_result {
+            Ok(projects) if !projects.is_empty() => {
+                println!(
+                    "Found {} project(s). Select which to add (or none to skip):",
+                    projects.len()
+                );
+
+                let mut items: Vec<String> = Vec::new();
+                for (name, id) in &projects {
+                    items.push(format!("{} ({})", name, id));
+                }
+
+                let mut tui_config = TuiConfig::with_height(15.min(items.len() as u16 + 3));
+                tui_config.show_help_text = true;
+
+                let (session, tui_future) = FuzzyFinderSession::with_config(true, tui_config);
+
+                for item in &items {
+                    let _ = session.add(item).await;
+                }
+                drop(session);
+
+                let selected = tui_future.await.unwrap_or_default();
+
+                if !selected.is_empty() {
+                    for selection in &selected {
+                        // Extract project name and ID
+                        if let Some((name, rest)) = selection.split_once(" (") {
+                            let project_id = rest.trim_end_matches(')');
+                            let provider_id =
+                                format!("bw-{}", name.to_lowercase().replace(' ', "-"));
+                            config.providers.push(ProviderConfig::new_bitwarden(
+                                provider_id,
+                                Some(project_id.to_string()),
+                                organization_id.clone(),
+                                Some(bw_token_env.to_string()),
+                            ));
+                        }
+                    }
+                    println!("Added {} Bitwarden provider(s)", selected.len());
+                } else {
+                    println!("No Bitwarden projects selected");
+                }
+            }
+            Ok(_) => println!("No Bitwarden projects found"),
+            Err(e) => {
+                println!("Could not list Bitwarden projects: {}", e);
+                if std::env::var("BWS_ORGANIZATION_ID").is_err() {
+                    println!(
+                        "  Hint: Ensure BWS_ORGANIZATION_ID is set if your token requires it."
+                    );
+                }
+            }
+        }
+    } else {
+        println!("{} not set, skipping Bitwarden setup", bw_token_env);
+        println!("  Tip: Set this environment variable and re-run to add Bitwarden providers");
     }
 
     println!();

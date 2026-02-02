@@ -1,10 +1,12 @@
 //! Provider enumeration and detection.
 
 mod aws;
+mod bitwarden;
 mod jaws;
 pub mod onepassword;
 
 pub use aws::AwsSecretManager;
+pub use bitwarden::BitwardenSecretManager;
 pub use jaws::JawsSecretManager;
 pub use onepassword::{OnePasswordSecretManager, SecretRef};
 
@@ -12,13 +14,14 @@ use crate::config::{Config, ProviderConfig};
 use crate::secrets::manager::SecretManager;
 
 use aws_config::meta::region::RegionProviderChain;
-use aws_sdk_secretsmanager::{config::Region, Client};
-use futures::stream::Stream;
+use aws_sdk_secretsmanager::{Client, config::Region};
 use futures::StreamExt;
+use futures::stream::Stream;
 
 pub enum Provider {
     Aws(AwsSecretManager, String),                 // Manager + Provider ID
     OnePassword(OnePasswordSecretManager, String), // Manager + Provider ID
+    Bitwarden(BitwardenSecretManager, String),     // Manager + Provider ID
     Jaws(JawsSecretManager, String),               // Manager + Provider ID
 }
 
@@ -27,6 +30,7 @@ impl Provider {
         match self {
             Provider::Aws(_, id) => id,
             Provider::OnePassword(_, id) => id,
+            Provider::Bitwarden(_, id) => id,
             Provider::Jaws(_, id) => id,
         }
     }
@@ -35,6 +39,7 @@ impl Provider {
         match self {
             Provider::Aws(_, _) => "aws",
             Provider::OnePassword(_, _) => "onepassword",
+            Provider::Bitwarden(_, _) => "bitwarden",
             Provider::Jaws(_, _) => "jaws",
         }
     }
@@ -46,6 +51,7 @@ impl Provider {
         match self {
             Provider::Aws(m, _) => m.list_secrets_stream(None),
             Provider::OnePassword(m, _) => m.list_secrets_stream(None),
+            Provider::Bitwarden(m, _) => m.list_secrets_stream(None),
             Provider::Jaws(m, _) => m.list_secrets_stream(None),
         }
     }
@@ -55,6 +61,7 @@ impl Provider {
         match self {
             Provider::Aws(m, _) => m.get_secret(api_ref).await,
             Provider::OnePassword(m, _) => m.get_secret(api_ref).await,
+            Provider::Bitwarden(m, _) => m.get_secret(api_ref).await,
             Provider::Jaws(m, _) => m.get_secret(api_ref).await,
         }
     }
@@ -67,7 +74,8 @@ impl Provider {
     ) -> Result<String, Box<dyn std::error::Error>> {
         match self {
             Provider::Aws(m, _) => m.create(name, value, description).await,
-            Provider::OnePassword(_, _) => Err("1Password SDK does not support creating secrets. Please use the 1Password app or CLI.".into()),
+            Provider::OnePassword(m, _) => m.create(name, value, description).await,
+            Provider::Bitwarden(m, _) => m.create(name, value, description).await,
             Provider::Jaws(m, _) => m.create(name, value, description).await,
         }
     }
@@ -80,6 +88,7 @@ impl Provider {
         match self {
             Provider::Aws(m, _) => m.update(name, value).await,
             Provider::OnePassword(m, _) => m.update(name, value).await,
+            Provider::Bitwarden(m, _) => m.update(name, value).await,
             Provider::Jaws(m, _) => m.update(name, value).await,
         }
     }
@@ -88,6 +97,7 @@ impl Provider {
         match self {
             Provider::Aws(m, _) => m.delete(name, force).await,
             Provider::OnePassword(m, _) => m.delete(name, force).await,
+            Provider::Bitwarden(m, _) => m.delete(name, force).await,
             Provider::Jaws(m, _) => m.delete(name, force).await,
         }
     }
@@ -100,6 +110,7 @@ impl Provider {
         match self {
             Provider::Aws(m, _) => m.rollback(name, version_id).await,
             Provider::OnePassword(m, _) => m.rollback(name, version_id).await,
+            Provider::Bitwarden(m, _) => m.rollback(name, version_id).await,
             Provider::Jaws(m, _) => m.rollback(name, version_id).await,
         }
     }
@@ -115,7 +126,7 @@ pub async fn select_from_all_providers(
     use tokio::sync::Mutex;
 
     let (tx, rx) = create_items_channel();
-    
+
     // Map from display string to full reference (for 1Password combined refs)
     let display_to_full: Arc<Mutex<HashMap<String, String>>> = Arc::new(Mutex::new(HashMap::new()));
 
@@ -170,7 +181,9 @@ pub async fn select_from_all_providers(
             // Look up the full reference from our map
             let full_ref = map.get(&item).cloned().unwrap_or_else(|| {
                 // Fallback for non-1Password providers
-                item.split_once(" | ").map(|(_, s)| s.to_string()).unwrap_or(item.clone())
+                item.split_once(" | ")
+                    .map(|(_, s)| s.to_string())
+                    .unwrap_or(item.clone())
             });
             result.push((prov_id.to_string(), full_ref));
         }
@@ -211,6 +224,7 @@ pub async fn detect_providers(
                                     profile: Some(profile_name.clone()),
                                     region,
                                     vault: None,
+                                    organization: None,
                                     token_env: None,
                                 };
 
@@ -268,6 +282,15 @@ pub async fn detect_providers(
                     }
                 }
             }
+            "bitwarden" | "bws" | "bw" => match init_bitwarden_provider(provider_config).await {
+                Ok(bw_provider) => {
+                    providers.push(Provider::Bitwarden(bw_provider, provider_config.id.clone()));
+                }
+                Err(e) => eprintln!(
+                    "Failed to init Bitwarden provider '{}': {}",
+                    provider_config.id, e
+                ),
+            },
             "jaws" => {
                 // Future: remote jaws instance
                 eprintln!(
@@ -304,7 +327,7 @@ async fn init_onepassword_all_vaults(
     for vault in vaults {
         let vault_id = vault.id.clone();
         let provider_id = format!("op-{}", vault.title.to_lowercase().replace(' ', "-"));
-        
+
         match OnePasswordSecretManager::new(Some(vault_id), token_env).await {
             Ok(manager) => {
                 providers.push((manager, provider_id));
@@ -351,4 +374,14 @@ async fn init_onepassword_provider(
         .unwrap_or("OP_SERVICE_ACCOUNT_TOKEN");
 
     OnePasswordSecretManager::new(vault, token_env).await
+}
+
+async fn init_bitwarden_provider(
+    config: &ProviderConfig,
+) -> Result<BitwardenSecretManager, Box<dyn std::error::Error>> {
+    let project_id = config.vault.clone(); // Map vault to project_id for config consistency
+    let token_env = config.token_env.as_deref().unwrap_or("BWS_ACCESS_TOKEN");
+    let organization_id = config.organization.clone();
+
+    BitwardenSecretManager::new(project_id, token_env, organization_id).await
 }

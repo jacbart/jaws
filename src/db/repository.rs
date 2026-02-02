@@ -2,7 +2,7 @@
 
 use super::models::{DbDownload, DbOperation, DbProvider, DbSecret, SecretInput};
 use chrono::{DateTime, Utc};
-use rusqlite::{params, Connection, OptionalExtension};
+use rusqlite::{Connection, OptionalExtension, params};
 use std::sync::{Arc, Mutex};
 
 /// Repository for managing secrets in the database.

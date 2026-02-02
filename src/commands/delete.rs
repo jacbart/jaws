@@ -5,7 +5,7 @@ use std::io::{self, Write};
 
 use crate::config::Config;
 use crate::db::SecretRepository;
-use crate::secrets::{get_secret_path, Provider};
+use crate::secrets::{Provider, get_secret_path};
 
 /// Handle the local delete command - delete local secret files and DB records
 pub async fn handle_delete(
@@ -23,27 +23,32 @@ pub async fn handle_delete(
 
     // Select secret to delete
     let selected_secret = if let Some(name) = &secret_name {
-        let matches: Vec<_> = downloaded
-            .iter()
-            .filter(|(s, _)| {
-                s.display_name.to_lowercase().contains(&name.to_lowercase())
-                    || s.hash.starts_with(name)
-            })
-            .collect();
+        let matches: Vec<_> = if let Ok((provider, specific_name)) = parse_secret_ref(name, None) {
+            downloaded
+                .iter()
+                .filter(|(s, _)| s.provider_id == provider && s.display_name == specific_name)
+                .cloned()
+                .collect()
+        } else {
+            downloaded
+                .iter()
+                .filter(|(s, _)| {
+                    s.display_name.to_lowercase().contains(&name.to_lowercase())
+                        || s.hash.starts_with(name)
+                })
+                .cloned()
+                .collect()
+        };
 
         if matches.is_empty() {
             return Err(format!("No secret found matching '{}'", name).into());
         } else if matches.len() > 1 {
-            return Err(format!(
-                "Multiple secrets match '{}'. Be more specific.",
-                name
-            )
-            .into());
+            return Err(format!("Multiple secrets match '{}'. Be more specific.", name).into());
         }
         matches[0].clone()
     } else {
         // Show picker for selecting a secret
-        use ff::{create_items_channel, run_tui_with_config, TuiConfig};
+        use ff::{TuiConfig, create_items_channel, run_tui_with_config};
 
         let (tx, rx) = create_items_channel();
 
@@ -118,15 +123,21 @@ pub async fn handle_delete(
     Ok(())
 }
 
+use crate::utils::parse_secret_ref;
+
 /// Handle the remote delete command - delete from provider
 pub async fn handle_remote_delete(
+    config: &Config,
     providers: &[Provider],
     secret_name: Option<String>,
     force: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let selected = if let Some(name) = secret_name {
-        // Find which provider might have this secret
-        vec![(providers[0].id().to_string(), name)]
+        // Parse the secret reference to identify provider
+        let (provider_id, secret) = parse_secret_ref(&name, config.default_provider().as_deref())
+            .map_err(|e| -> Box<dyn std::error::Error> { e.into() })?;
+
+        vec![(provider_id, secret)]
     } else {
         crate::secrets::select_from_all_providers(providers).await?
     };
@@ -149,10 +160,7 @@ pub async fn handle_remote_delete(
                 }
             }
             Err(e) => {
-                eprintln!(
-                    "Error deleting {} from {}: {}",
-                    secret_ref, provider_id, e
-                );
+                eprintln!("Error deleting {} from {}: {}", secret_ref, provider_id, e);
             }
         }
     }
