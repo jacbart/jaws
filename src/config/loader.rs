@@ -228,8 +228,11 @@ defaults editor="vim" secrets_path="./.secrets" cache_ttl=900
             if let Some(vault) = &provider.vault {
                 output.push_str(&format!("    vault \"{}\"\n", vault));
             }
+            if let Some(organization) = &provider.organization {
+                output.push_str(&format!("    organization \"{}\"\n", organization));
+            }
             if let Some(token_env) = &provider.token_env {
-                output.push_str(&format!("    token_env \"{}\"\n", token_env));
+                output.push_str(&format!("    token-env \"{}\"\n", token_env));
             }
 
             output.push_str("}\n");
