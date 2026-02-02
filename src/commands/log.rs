@@ -1,7 +1,7 @@
 //! Log command handlers - viewing operation history.
 
 use crate::config::Config;
-use crate::db::{init_db, SecretRepository};
+use crate::db::{SecretRepository, init_db};
 
 /// Handle the log command - show all secret operations from DB
 pub async fn handle_log(

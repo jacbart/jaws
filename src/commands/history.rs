@@ -2,6 +2,7 @@
 
 use crate::config::Config;
 use crate::db::SecretRepository;
+use crate::utils::parse_secret_ref;
 
 /// Handle the history command - show version history for downloaded secrets
 pub async fn handle_history(
@@ -23,16 +24,25 @@ pub async fn handle_history(
 
     // If secret_name provided, filter; otherwise show picker
     let selected_secrets: Vec<_> = if let Some(name) = &secret_name {
-        downloaded
-            .into_iter()
-            .filter(|(s, _)| {
-                s.display_name.to_lowercase().contains(&name.to_lowercase())
-                    || s.hash.starts_with(name)
-            })
-            .collect()
+        // Check if it's a specific reference (PROVIDER://NAME)
+        if let Ok((provider, specific_name)) = parse_secret_ref(name, None) {
+            downloaded
+                .into_iter()
+                .filter(|(s, _)| s.provider_id == provider && s.display_name == specific_name)
+                .collect()
+        } else {
+            // Fuzzy search by name
+            downloaded
+                .into_iter()
+                .filter(|(s, _)| {
+                    s.display_name.to_lowercase().contains(&name.to_lowercase())
+                        || s.hash.starts_with(name)
+                })
+                .collect()
+        }
     } else {
         // Show picker for selecting a secret
-        use ff::{create_items_channel, run_tui_with_config, TuiConfig};
+        use ff::{TuiConfig, create_items_channel, run_tui_with_config};
 
         let (tx, rx) = create_items_channel();
 

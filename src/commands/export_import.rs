@@ -3,8 +3,8 @@
 use std::fs;
 
 use crate::archive::{
-    export_secrets, format_size, import_secrets, prompt_passphrase, prompt_passphrase_with_confirm,
-    DecryptionMethod, EncryptionMethod,
+    DecryptionMethod, EncryptionMethod, export_secrets, format_size, import_secrets,
+    prompt_passphrase, prompt_passphrase_with_confirm,
 };
 use crate::config::Config;
 

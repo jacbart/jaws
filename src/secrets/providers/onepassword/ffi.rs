@@ -71,22 +71,22 @@ fn create_rustbuffer_from_string(
     from_bytes_fn: RustBufferFromBytesFn,
 ) -> Result<RustBuffer, Box<dyn std::error::Error + Send + Sync>> {
     let bytes = s.as_bytes();
-    
+
     let foreign_bytes = ForeignBytes {
         len: bytes.len() as i32,
         data: bytes.as_ptr(),
     };
-    
+
     let mut status = RustCallStatus::new();
     let buf = unsafe { from_bytes_fn(foreign_bytes, &mut status) };
-    
+
     if !status.is_success() {
         if let Some(err) = status.get_error() {
             return Err(format!("Failed to allocate RustBuffer: {}", err).into());
         }
         return Err("Failed to allocate RustBuffer".into());
     }
-    
+
     Ok(buf)
 }
 
@@ -143,7 +143,10 @@ impl RustCallStatus {
             return Some(msg);
         }
 
-        Some(format!("Error code {}: unable to parse details (buf len: {})", self.code, self.error_buf.len))
+        Some(format!(
+            "Error code {}: unable to parse details (buf len: {})",
+            self.code, self.error_buf.len
+        ))
     }
 }
 
@@ -152,7 +155,7 @@ impl RustCallStatus {
 // ============================================================================
 
 /// Vault overview returned by VaultsList
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct VaultOverview {
     pub id: String,
@@ -162,7 +165,7 @@ pub struct VaultOverview {
 }
 
 /// Item category enum
-#[derive(Debug, Clone, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 pub enum ItemCategory {
     Login,
     SecureNote,
@@ -191,7 +194,7 @@ pub enum ItemCategory {
 }
 
 /// Item state enum
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum ItemState {
     Active,
@@ -199,7 +202,7 @@ pub enum ItemState {
 }
 
 /// Website info for items
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Website {
     pub url: String,
@@ -208,7 +211,7 @@ pub struct Website {
 }
 
 /// Item overview returned by ItemsList (without full field data)
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ItemOverview {
     pub id: String,
@@ -223,7 +226,7 @@ pub struct ItemOverview {
 }
 
 /// Field type enum
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub enum ItemFieldType {
     Text,
     Concealed,
@@ -243,7 +246,7 @@ pub enum ItemFieldType {
 }
 
 /// Item field
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ItemField {
     pub id: String,
@@ -254,14 +257,14 @@ pub struct ItemField {
 }
 
 /// Item section
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ItemSection {
     pub id: String,
     pub title: String,
 }
 
 /// File attributes
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct FileAttributes {
     pub name: String,
     pub id: String,
@@ -269,7 +272,7 @@ pub struct FileAttributes {
 }
 
 /// Item file
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ItemFile {
     pub attributes: FileAttributes,
@@ -278,7 +281,7 @@ pub struct ItemFile {
 }
 
 /// Full item returned by ItemsGet
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Item {
     pub id: String,
@@ -348,7 +351,8 @@ type InvokeSyncFn = unsafe extern "C" fn(RustBuffer, *mut RustCallStatus) -> Rus
 type ReleaseClientFn = unsafe extern "C" fn(RustBuffer, *mut RustCallStatus);
 type RustBufferFreeFn = unsafe extern "C" fn(RustBuffer, *mut RustCallStatus);
 type FuturePollFn = unsafe extern "C" fn(*mut std::ffi::c_void, extern "C" fn(usize, i8), usize);
-type FutureCompleteFn = unsafe extern "C" fn(*mut std::ffi::c_void, *mut RustCallStatus) -> RustBuffer;
+type FutureCompleteFn =
+    unsafe extern "C" fn(*mut std::ffi::c_void, *mut RustCallStatus) -> RustBuffer;
 type FutureFreeFn = unsafe extern "C" fn(*mut std::ffi::c_void);
 
 /// 1Password SDK client with direct FFI access
@@ -492,8 +496,8 @@ impl OnePasswordSdkClient {
         complete_fn: FutureCompleteFn,
         free_fn: FutureFreeFn,
     ) -> Result<RustBuffer, Box<dyn std::error::Error + Send + Sync>> {
-        use std::sync::atomic::{AtomicI8, Ordering};
         use std::sync::Arc as StdArc;
+        use std::sync::atomic::{AtomicI8, Ordering};
 
         // Shared state for the callback
         let poll_result = StdArc::new(AtomicI8::new(-1));
@@ -572,10 +576,7 @@ impl OnePasswordSdkClient {
                 } else {
                     "libop_uniffi_core.so"
                 };
-                vec![
-                    format!("{}/{}", path, lib_name),
-                    path.clone(),
-                ]
+                vec![format!("{}/{}", path, lib_name), path.clone()]
             };
 
             for p in &paths_to_try {
@@ -763,14 +764,107 @@ impl OnePasswordSdkClient {
 
         // The response is the secret value directly as a string
         // But it might be wrapped - try to parse as JSON first
-        if let Ok(value) = serde_json::from_str::<serde_json::Value>(&response)
-            && let Some(secret) = value.get("secret").and_then(|s| s.as_str())
-        {
-            return Ok(secret.to_string());
+        if let Ok(value) = serde_json::from_str::<serde_json::Value>(&response) {
+            // Case 1: It's a JSON object with a "secret" field
+            if let Some(secret) = value.get("secret").and_then(|s| s.as_str()) {
+                return Ok(secret.to_string());
+            }
+
+            // Case 2: It's just a JSON string (the SDK returns "value" with quotes)
+            if let Some(secret_str) = value.as_str() {
+                return Ok(secret_str.to_string());
+            }
         }
 
         // Otherwise return the raw response (it's likely just the secret value)
         Ok(response)
+    }
+
+    /// Create a new item
+    pub fn create_item(
+        &self,
+        item: &Item,
+    ) -> Result<Item, Box<dyn std::error::Error + Send + Sync>> {
+        let invocation = Invocation {
+            invocation: InvocationInner {
+                client_id: self.client_id,
+                parameters: InvocationParameters {
+                    name: "ItemsCreate".to_string(),
+                    parameters: serde_json::json!({
+                        "item": item
+                    }),
+                },
+            },
+        };
+
+        let response = self.invoke(&invocation)?;
+        let created_item: Item = serde_json::from_str(&response)?;
+        Ok(created_item)
+    }
+
+    /// Update an existing item
+    pub fn put_item(&self, item: &Item) -> Result<Item, Box<dyn std::error::Error + Send + Sync>> {
+        let invocation = Invocation {
+            invocation: InvocationInner {
+                client_id: self.client_id,
+                parameters: InvocationParameters {
+                    name: "ItemsPut".to_string(),
+                    parameters: serde_json::json!({
+                        "item": item
+                    }),
+                },
+            },
+        };
+
+        let response = self.invoke(&invocation)?;
+        let updated_item: Item = serde_json::from_str(&response)?;
+        Ok(updated_item)
+    }
+
+    /// Delete an item
+    pub fn delete_item(
+        &self,
+        vault_id: &str,
+        item_id: &str,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let invocation = Invocation {
+            invocation: InvocationInner {
+                client_id: self.client_id,
+                parameters: InvocationParameters {
+                    name: "ItemsDelete".to_string(),
+                    parameters: serde_json::json!({
+                        "vault_id": vault_id,
+                        "item_id": item_id
+                    }),
+                },
+            },
+        };
+
+        self.invoke(&invocation)?;
+        Ok(())
+    }
+
+    /// Archive an item
+    pub fn archive_item(
+        &self,
+        vault_id: &str,
+        item_id: &str,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let invocation = Invocation {
+            invocation: InvocationInner {
+                client_id: self.client_id,
+                parameters: InvocationParameters {
+                    name: "ItemsArchive".to_string(),
+                    parameters: serde_json::json!({
+                        "vault_id": vault_id,
+                        "item_id": item_id
+                    }),
+                },
+            },
+        };
+
+        self.invoke(&invocation)?;
+        Ok(())
     }
 }
 
@@ -839,6 +933,40 @@ impl SharedSdkClient {
     ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
         let client = self.inner.lock().await;
         client.resolve_secret(reference)
+    }
+
+    pub async fn create_item(
+        &self,
+        item: &Item,
+    ) -> Result<Item, Box<dyn std::error::Error + Send + Sync>> {
+        let client = self.inner.lock().await;
+        client.create_item(item)
+    }
+
+    pub async fn put_item(
+        &self,
+        item: &Item,
+    ) -> Result<Item, Box<dyn std::error::Error + Send + Sync>> {
+        let client = self.inner.lock().await;
+        client.put_item(item)
+    }
+
+    pub async fn delete_item(
+        &self,
+        vault_id: &str,
+        item_id: &str,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let client = self.inner.lock().await;
+        client.delete_item(vault_id, item_id)
+    }
+
+    pub async fn archive_item(
+        &self,
+        vault_id: &str,
+        item_id: &str,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let client = self.inner.lock().await;
+        client.archive_item(vault_id, item_id)
     }
 }
 

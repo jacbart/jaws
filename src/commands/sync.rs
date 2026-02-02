@@ -6,7 +6,7 @@ use futures::StreamExt;
 
 use crate::config::Config;
 use crate::db::{SecretInput, SecretRepository};
-use crate::secrets::{hash_api_ref, Provider, SecretRef};
+use crate::secrets::{Provider, SecretRef, hash_api_ref};
 
 /// Handle the sync command
 pub async fn handle_sync(

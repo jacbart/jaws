@@ -6,7 +6,7 @@ A CLI tool and library for managing secrets from multiple providers (AWS Secrets
 
 ## Features
 
-- **Multi-provider support** - AWS Secrets Manager, 1Password, and local "jaws" secrets
+- **Multi-provider support** - AWS Secrets Manager, 1Password, Bitwarden, and local "jaws" secrets
 - **Git-like workflow** - `jaws pull`, `jaws push`, familiar commands
 - **Local version tracking** - Full history of downloaded secrets with rollback support
 - **Template injection** - Inject secrets into config files with `--inject`
@@ -54,7 +54,7 @@ jaws rollback
 | `jaws pull -p SECRET` | Print secret value to stdout (for scripts) |
 | `jaws pull -i TPL -o OUT` | Inject secrets into a template file |
 | `jaws push` | Upload changed secrets to providers |
-| `jaws create NAME` | Create a new local secret |
+| `jaws create NAME` | Create a new secret (local or remote) |
 | `jaws delete` | Delete a local secret and all its versions |
 | `jaws list` | List all known secrets (one per line) |
 | `jaws history` | View local version history |
@@ -113,6 +113,9 @@ providers {
     
     // Or specific 1Password vault
     onepassword id="op-dev" vault="abc123"
+
+    // Bitwarden
+    bitwarden id="bw" project="all"
 }
 ```
 
@@ -123,6 +126,10 @@ Ensure your AWS credentials are configured in `~/.aws/credentials` and you have 
 ### 1Password Setup
 
 Set the `OP_SERVICE_ACCOUNT_TOKEN` environment variable with your 1Password service account token.
+
+### Bitwarden Setup
+
+Set the `BWS_ACCESS_TOKEN` environment variable with your Bitwarden Secrets Manager access token.
 
 ## Usage Examples
 
@@ -153,17 +160,26 @@ jaws pull -i .env.tpl
 jaws pull -i .env.tpl -o .env.prod
 ```
 
-### Local Secrets
+### Creating Secrets
 
-Create and manage secrets that stay local (not synced to any provider):
+You can create secrets locally or directly in a remote provider:
 
 ```bash
-# Create a local secret
+# Create a local secret (default provider)
 jaws create my-local-secret
+
+# Create a secret in AWS
+jaws create aws://my-new-secret
 
 # Create from a file
 jaws create my-cert -f ./certificate.pem
+```
 
+### Local Management
+
+List and manage secrets:
+
+```bash
 # List all secrets including local ones
 jaws list --provider jaws
 ```

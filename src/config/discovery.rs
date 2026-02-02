@@ -49,7 +49,8 @@ impl Config {
             let line = line.trim();
             if line.starts_with('[') {
                 in_profile_section = line == profile_header;
-            } else if in_profile_section && line.starts_with("region")
+            } else if in_profile_section
+                && line.starts_with("region")
                 && let Some((_key, value)) = line.split_once('=')
             {
                 return Some(value.trim().to_string());

@@ -4,6 +4,7 @@ use std::fs;
 
 use clap::Parser;
 
+use jaws::DbProvider;
 use jaws::cli::{Cli, Commands, ConfigCommands};
 use jaws::commands::{
     handle_clean, handle_create, handle_default_command, handle_delete, handle_export,
@@ -11,12 +12,14 @@ use jaws::commands::{
     handle_pull, handle_pull_inject, handle_push, handle_remote, handle_rollback, handle_sync,
 };
 use jaws::config::Config;
-use jaws::db::{init_db, SecretRepository};
+use jaws::db::{SecretRepository, init_db};
 use jaws::secrets::detect_providers;
-use jaws::DbProvider;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Initialize default crypto provider for rustls (required by bitwarden sdk)
+    let _ = rustls::crypto::ring::default_provider().install_default();
+
     let cli = Cli::parse();
 
     // Load config from file (use CLI-specified path if provided)
@@ -191,8 +194,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             // Handle inject mode
             if let Some(template_path) = inject {
-                handle_pull_inject(&config, &repo, &providers, &template_path, output.as_deref())
-                    .await?;
+                handle_pull_inject(
+                    &config,
+                    &repo,
+                    &providers,
+                    &template_path,
+                    output.as_deref(),
+                )
+                .await?;
             } else {
                 handle_pull(&config, &repo, &providers, secret_name, edit, print).await?;
             }
