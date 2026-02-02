@@ -17,6 +17,7 @@ pkgs.mkShell {
     rust-analyzer
     openssl
     pkg-config
+    git-cliff
   ];
   nativeBuildInputs = with pkgs; [
     pkg-config
