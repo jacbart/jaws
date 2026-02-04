@@ -456,11 +456,11 @@ pub async fn handle_pull_inject(
         )
     })?;
 
-    // Pattern to match {{PROVIDER://SECRET_NAME}}
-    // Captures the full reference inside the braces
-    let pattern = Regex::new(r"\{\{([a-zA-Z0-9_-]+://[^}]+)\}\}").expect("Invalid regex pattern");
+    // Pattern to match {{ EXPRESSION }}
+    // Captures everything inside the braces non-greedily
+    let pattern = Regex::new(r"\{\{(.+?)\}\}").expect("Invalid regex pattern");
 
-    // Find all unique secret references
+    // Find all unique secret references/expressions
     let mut secret_refs: Vec<String> = pattern
         .captures_iter(&template_content)
         .map(|cap| cap[1].to_string())
@@ -486,75 +486,113 @@ pub async fn handle_pull_inject(
     let mut resolved: HashMap<String, String> = HashMap::new();
     let mut errors: Vec<String> = Vec::new();
 
-    for secret_ref in &secret_refs {
-        // Parse the secret reference
-        let (provider_id, secret_name) =
-            match parse_secret_ref(secret_ref, config.default_provider().as_deref()) {
-                Ok(parsed) => parsed,
-                Err(e) => {
-                    errors.push(format!("  {}: {}", secret_ref, e));
+    for full_ref in &secret_refs {
+        let mut found_value: Option<String> = None;
+        let mut candidate_errors: Vec<String> = Vec::new();
+
+        // Split by || and iterate through candidates
+        let candidates: Vec<&str> = full_ref.split("||").map(|s| s.trim()).collect();
+
+        for candidate in candidates {
+            // Check for string literals (quoted with " or ')
+            if (candidate.starts_with('"') && candidate.ends_with('"'))
+                || (candidate.starts_with('\'') && candidate.ends_with('\''))
+                    && candidate.len() >= 2
+            {
+                found_value = Some(candidate[1..candidate.len() - 1].to_string());
+                break;
+            }
+
+            // Try to resolve as a secret reference
+            // Parse the secret reference
+            let (provider_id, secret_name) =
+                match parse_secret_ref(candidate, config.default_provider().as_deref()) {
+                    Ok(parsed) => parsed,
+                    Err(_) => {
+                        // Not a valid secret ref (and not a string literal), probably malformed
+                        // Only log if it's the last candidate or clearly meant to be a secret?
+                        // For now, we log it as an error for this candidate
+                        candidate_errors.push(format!("Invalid format: {}", candidate));
+                        continue;
+                    }
+                };
+
+            // Find the provider
+            let provider = match providers.iter().find(|p| p.id() == provider_id) {
+                Some(p) => p,
+                None => {
+                    candidate_errors.push(format!("Unknown provider: {}", provider_id));
                     continue;
                 }
             };
 
-        // Find the provider
-        let provider = match providers.iter().find(|p| p.id() == provider_id) {
-            Some(p) => p,
-            None => {
-                errors.push(format!(
-                    "  {}: Unknown provider '{}'",
-                    secret_ref, provider_id
-                ));
-                continue;
-            }
-        };
-
-        // Look up secret in DB
-        let secret = match repo.find_secret_by_provider_and_name(&provider_id, &secret_name)? {
-            Some(s) => s,
-            None => {
-                errors.push(format!(
-                    "  {}: Secret not found. Run 'jaws sync' first.",
-                    secret_ref
-                ));
-                continue;
-            }
-        };
-
-        // Fetch the secret value (respecting TTL cache)
-        let content = if let Some(download) = repo.get_latest_download(secret.id)? {
-            let age = Utc::now() - download.downloaded_at;
-            if age.num_seconds() < config.cache_ttl() as i64 {
-                // Use cached version
-                load_secret_file(&config.secrets_path(), &download.filename)?
-            } else {
-                // Cache expired - fetch fresh
-                match fetch_and_save_secret(config, repo, provider, &secret).await {
-                    Ok(content) => content,
-                    Err(e) => {
-                        errors.push(format!("  {}: Failed to fetch - {}", secret_ref, e));
-                        continue;
-                    }
-                }
-            }
-        } else {
-            // No download record - fetch and save
-            match fetch_and_save_secret(config, repo, provider, &secret).await {
-                Ok(content) => content,
-                Err(e) => {
-                    errors.push(format!("  {}: Failed to fetch - {}", secret_ref, e));
+            // Look up secret in DB
+            let secret = match repo.find_secret_by_provider_and_name(&provider_id, &secret_name) {
+                Ok(Some(s)) => s,
+                Ok(None) => {
+                    candidate_errors.push(format!(
+                        "Secret not found: {}://{}",
+                        provider_id, secret_name
+                    ));
                     continue;
                 }
-            }
-        };
+                Err(e) => {
+                    candidate_errors.push(format!("DB error: {}", e));
+                    continue;
+                }
+            };
 
-        resolved.insert(secret_ref.clone(), content);
+            // Fetch the secret value (respecting TTL cache)
+            let fetch_result = if let Ok(Some(download)) = repo.get_latest_download(secret.id) {
+                let age = Utc::now() - download.downloaded_at;
+                if age.num_seconds() < config.cache_ttl() as i64 {
+                    // Use cached version
+                    match load_secret_file(&config.secrets_path(), &download.filename) {
+                        Ok(content) => Ok(content),
+                        Err(e) => Err(format!("Failed to load cache: {}", e)),
+                    }
+                } else {
+                    // Cache expired - fetch fresh
+                    match fetch_and_save_secret(config, repo, provider, &secret).await {
+                        Ok(content) => Ok(content),
+                        Err(e) => Err(format!("Failed to fetch: {}", e)),
+                    }
+                }
+            } else {
+                // No download record - fetch and save
+                match fetch_and_save_secret(config, repo, provider, &secret).await {
+                    Ok(content) => Ok(content),
+                    Err(e) => Err(format!("Failed to fetch: {}", e)),
+                }
+            };
+
+            match fetch_result {
+                Ok(content) => {
+                    found_value = Some(content);
+                    break; // Successfully found a value, stop checking other candidates
+                }
+                Err(e) => {
+                    candidate_errors.push(e);
+                }
+            }
+        }
+
+        if let Some(value) = found_value {
+            resolved.insert(full_ref.clone(), value);
+        } else {
+            // All candidates failed
+            errors.push(format!(
+                "  {{{{{}}}}}: All candidates failed:\n    - {}",
+                full_ref,
+                candidate_errors.join("\n    - ")
+            ));
+        }
     }
 
     // Check for errors
     if !errors.is_empty() {
         return Err(format!(
-            "Failed to resolve {} secret(s) in template:\n{}",
+            "Failed to resolve {} placeholder(s) in template:\n{}",
             errors.len(),
             errors.join("\n")
         )
@@ -563,8 +601,8 @@ pub async fn handle_pull_inject(
 
     // Replace all placeholders with resolved values
     let mut output_content = template_content;
-    for (secret_ref, value) in &resolved {
-        let placeholder = format!("{{{{{}}}}}", secret_ref);
+    for (full_ref, value) in &resolved {
+        let placeholder = format!("{{{{{}}}}}", full_ref);
         output_content = output_content.replace(&placeholder, value);
     }
 
@@ -572,7 +610,7 @@ pub async fn handle_pull_inject(
     if let Some(output) = output_path {
         std::fs::write(output, &output_content)?;
         eprintln!(
-            "Injected {} secret(s). Output written to: {}",
+            "Injected {} value(s). Output written to: {}",
             resolved.len(),
             output.display()
         );

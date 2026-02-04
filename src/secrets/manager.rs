@@ -1,4 +1,3 @@
-#![allow(dead_code)]
 use async_trait::async_trait;
 use futures::Stream;
 use std::path::PathBuf;

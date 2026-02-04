@@ -116,7 +116,6 @@ impl SecretRepository {
     }
 
     /// Get a secret by its hash.
-    #[allow(dead_code)]
     pub fn get_secret_by_hash(
         &self,
         hash: &str,
@@ -441,7 +440,6 @@ impl SecretRepository {
     }
 
     /// Get a secret by its ID.
-    #[allow(dead_code)]
     pub fn get_secret_by_id(
         &self,
         id: i64,

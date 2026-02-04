@@ -197,7 +197,6 @@ impl Config {
     }
 
     /// Add a provider to the config
-    #[allow(dead_code)]
     pub fn add_provider(&mut self, provider: ProviderConfig) {
         // Remove existing provider with same id if present
         self.providers.retain(|p| p.id != provider.id);
@@ -205,7 +204,6 @@ impl Config {
     }
 
     /// Remove a provider by id
-    #[allow(dead_code)]
     pub fn remove_provider(&mut self, id: &str) -> bool {
         let len_before = self.providers.len();
         self.providers.retain(|p| p.id != id);

@@ -15,7 +15,6 @@ use crate::secrets::storage::{get_secret_path, hash_api_ref, load_secret_file, s
 /// Filter for jaws secrets (future use for pattern matching, tags, etc.)
 #[derive(Debug, Clone, Default)]
 pub struct JawsFilter {
-    #[allow(dead_code)]
     pub name_pattern: Option<String>,
 }
 
@@ -37,7 +36,6 @@ impl JawsSecretManager {
     }
 
     /// Get the secrets path.
-    #[allow(dead_code)]
     pub fn secrets_path(&self) -> &PathBuf {
         &self.secrets_path
     }
@@ -51,7 +49,6 @@ impl JawsSecretManager {
 
     /// Create a secret directly (used by the create command).
     /// This is a convenience method that wraps the SecretManager::create trait method.
-    #[allow(dead_code)]
     pub async fn create_secret(
         &self,
         name: &str,
@@ -280,7 +277,6 @@ impl SecretManager for JawsSecretManager {
 
 /// Get a secret by name (display_name) for the jaws provider.
 /// This is a convenience function for looking up secrets by name rather than api_ref.
-#[allow(dead_code)]
 pub fn get_jaws_secret_by_name(
     secrets_path: &Path,
     name: &str,

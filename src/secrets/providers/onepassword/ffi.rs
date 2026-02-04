@@ -4,8 +4,6 @@
 //! the correct UniFFI calling conventions to access vault and item listing
 //! functionality.
 
-#![allow(dead_code)]
-
 use serde::{Deserialize, Serialize};
 use std::env;
 use std::sync::Arc;

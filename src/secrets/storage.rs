@@ -42,7 +42,6 @@ pub fn secret_filename(display_name: &str, hash: &str, version: i32) -> String {
 /// Parse a filename to extract display name, hash, and version.
 /// Expected format: `{display_name}_{hash}_{version}`
 /// Returns None if the filename doesn't match the expected format.
-#[allow(dead_code)]
 pub fn parse_filename(filename: &str) -> Option<(String, String, i32)> {
     // Split from the right to get version first
     let parts: Vec<&str> = filename.rsplitn(2, '_').collect();
@@ -112,13 +111,11 @@ pub fn compute_content_hash(content: &str) -> String {
 }
 
 /// Check if a secret file exists.
-#[allow(dead_code)]
 pub fn secret_file_exists(secrets_path: &Path, filename: &str) -> bool {
     secrets_path.join(filename).exists()
 }
 
 /// Delete a secret file.
-#[allow(dead_code)]
 pub fn delete_secret_file(
     secrets_path: &Path,
     filename: &str,
@@ -132,7 +129,6 @@ pub fn delete_secret_file(
 
 /// List all secret files in the secrets directory.
 /// Returns a list of (display_name, hash, version, filename) tuples.
-#[allow(dead_code)]
 pub fn list_secret_files(
     secrets_path: &Path,
 ) -> Result<Vec<(String, String, i32, String)>, Box<dyn std::error::Error>> {

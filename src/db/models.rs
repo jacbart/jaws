@@ -8,7 +8,6 @@ pub struct DbProvider {
     pub id: String,
     pub kind: String,
     pub last_sync_at: Option<DateTime<Utc>>,
-    #[allow(dead_code)]
     pub config_json: Option<String>,
 }
 
@@ -20,20 +19,15 @@ pub struct DbSecret {
     pub api_ref: String,
     pub display_name: String,
     pub hash: String,
-    #[allow(dead_code)]
     pub description: Option<String>,
-    #[allow(dead_code)]
     pub remote_updated_at: Option<DateTime<Utc>>,
-    #[allow(dead_code)]
     pub created_at: DateTime<Utc>,
 }
 
 /// A downloaded version of a secret
 #[derive(Debug, Clone)]
 pub struct DbDownload {
-    #[allow(dead_code)]
     pub id: i64,
-    #[allow(dead_code)]
     pub secret_id: i64,
     pub version: i32,
     pub filename: String,
@@ -55,7 +49,6 @@ pub struct SecretInput {
 /// An operation log entry
 #[derive(Debug, Clone)]
 pub struct DbOperation {
-    #[allow(dead_code)]
     pub id: i64,
     pub operation_type: String,
     pub provider_id: String,
