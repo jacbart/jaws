@@ -1,4 +1,23 @@
+## [1.2.2] - 2026-02-04
+
+### 🚀 Features
+
+- *(inject)* Added or statements to injection templating
+
+### 📚 Documentation
+
+- *(inject)* Add an or statment and default value to an example in the README
 ## [1.2.1] - 2026-02-02
+
+### 🚀 Features
+
+- Bitwarden sdk added, some polish with the rest, and rand cargo fmt. updated some of the readme
+- Release script and hm module
+
+### 🐛 Bug Fixes
+
+- Config gen tool
+## [1.2.0] - 2026-02-01
 
 ### 🚀 Features
 
@@ -10,8 +29,6 @@
 - Add more config locations
 - Rework the file org, moviing local actions to a jawsSecretsManager to allow future self-hosting opertunities. other stuff
 - Removed editor and secrets-path flags in favor of a config flag
-- Bitwarden sdk added, some polish with the rest, and rand cargo fmt. updated some of the readme
-- Release script and hm module
 
 ### 🐛 Bug Fixes
 
@@ -19,7 +36,6 @@
 - *(dep)* Update golang dot org x net to version 0.23.0
 - Config location detection
 - *(tilde)* Expand tilde to place secrets in correct spot
-- Config gen tool
 
 ### 💼 Other
 
