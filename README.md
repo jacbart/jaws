@@ -47,47 +47,47 @@ jaws rollback
 
 ### Local Operations
 
-| Command | Description |
-|---------|-------------|
-| `jaws` | Open TUI to select and edit downloaded secrets |
-| `jaws pull [SECRET]` | Download secrets from providers |
-| `jaws pull -p SECRET` | Print secret value to stdout (for scripts) |
-| `jaws pull -i TPL -o OUT` | Inject secrets into a template file |
-| `jaws push` | Upload changed secrets to providers |
-| `jaws create NAME` | Create a new secret (local or remote) |
-| `jaws delete` | Delete a local secret and all its versions |
-| `jaws list` | List all known secrets (one per line) |
-| `jaws history` | View local version history |
-| `jaws rollback` | Rollback to a previous local version |
-| `jaws log` | Show operation log |
-| `jaws clean` | Clear local cache and secrets |
+| Command                   | Description                                    |
+| ------------------------- | ---------------------------------------------- |
+| `jaws`                    | Open TUI to select and edit downloaded secrets |
+| `jaws pull [SECRET]`      | Download secrets from providers                |
+| `jaws pull -p SECRET`     | Print secret value to stdout (for scripts)     |
+| `jaws pull -i TPL -o OUT` | Inject secrets into a template file            |
+| `jaws push`               | Upload changed secrets to providers            |
+| `jaws create NAME`        | Create a new secret (local or remote)          |
+| `jaws delete`             | Delete a local secret and all its versions     |
+| `jaws list`               | List all known secrets (one per line)          |
+| `jaws history`            | View local version history                     |
+| `jaws rollback`           | Rollback to a previous local version           |
+| `jaws log`                | Show operation log                             |
+| `jaws clean`              | Clear local cache and secrets                  |
 
 ### Remote/Provider Operations
 
-| Command | Description |
-|---------|-------------|
-| `jaws sync` | Refresh local cache of remote secrets |
-| `jaws remote delete` | Delete a secret from the provider |
-| `jaws remote rollback` | Rollback to a previous version on the provider |
-| `jaws remote history` | View provider version history (not yet implemented) |
+| Command                | Description                                         |
+| ---------------------- | --------------------------------------------------- |
+| `jaws sync`            | Refresh local cache of remote secrets               |
+| `jaws remote delete`   | Delete a secret from the provider                   |
+| `jaws remote rollback` | Rollback to a previous version on the provider      |
+| `jaws remote history`  | View provider version history (not yet implemented) |
 
 ### Archive Operations
 
-| Command | Description |
-|---------|-------------|
-| `jaws export` | Export and encrypt secrets to a `.barrel` file |
-| `jaws import FILE` | Import and decrypt a `.barrel` archive |
+| Command            | Description                                    |
+| ------------------ | ---------------------------------------------- |
+| `jaws export`      | Export and encrypt secrets to a `.barrel` file |
+| `jaws import FILE` | Import and decrypt a `.barrel` archive         |
 
 ### Configuration
 
-| Command | Description |
-|---------|-------------|
-| `jaws config generate` | Generate a new config file |
-| `jaws config generate -i` | Interactive config generation with provider discovery |
-| `jaws config list` | List all configuration settings |
-| `jaws config get <key>` | Get a specific config value |
-| `jaws config set <key> <value>` | Set a config value |
-| `jaws config providers` | List configured providers |
+| Command                         | Description                                           |
+| ------------------------------- | ----------------------------------------------------- |
+| `jaws config generate`          | Generate a new config file                            |
+| `jaws config generate -i`       | Interactive config generation with provider discovery |
+| `jaws config list`              | List all configuration settings                       |
+| `jaws config get <key>`         | Get a specific config value                           |
+| `jaws config set <key> <value>` | Set a config value                                    |
+| `jaws config providers`         | List configured providers                             |
 
 ## Configuration
 
@@ -104,13 +104,13 @@ defaults {
 providers {
     // AWS with auto-discovery of all profiles
     aws id="aws" profile="all"
-    
+
     // Or specific AWS profile
     aws id="aws-prod" profile="production" region="us-east-1"
-    
+
     // 1Password with auto-discovery of all vaults
     onepassword id="op" vault="all"
-    
+
     // Or specific 1Password vault
     onepassword id="op-dev" vault="abc123"
 
@@ -146,12 +146,14 @@ mysql -u admin -p$(jaws pull aws://mysql-pass -p) mydb
 ### Template Injection with `--inject`
 
 Create a template file (e.g., `.env.tpl`):
+
 ```
 DATABASE_URL=postgres://user:{{aws://db-password}}@localhost/mydb
-API_KEY={{jaws://api-key}}
+API_KEY={{jaws://api-key || 'default_value' }}
 ```
 
 Inject secrets:
+
 ```bash
 # Output to stdout
 jaws pull -i .env.tpl
@@ -229,11 +231,11 @@ use jaws::{Config, detect_providers};
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let config = Config::load()?;
     let providers = detect_providers(&config).await?;
-    
+
     for provider in &providers {
         println!("Provider: {} ({})", provider.id(), provider.kind());
     }
-    
+
     Ok(())
 }
 ```
