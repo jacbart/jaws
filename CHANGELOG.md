@@ -1,3 +1,8 @@
+## [1.2.3] - 2026-02-06
+
+### 🐛 Bug Fixes
+
+- *(onepass)* Push command was not working right for 1pass
 ## [1.2.2] - 2026-02-04
 
 ### 🚀 Features
