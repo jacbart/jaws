@@ -364,8 +364,32 @@ impl SecretManager for OnePasswordSecretManager {
     }
 
     async fn update(&self, name: &str, value: &str) -> Result<String, Box<dyn std::error::Error>> {
-        let (vault_id, item_title, field_name) = self.resolve_context(name).await?;
-        let item_id = self.find_item_id(&vault_id, &item_title).await?;
+        // Check if this is an op:// reference format (used when pushing from DB)
+        // Format: op://vault_id/item_id/field_id
+        let (vault_id, item_id, field_name) = if name.starts_with("op://") {
+            let path = name.strip_prefix("op://").unwrap();
+            let parts: Vec<&str> = path.split('/').collect();
+            match parts.len() {
+                2 => (parts[0].to_string(), parts[1].to_string(), None),
+                3 => (
+                    parts[0].to_string(),
+                    parts[1].to_string(),
+                    Some(parts[2].to_string()),
+                ),
+                _ => {
+                    return Err(format!(
+                        "Invalid op:// reference format. Expected 'op://vault/item' or 'op://vault/item/field', got: {}",
+                        name
+                    )
+                    .into())
+                }
+            }
+        } else {
+            // Display path format - resolve to IDs
+            let (vault_id, item_title, field_name) = self.resolve_context(name).await?;
+            let item_id = self.find_item_id(&vault_id, &item_title).await?;
+            (vault_id, item_id, field_name)
+        };
 
         // Get full item to update
         let mut item = self
