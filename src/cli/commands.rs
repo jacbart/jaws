@@ -139,10 +139,10 @@ pub enum Commands {
         #[arg(long)]
         delete: bool,
     },
-    /// Manage configuration
+    /// Manage configuration (shows current config if no subcommand provided)
     Config {
         #[command(subcommand)]
-        command: ConfigCommands,
+        command: Option<ConfigCommands>,
     },
     /// Create a new secret (uses default_provider from config, or prompts for provider)
     Create {
@@ -186,8 +186,8 @@ pub enum Commands {
 /// Subcommands for configuration management.
 #[derive(Subcommand, Debug)]
 pub enum ConfigCommands {
-    /// Generate a new config file
-    Generate {
+    /// Initialize a new config file (interactive by default)
+    Init {
         /// Path where to create the config file (default: ./jaws.kdl)
         #[arg(long)]
         path: Option<PathBuf>,
@@ -196,12 +196,10 @@ pub enum ConfigCommands {
         #[arg(long)]
         overwrite: bool,
 
-        /// Interactive mode - prompts for settings and discovers providers
+        /// Generate minimal config without interactive prompts
         #[arg(short, long)]
-        interactive: bool,
+        minimal: bool,
     },
-    /// List all configuration settings
-    List,
     /// Get a specific configuration value
     Get {
         /// Setting key (e.g., "editor", "secrets_path", "cache_ttl")
@@ -214,6 +212,4 @@ pub enum ConfigCommands {
         /// New value
         value: String,
     },
-    /// List configured providers
-    Providers,
 }

@@ -28,27 +28,27 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Handle Config command separately as it doesn't require providers or database
     if let Some(Commands::Config { command }) = &cli.command {
         match command {
-            ConfigCommands::Generate {
-                path,
-                overwrite,
-                interactive,
-            } => {
-                if *interactive {
-                    return handle_interactive_generate(path.clone(), *overwrite).await;
+            // No subcommand: show current configuration
+            None => {
+                // Show config file path
+                if let Some(path) = Config::find_existing_config() {
+                    println!("Config file: {}", path.display());
                 } else {
-                    let config_path = Config::generate_config_file(path.clone(), *overwrite)?;
-                    println!("Config file generated at: {}", config_path.display());
-                    return Ok(());
+                    println!("Config file: (using defaults, no config file found)");
                 }
-            }
-            ConfigCommands::List => {
-                println!("Current Configuration:");
+                println!();
+                println!("Settings:");
                 println!("  editor: {}", config.editor());
                 println!("  secrets_path: {}", config.secrets_path().display());
                 println!("  cache_ttl: {}s", config.cache_ttl());
+                if let Some(default_provider) = config.default_provider() {
+                    println!("  default_provider: {}", default_provider);
+                }
                 println!();
                 if config.providers.is_empty() {
                     println!("Providers: (none configured)");
+                    println!();
+                    println!("Run 'jaws config init' to set up providers.");
                 } else {
                     println!("Providers:");
                     for p in &config.providers {
@@ -69,18 +69,33 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
                 return Ok(());
             }
-            ConfigCommands::Get { key } => {
+            Some(ConfigCommands::Init {
+                path,
+                overwrite,
+                minimal,
+            }) => {
+                if *minimal {
+                    // Non-interactive: generate minimal config
+                    let config_path = Config::generate_config_file(path.clone(), *overwrite)?;
+                    println!("Config file generated at: {}", config_path.display());
+                } else {
+                    // Interactive (default)
+                    return handle_interactive_generate(path.clone(), *overwrite).await;
+                }
+                return Ok(());
+            }
+            Some(ConfigCommands::Get { key }) => {
                 match config.get_default(key) {
                     Ok(value) => println!("{}", value),
                     Err(e) => eprintln!("{}", e),
                 }
                 return Ok(());
             }
-            ConfigCommands::Set { key, value } => {
+            Some(ConfigCommands::Set { key, value }) => {
                 let config_path = match Config::find_existing_config() {
                     Some(path) => path,
                     None => {
-                        eprintln!("Config file not found. Run 'jaws config generate' first.");
+                        eprintln!("Config file not found. Run 'jaws config init' first.");
                         return Ok(());
                     }
                 };
@@ -91,35 +106,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         println!("Updated {} = {} in {}", key, value, config_path.display());
                     }
                     Err(e) => eprintln!("{}", e),
-                }
-                return Ok(());
-            }
-            ConfigCommands::Providers => {
-                if config.providers.is_empty() {
-                    println!("No providers configured.");
-                    println!();
-                    println!("Run 'jaws config generate --interactive' to set up providers,");
-                    println!("or manually edit jaws.kdl");
-                } else {
-                    println!("Configured Providers:");
-                    for p in &config.providers {
-                        print!("  {} [{}]", p.id, p.kind);
-                        if let Some(profile) = &p.profile {
-                            if profile == "all" {
-                                print!(" (auto-discover all AWS profiles)");
-                            } else {
-                                print!(" profile={}", profile);
-                            }
-                        }
-                        if let Some(vault) = &p.vault {
-                            if vault == "all" {
-                                print!(" (auto-discover all vaults)");
-                            } else {
-                                print!(" vault={}", vault);
-                            }
-                        }
-                        println!();
-                    }
                 }
                 return Ok(());
             }
