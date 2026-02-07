@@ -1,6 +1,6 @@
 [package]
 name = "jaws"
-version = "1.2.3"
+version = "1.2.4"
 edition = "2024"
 description = "A CLI tool and library for managing secrets from multiple providers"
 license = "MIT"

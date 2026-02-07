@@ -1,3 +1,8 @@
+## [1.2.4] - 2026-02-07
+
+### 🐛 Bug Fixes
+
+- Tui flickering, env and profile will not just use profile for aws
 ## [1.2.3] - 2026-02-06
 
 ### 🐛 Bug Fixes
