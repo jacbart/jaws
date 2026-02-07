@@ -44,6 +44,12 @@ pub struct Defaults {
     /// When set, allows omitting the provider:// prefix.
     #[knuffel(property(name = "default_provider"))]
     pub default_provider: Option<String>,
+
+    /// Maximum number of versions to keep per secret.
+    /// Older versions are automatically pruned when this limit is exceeded.
+    /// Default: 10
+    #[knuffel(property(name = "max_versions"))]
+    pub max_versions: Option<u32>,
 }
 
 /// Configuration for a secrets provider.
@@ -154,6 +160,16 @@ impl Config {
             .and_then(|d| d.default_provider.clone())
     }
 
+    /// Get the maximum number of versions to keep per secret.
+    /// Returns None if unlimited, or Some(n) to keep last n versions.
+    /// Default: 10
+    pub fn max_versions(&self) -> Option<u32> {
+        self.defaults
+            .as_ref()
+            .and_then(|d| d.max_versions)
+            .or(Some(10)) // Default to 10 versions
+    }
+
     /// Get the path to the database file
     pub fn db_path(&self) -> PathBuf {
         self.secrets_path().join("jaws.db")
@@ -170,9 +186,16 @@ impl Config {
                     Some(value.parse().map_err(|_| "Invalid number for cache_ttl")?)
             }
             "default_provider" => defaults.default_provider = Some(value.to_string()),
+            "max_versions" => {
+                let v: u32 = value.parse().map_err(|_| "Invalid number for max_versions")?;
+                if v == 0 {
+                    return Err("max_versions must be at least 1".to_string());
+                }
+                defaults.max_versions = Some(v);
+            }
             _ => {
                 return Err(format!(
-                    "Unknown setting: {}. Valid settings: editor, secrets_path, cache_ttl, default_provider",
+                    "Unknown setting: {}. Valid settings: editor, secrets_path, cache_ttl, default_provider, max_versions",
                     key
                 ));
             }
@@ -189,8 +212,12 @@ impl Config {
             "default_provider" => Ok(self
                 .default_provider()
                 .unwrap_or_else(|| "(not set)".to_string())),
+            "max_versions" => Ok(self
+                .max_versions()
+                .map(|v| v.to_string())
+                .unwrap_or_else(|| "unlimited".to_string())),
             _ => Err(format!(
-                "Unknown setting: {}. Valid settings: editor, secrets_path, cache_ttl, default_provider",
+                "Unknown setting: {}. Valid settings: editor, secrets_path, cache_ttl, default_provider, max_versions",
                 key
             )),
         }

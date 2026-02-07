@@ -16,6 +16,8 @@ use crate::secrets::{
 };
 use crate::utils::{format_error, parse_secret_ref};
 
+use super::snapshot::{check_and_snapshot, is_dirty};
+
 /// Handle the pull command
 pub async fn handle_pull(
     config: &Config,
@@ -342,17 +344,41 @@ async fn handle_pull_print(
     Ok(())
 }
 
-/// Fetch a secret from the provider and save it locally
+/// Fetch a secret from the provider and save it locally.
+/// If the local file has uncommitted changes, auto-snapshot them first.
 pub async fn fetch_and_save_secret(
     config: &Config,
     repo: &SecretRepository,
     provider: &Provider,
     secret: &DbSecret,
 ) -> Result<String, Box<dyn std::error::Error>> {
+    // Check if local file has uncommitted changes - snapshot them first
+    if let Some(download) = repo.get_latest_download(secret.id)? {
+        if is_dirty(config, &download) {
+            // Auto-snapshot local changes before overwriting with pull
+            match check_and_snapshot(config, repo, secret, &download) {
+                Ok(result) => {
+                    if let Some(v) = result.new_version {
+                        eprintln!(
+                            "Saved local changes: {}://{} (v{})",
+                            secret.provider_id, secret.display_name, v
+                        );
+                    }
+                }
+                Err(e) => {
+                    eprintln!(
+                        "Warning: Could not save local changes for {}: {}",
+                        secret.display_name, e
+                    );
+                }
+            }
+        }
+    }
+
     // Fetch from provider
     let content = provider.get_secret(&secret.api_ref).await?;
 
-    // Get next version number
+    // Get next version number (re-fetch after potential snapshot)
     let version = repo
         .get_latest_download(secret.id)
         .ok()
@@ -372,7 +398,47 @@ pub async fn fetch_and_save_secret(
     // Record download in database
     repo.create_download(secret.id, &filename, &content_hash)?;
 
+    // Prune old versions if max_versions is configured
+    if let Some(max) = config.max_versions() {
+        let _ = prune_old_versions_for_secret(config, repo, secret.id, max);
+    }
+
     Ok(content)
+}
+
+/// Prune old versions for a specific secret
+fn prune_old_versions_for_secret(
+    config: &Config,
+    repo: &SecretRepository,
+    secret_id: i64,
+    max_versions: u32,
+) -> Result<usize, Box<dyn std::error::Error>> {
+    if max_versions == 0 {
+        return Ok(0);
+    }
+
+    let downloads = repo.list_downloads(secret_id)?;
+
+    if downloads.len() <= max_versions as usize {
+        return Ok(0);
+    }
+
+    // Downloads are sorted by version DESC, so skip the first max_versions
+    let to_delete: Vec<_> = downloads.into_iter().skip(max_versions as usize).collect();
+    let delete_count = to_delete.len();
+
+    for download in to_delete {
+        // Delete the file
+        let file_path = get_secret_path(&config.secrets_path(), &download.filename);
+        if file_path.exists() {
+            std::fs::remove_file(&file_path)?;
+        }
+
+        // Delete the database record
+        repo.delete_download(download.id)?;
+    }
+
+    Ok(delete_count)
 }
 
 /// Handle pull by name (non-print mode) - download and optionally edit

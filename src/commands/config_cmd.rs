@@ -95,6 +95,7 @@ pub async fn handle_interactive_generate(
             secrets_path: Some(secrets_path),
             cache_ttl: Some(cache_ttl),
             default_provider: None,
+            max_versions: None, // Use default (10)
         }),
         providers: Vec::new(),
     };

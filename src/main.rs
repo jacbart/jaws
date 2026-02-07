@@ -41,6 +41,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 println!("  editor: {}", config.editor());
                 println!("  secrets_path: {}", config.secrets_path().display());
                 println!("  cache_ttl: {}s", config.cache_ttl());
+                if let Some(max_v) = config.max_versions() {
+                    println!("  max_versions: {}", max_v);
+                }
                 if let Some(default_provider) = config.default_provider() {
                     println!("  default_provider: {}", default_provider);
                 }
@@ -194,7 +197,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
 
         Commands::List { provider, local } => {
-            handle_list(&repo, provider, local)?;
+            handle_list(&config, &repo, provider, local)?;
         }
 
         Commands::Push { secret_name, edit } => {

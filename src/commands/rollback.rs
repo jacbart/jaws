@@ -5,8 +5,10 @@ use std::process::Command;
 
 use crate::config::Config;
 use crate::db::SecretRepository;
-use crate::secrets::{Provider, get_secret_path, save_secret_file};
+use crate::secrets::{Provider, get_secret_path, save_secret_file, storage::compute_content_hash};
 use crate::utils::parse_secret_ref;
+
+use super::snapshot::{check_and_snapshot, is_dirty};
 
 /// Handle the unified rollback command - can rollback locally or on remote provider
 pub async fn handle_rollback(
@@ -103,8 +105,29 @@ async fn handle_local_rollback(
 
     let (secret, latest_download) = selected_secret;
 
-    // Get all versions for this secret
+    // Check for uncommitted changes and auto-snapshot before rollback
+    if is_dirty(config, &latest_download) {
+        match check_and_snapshot(config, repo, &secret, &latest_download) {
+            Ok(result) => {
+                if let Some(v) = result.new_version {
+                    println!(
+                        "Saved local changes: {}://{} (v{})",
+                        secret.provider_id, secret.display_name, v
+                    );
+                }
+            }
+            Err(e) => {
+                eprintln!(
+                    "Warning: Could not save local changes for {}: {}",
+                    secret.display_name, e
+                );
+            }
+        }
+    }
+
+    // Re-fetch downloads after potential snapshot
     let all_downloads = repo.list_downloads(secret.id)?;
+    let latest_download = all_downloads.first().cloned().ok_or("No downloads found")?;
 
     if all_downloads.len() <= 1 {
         println!(
@@ -184,8 +207,20 @@ async fn handle_local_rollback(
     }
 
     let content = fs::read_to_string(&old_file_path)?;
+    let target_content_hash = compute_content_hash(&content);
 
-    // Create a new version with this content (next version number after latest)
+    // Compare with current version's hash - skip if identical
+    if let Some(current_hash) = &latest_download.file_hash {
+        if current_hash == &target_content_hash {
+            println!(
+                "No changes - content identical to v{}.",
+                target_download.version
+            );
+            return Ok(());
+        }
+    }
+
+    // Content differs - create a new version with this content
     let new_version = latest_download.version + 1;
     let (new_filename, content_hash) = save_secret_file(
         &config.secrets_path(),

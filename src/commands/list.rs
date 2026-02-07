@@ -1,9 +1,13 @@
 //! List command handlers - listing secrets.
 
+use crate::config::Config;
 use crate::db::SecretRepository;
+
+use super::snapshot::is_dirty;
 
 /// Handle the list command - print all known secrets
 pub fn handle_list(
+    config: &Config,
     repo: &SecretRepository,
     provider: Option<String>,
     local_only: bool,
@@ -26,8 +30,16 @@ pub fn handle_list(
             downloaded
         };
 
-        for (secret, _download) in filtered {
-            println!("{}://{}", secret.provider_id, secret.display_name);
+        for (secret, download) in filtered {
+            let modified = if is_dirty(config, &download) {
+                " (modified)"
+            } else {
+                ""
+            };
+            println!(
+                "{}://{}{}",
+                secret.provider_id, secret.display_name, modified
+            );
         }
     } else {
         // Show all known secrets (from sync)
@@ -40,9 +52,27 @@ pub fn handle_list(
             return Ok(());
         }
 
+        // Get downloaded secrets to check for modifications
+        let downloaded = repo.list_all_downloaded_secrets()?;
+
         for secret in secrets {
-            // Print in PROVIDER://NAME format
-            println!("{}://{}", secret.provider_id, secret.display_name);
+            // Check if this secret is downloaded and modified
+            let modified = downloaded
+                .iter()
+                .find(|(s, _)| s.id == secret.id)
+                .map(|(_, d)| {
+                    if is_dirty(config, d) {
+                        " (modified)"
+                    } else {
+                        ""
+                    }
+                })
+                .unwrap_or("");
+
+            println!(
+                "{}://{}{}",
+                secret.provider_id, secret.display_name, modified
+            );
         }
     }
 

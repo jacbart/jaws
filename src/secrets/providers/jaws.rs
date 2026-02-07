@@ -10,7 +10,7 @@ use uuid::Uuid;
 
 use crate::db::{SecretInput, SecretRepository, init_db};
 use crate::secrets::manager::SecretManager;
-use crate::secrets::storage::{get_secret_path, hash_api_ref, load_secret_file, save_secret_file};
+use crate::secrets::storage::{compute_content_hash, get_secret_path, hash_api_ref, load_secret_file, save_secret_file};
 
 /// Filter for jaws secrets (future use for pattern matching, tags, etc.)
 #[derive(Debug, Clone, Default)]
@@ -245,9 +245,23 @@ impl SecretManager for JawsSecretManager {
                 .ok_or("No previous version found")?
         };
 
-        // Read old content and create new version
+        // Read old content
         let content = load_secret_file(&self.secrets_path, &target.filename)?;
-        let new_version = downloads[0].version + 1;
+        let target_content_hash = compute_content_hash(&content);
+
+        // Compare with current version's hash - skip if identical
+        let current = &downloads[0];
+        if let Some(current_hash) = &current.file_hash {
+            if current_hash == &target_content_hash {
+                return Ok(format!(
+                    "No changes - content identical to v{}.",
+                    target.version
+                ));
+            }
+        }
+
+        // Content differs - create new version
+        let new_version = current.version + 1;
 
         let (filename, content_hash) = save_secret_file(
             &self.secrets_path,

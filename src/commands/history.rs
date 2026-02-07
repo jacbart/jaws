@@ -5,6 +5,8 @@ use crate::db::SecretRepository;
 use crate::secrets::Provider;
 use crate::utils::parse_secret_ref;
 
+use super::snapshot::is_dirty;
+
 /// Handle the unified history command - show version history (local or remote)
 pub async fn handle_history(
     config: &Config,
@@ -18,12 +20,13 @@ pub async fn handle_history(
     if remote {
         handle_remote_history(config, providers, secret_name).await
     } else {
-        handle_local_history(repo, secret_name, verbose, limit).await
+        handle_local_history(config, repo, secret_name, verbose, limit).await
     }
 }
 
 /// Handle local history - show version history for downloaded secrets
 async fn handle_local_history(
+    config: &Config,
     repo: &SecretRepository,
     secret_name: Option<String>,
     verbose: bool,
@@ -103,7 +106,7 @@ async fn handle_local_history(
     }
 
     // Show history for each selected secret
-    for (secret, _latest_download) in selected_secrets {
+    for (secret, latest_download) in selected_secrets {
         let downloads = repo.list_downloads(secret.id)?;
 
         if downloads.is_empty() {
@@ -113,6 +116,11 @@ async fn handle_local_history(
 
         println!("\n{}://{}", secret.provider_id, secret.display_name);
         println!("{}", "-".repeat((secret.provider_id.len() + secret.display_name.len() + 3).min(60)));
+
+        // Check for uncommitted changes
+        if is_dirty(config, &latest_download) {
+            println!("  (uncommitted changes)");
+        }
 
         let versions_to_show: Vec<_> = if let Some(n) = limit {
             downloads.into_iter().take(n).collect()

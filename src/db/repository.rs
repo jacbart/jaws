@@ -2,7 +2,7 @@
 
 use super::models::{DbDownload, DbOperation, DbProvider, DbSecret, SecretInput};
 use chrono::{DateTime, Utc};
-use rusqlite::{Connection, OptionalExtension, params};
+use rusqlite::{params, Connection, OptionalExtension};
 use std::sync::{Arc, Mutex};
 
 /// Repository for managing secrets in the database.
@@ -437,6 +437,13 @@ impl SecretRepository {
             )
             .optional()?;
         Ok(result)
+    }
+
+    /// Delete a specific download record by ID.
+    pub fn delete_download(&self, download_id: i64) -> Result<(), Box<dyn std::error::Error>> {
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        conn.execute("DELETE FROM downloads WHERE id = ?", [download_id])?;
+        Ok(())
     }
 
     /// Get a secret by its ID.

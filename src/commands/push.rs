@@ -5,9 +5,11 @@ use std::process::Command;
 
 use crate::config::Config;
 use crate::db::{DbDownload, DbSecret, SecretRepository};
-use crate::secrets::{Provider, get_secret_path, storage::compute_content_hash};
+use crate::secrets::{Provider, get_secret_path};
 
 use crate::utils::parse_secret_ref;
+
+use super::snapshot::{check_and_snapshot, is_dirty, print_snapshot_summary};
 
 /// Handle the push command - push local secrets to providers
 pub async fn handle_push(
@@ -73,6 +75,32 @@ pub async fn handle_push(
             .expect("failed to launch editor");
     }
 
+    // Auto-snapshot any modified secrets before pushing
+    let mut snapshot_results = Vec::new();
+    for (secret, download) in &secrets_to_push {
+        let result = check_and_snapshot(config, repo, secret, download)?;
+        if result.new_version.is_some() {
+            snapshot_results.push(result);
+        }
+    }
+
+    // Print snapshot summary if any were saved
+    if !snapshot_results.is_empty() {
+        print_snapshot_summary(&snapshot_results);
+        println!();
+    }
+
+    // Re-fetch the latest downloads after snapshotting
+    let secrets_to_push: Vec<(DbSecret, DbDownload)> = {
+        let mut result = Vec::new();
+        for (secret, _) in &secrets_to_push {
+            if let Some(download) = repo.get_latest_download(secret.id)? {
+                result.push((secret.clone(), download));
+            }
+        }
+        result
+    };
+
     // Push each secret
     let mut pushed_count = 0;
     let mut error_count = 0;
@@ -91,21 +119,10 @@ pub async fn handle_push(
         // For jaws (local) secrets, show a message about future remote push capability
         if secret.provider_id == "jaws" {
             println!(
-                "{} [jaws] -> Updated locally. \
-                 (Future: Configure push targets to sync to remote providers)",
-                secret.display_name
+                "{} [jaws] -> Updated locally (v{})",
+                secret.display_name, download.version
             );
-            // Update the local secret
-            let jaws_provider = providers
-                .iter()
-                .find(|p| p.kind() == "jaws")
-                .expect("jaws provider always exists");
-            if let Err(e) = jaws_provider.update(&secret.api_ref, &content).await {
-                eprintln!("Error updating local secret: {}", e);
-                error_count += 1;
-            } else {
-                pushed_count += 1;
-            }
+            pushed_count += 1;
             continue;
         }
 
@@ -189,22 +206,8 @@ fn find_dirty_secrets(
     let mut results = Vec::new();
 
     for (secret, download) in downloaded {
-        let file_path = get_secret_path(&config.secrets_path(), &download.filename);
-
-        if !file_path.exists() {
-            continue;
-        }
-
-        // Read current file content and compute hash
-        let is_dirty = if let Ok(content) = fs::read_to_string(&file_path) {
-            let current_hash = compute_content_hash(&content);
-            // Compare with stored hash - if different, it's been modified
-            download.file_hash.as_ref() != Some(&current_hash)
-        } else {
-            false
-        };
-
-        results.push((secret.clone(), download.clone(), is_dirty));
+        let dirty = is_dirty(config, download);
+        results.push((secret.clone(), download.clone(), dirty));
     }
 
     results

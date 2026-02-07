@@ -9,6 +9,8 @@ use crate::config::Config;
 use crate::db::SecretRepository;
 use crate::secrets::get_secret_path;
 
+use super::snapshot::{print_snapshot_summary, snapshot_secrets};
+
 /// Handle the default command (no subcommand) - show picker for downloaded secrets to edit
 pub async fn handle_default_command(
     config: &Config,
@@ -48,24 +50,34 @@ pub async fn handle_default_command(
         return Ok(());
     }
 
-    // Collect all selected file paths
+    // Collect all selected file paths and secret IDs
     let mut files_to_open: Vec<String> = Vec::new();
+    let mut selected_secret_ids: Vec<i64> = Vec::new();
+
     for selected_display in &selected {
         for (secret, download) in &downloaded {
             let display = format!("{} | {}", secret.provider_id, secret.display_name);
             if &display == selected_display {
                 let file_path = get_secret_path(&config.secrets_path(), &download.filename);
                 files_to_open.push(file_path.to_string_lossy().to_string());
+                selected_secret_ids.push(secret.id);
                 break;
             }
         }
     }
 
     if !files_to_open.is_empty() {
+        // Open editor
         let _ = Command::new(config.editor())
             .args(&files_to_open)
             .status()
             .expect("failed to launch editor");
+
+        // After editor closes, check for modifications and auto-snapshot
+        let results = snapshot_secrets(config, repo, &selected_secret_ids)?;
+
+        // Print summary of saved versions
+        print_snapshot_summary(&results);
     }
 
     Ok(())
