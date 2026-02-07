@@ -181,6 +181,8 @@ pub enum Commands {
         #[arg(long)]
         keep_local: bool,
     },
+    /// Print version information
+    Version,
 }
 
 /// Subcommands for configuration management.

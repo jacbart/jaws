@@ -25,6 +25,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Load config from file (use CLI-specified path if provided)
     let config = Config::load_from(cli.config.config_path.as_deref())?;
 
+    // Handle Version command separately as it doesn't require providers or database
+    if let Some(Commands::Version) = &cli.command {
+        println!("v{}", env!("CARGO_PKG_VERSION"));
+        return Ok(());
+    }
+
     // Handle Config command separately as it doesn't require providers or database
     if let Some(Commands::Config { command }) = &cli.command {
         match command {
@@ -247,6 +253,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         Commands::Export { .. } => unreachable!(),
         Commands::Import { .. } => unreachable!(),
+        Commands::Version => unreachable!(),
 
         Commands::Create {
             name,
