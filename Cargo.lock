@@ -1484,8 +1484,8 @@ checksum = "37909eebbb50d72f9059c3b6d82c0463f2ff062c9e95845c43a6c9c0355411be"
 
 [[package]]
 name = "ff"
-version = "1.0.9"
-source = "git+https://github.com/jacbart/ff.git?branch=main#eab6bbd8e07a53ee8f597865b415998f6314f80c"
+version = "1.0.10"
+source = "git+https://github.com/jacbart/ff.git?branch=main#b39bd28e89787a8a3ee3e0986120d4a3f872079a"
 dependencies = [
  "crossterm",
  "futures",
