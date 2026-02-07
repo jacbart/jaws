@@ -1,7 +1,18 @@
 //! Command and subcommand definitions.
 
-use clap::Subcommand;
+use clap::{Subcommand, ValueEnum};
 use std::path::PathBuf;
+
+/// Scope for delete operations
+#[derive(Debug, Clone, Copy, ValueEnum)]
+pub enum DeleteScope {
+    /// Delete only local cached files
+    Local,
+    /// Delete only from the remote provider
+    Remote,
+    /// Delete from both local cache and remote provider
+    Both,
+}
 
 /// Top-level commands available in jaws.
 #[derive(Subcommand, Debug)]
@@ -31,17 +42,25 @@ pub enum Commands {
     },
     /// Push secrets to your secrets manager
     Push {
-        /// Name of the secret to push (optional - if not provided, pushes all changed secrets)
+        /// Name of the secret to push (optional - if not provided, shows TUI with modified secrets)
         secret_name: Option<String>,
 
         /// Open secrets in editor before pushing
         #[arg(short, long)]
         edit: bool,
     },
-    /// Delete a local secret and all its versions
+    /// Delete a secret (prompts for scope: local, remote, or both)
     Delete {
         /// Name of the secret to delete (optional - if not provided, opens TUI selector)
         secret_name: Option<String>,
+
+        /// Delete scope: local, remote, or both (if not provided, prompts interactively)
+        #[arg(short, long, value_enum)]
+        scope: Option<DeleteScope>,
+
+        /// Force delete without recovery period (for remote deletions)
+        #[arg(short, long)]
+        force: bool,
     },
     /// Refresh the local cache of remote secrets
     Sync,
@@ -50,8 +69,12 @@ pub enum Commands {
         /// Filter by provider (e.g., "jaws", "aws-dev")
         #[arg(short, long)]
         provider: Option<String>,
+
+        /// Show only locally downloaded secrets
+        #[arg(short, long)]
+        local: bool,
     },
-    /// View version history of downloaded secrets
+    /// View version history (local and remote)
     History {
         /// Name of the secret to show history for (optional - if not provided, opens TUI selector)
         secret_name: Option<String>,
@@ -63,19 +86,31 @@ pub enum Commands {
         /// Maximum number of versions to show (default: all)
         #[arg(short = 'n', long)]
         limit: Option<usize>,
+
+        /// Show remote provider version history instead of local
+        #[arg(short, long)]
+        remote: bool,
     },
-    /// Rollback a secret to a previous version
+    /// Rollback a secret to a previous version (local or remote)
     Rollback {
         /// Name of the secret to rollback
         secret_name: Option<String>,
 
-        /// Version number to rollback to (optional - if not provided, shows version selector)
+        /// Version number to rollback to for local rollback (optional - shows version selector)
         #[arg(short, long)]
         version: Option<i32>,
 
-        /// Open the rolled back secret in editor
+        /// Open the rolled back secret in editor (local rollback only)
         #[arg(short, long)]
         edit: bool,
+
+        /// Rollback on the remote provider instead of locally
+        #[arg(short, long)]
+        remote: bool,
+
+        /// Version ID for remote rollback (provider-specific, e.g., AWS version ID)
+        #[arg(long)]
+        version_id: Option<String>,
     },
     /// Export and encrypt the secrets directory to a .barrel file
     Export {
@@ -109,10 +144,10 @@ pub enum Commands {
         #[command(subcommand)]
         command: ConfigCommands,
     },
-    /// Create a new secret (defaults to local jaws provider if not specified)
+    /// Create a new secret (uses default_provider from config, or prompts for provider)
     Create {
-        /// Name for the secret (e.g. "my-secret" or "aws://my-secret")
-        name: String,
+        /// Name for the secret (optional - if not provided, prompts interactively)
+        name: Option<String>,
 
         /// Optional description
         #[arg(short, long)]
@@ -132,11 +167,6 @@ pub enum Commands {
         #[arg(short, long)]
         provider: Option<String>,
     },
-    /// Remote provider operations
-    Remote {
-        #[command(subcommand)]
-        command: RemoteCommands,
-    },
     /// Clear local cache and secrets
     Clean {
         /// Delete without confirmation (dangerous for local jaws secrets)
@@ -153,34 +183,6 @@ pub enum Commands {
     },
 }
 
-/// Subcommands for remote provider operations.
-#[derive(Subcommand, Debug)]
-pub enum RemoteCommands {
-    /// Delete a secret from the provider
-    Delete {
-        /// Name of the secret to delete (optional - if not provided, opens TUI selector)
-        secret_name: Option<String>,
-
-        /// Force delete without recovery period
-        #[arg(short, long)]
-        force: bool,
-    },
-    /// Rollback a secret to a previous version on the provider
-    Rollback {
-        /// Name of the secret to rollback (optional - if not provided, opens TUI selector)
-        secret_name: Option<String>,
-
-        /// Version ID to rollback to (optional - if not provided, uses previous version)
-        #[arg(long)]
-        version_id: Option<String>,
-    },
-    /// View version history from the provider (not yet implemented)
-    History {
-        /// Name of the secret to show history for
-        secret_name: Option<String>,
-    },
-}
-
 /// Subcommands for configuration management.
 #[derive(Subcommand, Debug)]
 pub enum ConfigCommands {
@@ -188,7 +190,7 @@ pub enum ConfigCommands {
     Generate {
         /// Path where to create the config file (default: ./jaws.kdl)
         #[arg(long)]
-        path: Option<std::path::PathBuf>,
+        path: Option<PathBuf>,
 
         /// Overwrite existing config file if it exists
         #[arg(long)]

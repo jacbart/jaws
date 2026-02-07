@@ -4,12 +4,12 @@ use std::fs;
 use std::process::Command;
 
 use crate::config::Config;
-use crate::db::SecretRepository;
-use crate::secrets::{Provider, get_secret_path};
+use crate::db::{DbDownload, DbSecret, SecretRepository};
+use crate::secrets::{Provider, get_secret_path, storage::compute_content_hash};
 
 use crate::utils::parse_secret_ref;
 
-/// Handle the push command
+/// Handle the push command - push local secrets to providers
 pub async fn handle_push(
     config: &Config,
     repo: &SecretRepository,
@@ -24,8 +24,8 @@ pub async fn handle_push(
         return Err("No secrets downloaded. Use 'jaws pull' first.".into());
     }
 
-    // Filter by name if provided
-    let secrets_to_push: Vec<_> = if let Some(name) = &secret_name {
+    // Filter by name if provided, otherwise show TUI with modified secrets
+    let secrets_to_push: Vec<(DbSecret, DbDownload)> = if let Some(name) = &secret_name {
         if let Ok((provider, specific_name)) = parse_secret_ref(name, None) {
             downloaded
                 .into_iter()
@@ -38,17 +38,21 @@ pub async fn handle_push(
                 .collect()
         }
     } else {
-        downloaded
+        // No secret specified - show TUI with modified (dirty) secrets
+        select_dirty_secrets(config, &downloaded).await?
     };
 
     if secrets_to_push.is_empty() {
-        return Err(format!(
-            "No matching secrets found{}",
-            secret_name
-                .map(|n| format!(" for '{}'", n))
-                .unwrap_or_default()
-        )
-        .into());
+        if secret_name.is_some() {
+            return Err(format!(
+                "No matching secrets found for '{}'",
+                secret_name.unwrap()
+            )
+            .into());
+        } else {
+            println!("No modified secrets to push.");
+            return Ok(());
+        }
     }
 
     // Collect file paths for editing
@@ -118,6 +122,14 @@ pub async fn handle_push(
                     secret.display_name, secret.provider_id, result
                 );
                 pushed_count += 1;
+
+                // Log the operation
+                let _ = repo.log_operation(
+                    "push",
+                    &secret.provider_id,
+                    &secret.display_name,
+                    None,
+                );
             }
             Err(e) => {
                 let error_msg = e.to_string();
@@ -131,6 +143,14 @@ pub async fn handle_push(
                                 secret.display_name, secret.provider_id, result
                             );
                             pushed_count += 1;
+
+                            // Log the operation
+                            let _ = repo.log_operation(
+                                "push_create",
+                                &secret.provider_id,
+                                &secret.display_name,
+                                None,
+                            );
                         }
                         Err(create_err) => {
                             eprintln!(
@@ -159,4 +179,85 @@ pub async fn handle_push(
     }
 
     Ok(())
+}
+
+/// Find secrets that have been modified locally (dirty)
+fn find_dirty_secrets(
+    config: &Config,
+    downloaded: &[(DbSecret, DbDownload)],
+) -> Vec<(DbSecret, DbDownload, bool)> {
+    let mut results = Vec::new();
+
+    for (secret, download) in downloaded {
+        let file_path = get_secret_path(&config.secrets_path(), &download.filename);
+
+        if !file_path.exists() {
+            continue;
+        }
+
+        // Read current file content and compute hash
+        let is_dirty = if let Ok(content) = fs::read_to_string(&file_path) {
+            let current_hash = compute_content_hash(&content);
+            // Compare with stored hash - if different, it's been modified
+            download.file_hash.as_ref() != Some(&current_hash)
+        } else {
+            false
+        };
+
+        results.push((secret.clone(), download.clone(), is_dirty));
+    }
+
+    results
+}
+
+/// Show TUI selector for dirty (modified) secrets
+async fn select_dirty_secrets(
+    config: &Config,
+    downloaded: &[(DbSecret, DbDownload)],
+) -> Result<Vec<(DbSecret, DbDownload)>, Box<dyn std::error::Error>> {
+    use ff::{TuiConfig, create_items_channel, run_tui_with_config};
+
+    // Find all dirty secrets
+    let dirty_secrets: Vec<_> = find_dirty_secrets(config, downloaded)
+        .into_iter()
+        .filter(|(_, _, is_dirty)| *is_dirty)
+        .map(|(s, d, _)| (s, d))
+        .collect();
+
+    if dirty_secrets.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let (tx, rx) = create_items_channel();
+
+    for (secret, _download) in &dirty_secrets {
+        let display = format!("{} | {} (modified)", secret.provider_id, secret.display_name);
+        if tx.send(display).await.is_err() {
+            break;
+        }
+    }
+    drop(tx);
+
+    let mut tui_config = TuiConfig::fullscreen();
+    tui_config.show_help_text = false;
+
+    // Enable multi-select for batch push
+    let selected = run_tui_with_config(rx, true, tui_config)
+        .await
+        .map_err(|e| e as Box<dyn std::error::Error>)?;
+
+    if selected.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    // Filter dirty secrets to only those selected
+    let result = dirty_secrets
+        .into_iter()
+        .filter(|(s, _)| {
+            let display = format!("{} | {} (modified)", s.provider_id, s.display_name);
+            selected.contains(&display)
+        })
+        .collect();
+
+    Ok(result)
 }

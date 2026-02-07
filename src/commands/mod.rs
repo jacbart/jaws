@@ -13,7 +13,6 @@ mod list;
 mod log;
 mod pull;
 mod push;
-mod remote;
 mod rollback;
 mod sync;
 
@@ -28,6 +27,5 @@ pub use list::handle_list;
 pub use log::handle_log;
 pub use pull::{handle_pull, handle_pull_inject};
 pub use push::handle_push;
-pub use remote::handle_remote;
 pub use rollback::handle_rollback;
 pub use sync::handle_sync;

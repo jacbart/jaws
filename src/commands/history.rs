@@ -1,12 +1,29 @@
-//! History command handlers - viewing secret version history.
+//! History command handlers - viewing secret version history (local and remote).
 
 use crate::config::Config;
 use crate::db::SecretRepository;
+use crate::secrets::Provider;
 use crate::utils::parse_secret_ref;
 
-/// Handle the history command - show version history for downloaded secrets
+/// Handle the unified history command - show version history (local or remote)
 pub async fn handle_history(
-    _config: &Config,
+    config: &Config,
+    repo: &SecretRepository,
+    providers: &[Provider],
+    secret_name: Option<String>,
+    verbose: bool,
+    limit: Option<usize>,
+    remote: bool,
+) -> Result<(), Box<dyn std::error::Error>> {
+    if remote {
+        handle_remote_history(config, providers, secret_name).await
+    } else {
+        handle_local_history(repo, secret_name, verbose, limit).await
+    }
+}
+
+/// Handle local history - show version history for downloaded secrets
+async fn handle_local_history(
     repo: &SecretRepository,
     secret_name: Option<String>,
     verbose: bool,
@@ -94,8 +111,8 @@ pub async fn handle_history(
             continue;
         }
 
-        println!("\n{}", secret.display_name);
-        println!("{}", "-".repeat(secret.display_name.len().min(60)));
+        println!("\n{}://{}", secret.provider_id, secret.display_name);
+        println!("{}", "-".repeat((secret.provider_id.len() + secret.display_name.len() + 3).min(60)));
 
         let versions_to_show: Vec<_> = if let Some(n) = limit {
             downloads.into_iter().take(n).collect()
@@ -121,6 +138,65 @@ pub async fn handle_history(
             }
         }
     }
+
+    Ok(())
+}
+
+/// Handle remote history - show version history from the provider
+async fn handle_remote_history(
+    config: &Config,
+    providers: &[Provider],
+    secret_name: Option<String>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let selected = if let Some(name) = secret_name {
+        let (provider_id, secret) = parse_secret_ref(&name, config.default_provider().as_deref())
+            .map_err(|e| -> Box<dyn std::error::Error> { e.into() })?;
+        vec![(provider_id, secret)]
+    } else {
+        crate::secrets::select_from_all_providers(providers).await?
+    };
+
+    if selected.is_empty() {
+        return Ok(());
+    }
+
+    for (provider_id, secret_ref) in selected {
+        let provider = providers
+            .iter()
+            .find(|p| p.id() == provider_id)
+            .ok_or_else(|| format!("Provider '{}' not found", provider_id))?;
+
+        println!("\n{}://{}", provider_id, secret_ref);
+        println!("{}", "-".repeat((provider_id.len() + secret_ref.len() + 3).min(60)));
+
+        match provider.kind() {
+            "jaws" => {
+                println!("  'jaws' is a local-only provider. Use 'jaws history' without --remote.");
+            }
+            "aws" => {
+                // AWS Secrets Manager supports versioning
+                println!("  Remote version history for AWS Secrets Manager is available via the AWS Console.");
+                println!("  Use 'jaws rollback --remote' to restore a previous version.");
+                println!();
+                println!("  Tip: AWS maintains AWSCURRENT and AWSPREVIOUS version labels.");
+                println!("  When you update a secret, the previous value becomes AWSPREVIOUS.");
+            }
+            "onepassword" => {
+                println!("  1Password item history is available via the 1Password app or web interface.");
+                println!("  The op CLI and service accounts have limited version history support.");
+            }
+            "bitwarden" => {
+                println!("  Bitwarden Secrets Manager does not currently support version history.");
+                println!("  Use local history ('jaws history' without --remote) to track your changes.");
+            }
+            _ => {
+                println!("  Remote version history is not yet implemented for this provider.");
+            }
+        }
+    }
+
+    println!();
+    println!("Hint: Use 'jaws history' (without --remote) to view local version history.");
 
     Ok(())
 }

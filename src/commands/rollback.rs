@@ -1,4 +1,4 @@
-//! Rollback command handlers - restoring secrets to previous versions.
+//! Rollback command handlers - restoring secrets to previous versions (local or remote).
 
 use std::fs;
 use std::process::Command;
@@ -6,9 +6,28 @@ use std::process::Command;
 use crate::config::Config;
 use crate::db::SecretRepository;
 use crate::secrets::{Provider, get_secret_path, save_secret_file};
+use crate::utils::parse_secret_ref;
 
-/// Handle the rollback command - rollback a secret to a previous version
+/// Handle the unified rollback command - can rollback locally or on remote provider
 pub async fn handle_rollback(
+    config: &Config,
+    repo: &SecretRepository,
+    providers: &[Provider],
+    secret_name: Option<String>,
+    version: Option<i32>,
+    edit: bool,
+    remote: bool,
+    version_id: Option<String>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    if remote {
+        handle_remote_rollback(config, providers, secret_name, version_id).await
+    } else {
+        handle_local_rollback(config, repo, secret_name, version, edit).await
+    }
+}
+
+/// Handle local rollback - restore a secret to a previous local version
+async fn handle_local_rollback(
     config: &Config,
     repo: &SecretRepository,
     secret_name: Option<String>,
@@ -186,7 +205,7 @@ pub async fn handle_rollback(
 
     // Log the operation
     repo.log_operation(
-        "rollback",
+        "rollback_local",
         &secret.provider_id,
         &secret.display_name,
         Some(&format!(
@@ -207,10 +226,8 @@ pub async fn handle_rollback(
     Ok(())
 }
 
-use crate::utils::parse_secret_ref;
-
-/// Handle the remote rollback command - rollback on provider
-pub async fn handle_remote_rollback(
+/// Handle remote rollback - rollback on the provider
+async fn handle_remote_rollback(
     config: &Config,
     providers: &[Provider],
     secret_name: Option<String>,
@@ -232,17 +249,22 @@ pub async fn handle_remote_rollback(
             .find(|p| p.id() == provider_id)
             .ok_or_else(|| format!("Provider {} not found", provider_id))?;
 
+        if provider_id == "jaws" {
+            println!("Note: 'jaws' is a local-only provider. Use 'jaws rollback' without --remote for local rollback.");
+            continue;
+        }
+
         match provider.rollback(&secret_ref, version_id.as_deref()).await {
             Ok(result) => {
                 if let Some(vid) = &version_id {
                     println!(
-                        "{} [{}] rolled back to version {} -> {}",
-                        secret_ref, provider_id, vid, result
+                        "{}://{} rolled back to version {} -> {}",
+                        provider_id, secret_ref, vid, result
                     );
                 } else {
                     println!(
-                        "{} [{}] rolled back to previous version -> {}",
-                        secret_ref, provider_id, result
+                        "{}://{} rolled back to previous version -> {}",
+                        provider_id, secret_ref, result
                     );
                 }
             }

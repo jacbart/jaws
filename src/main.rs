@@ -9,7 +9,7 @@ use jaws::cli::{Cli, Commands, ConfigCommands};
 use jaws::commands::{
     handle_clean, handle_create, handle_default_command, handle_delete, handle_export,
     handle_history, handle_import, handle_interactive_generate, handle_list, handle_log,
-    handle_pull, handle_pull_inject, handle_push, handle_remote, handle_rollback, handle_sync,
+    handle_pull, handle_pull_inject, handle_push, handle_rollback, handle_sync,
 };
 use jaws::config::Config;
 use jaws::db::{SecretRepository, init_db};
@@ -207,20 +207,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
 
-        Commands::List { provider } => {
-            handle_list(&repo, provider)?;
+        Commands::List { provider, local } => {
+            handle_list(&repo, provider, local)?;
         }
 
         Commands::Push { secret_name, edit } => {
             handle_push(&config, &repo, &providers, secret_name, edit).await?;
         }
 
-        Commands::Delete { secret_name } => {
-            handle_delete(&config, &repo, secret_name).await?;
-        }
-
-        Commands::Remote { command } => {
-            handle_remote(&config, &providers, command).await?;
+        Commands::Delete {
+            secret_name,
+            scope,
+            force,
+        } => {
+            handle_delete(&config, &repo, &providers, secret_name, scope, force).await?;
         }
 
         Commands::Sync => {
@@ -231,16 +231,29 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             secret_name,
             verbose,
             limit,
+            remote,
         } => {
-            handle_history(&config, &repo, secret_name, verbose, limit).await?;
+            handle_history(&config, &repo, &providers, secret_name, verbose, limit, remote).await?;
         }
 
         Commands::Rollback {
             secret_name,
             version,
             edit,
+            remote,
+            version_id,
         } => {
-            handle_rollback(&config, &repo, secret_name, version, edit).await?;
+            handle_rollback(
+                &config,
+                &repo,
+                &providers,
+                secret_name,
+                version,
+                edit,
+                remote,
+                version_id,
+            )
+            .await?;
         }
 
         Commands::Export { .. } => unreachable!(),
