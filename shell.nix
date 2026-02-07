@@ -15,6 +15,7 @@ pkgs.mkShell {
     (rustVersion.override { extensions = [ "rust-src" ]; })
     bacon
     rust-analyzer
+    lldb
     openssl
     pkg-config
     git-cliff

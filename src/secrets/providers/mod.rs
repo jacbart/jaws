@@ -14,6 +14,7 @@ use crate::config::{Config, ProviderConfig};
 use crate::secrets::manager::SecretManager;
 
 use aws_config::meta::region::RegionProviderChain;
+use aws_config::profile::ProfileFileCredentialsProvider;
 use aws_sdk_secretsmanager::{Client, config::Region};
 use futures::StreamExt;
 use futures::stream::Stream;
@@ -342,22 +343,30 @@ async fn init_onepassword_all_vaults(
 async fn init_aws_provider(
     config: &ProviderConfig,
 ) -> Result<AwsSecretManager, Box<dyn std::error::Error>> {
-    let region = config.region.clone();
-    let profile = config.profile.clone();
-
-    // Set up region
-    let region_provider = RegionProviderChain::first_try(region.map(Region::new))
-        .or_default_provider()
+    // Set up region with fallback
+    let region_provider = config.region
+        .clone()
+        .map(Region::new)
+        .map(RegionProviderChain::first_try)
+        .unwrap_or_else(|| RegionProviderChain::default_provider())
         .or_else(Region::new("us-west-2"));
 
-    // Set up config loader
+    // Start building config
     let mut config_loader = aws_config::from_env().region(region_provider);
 
-    // If profile is specified, use it
-    if let Some(profile_name) = profile {
-        config_loader = config_loader.profile_name(profile_name);
+    // If profile is specified, force its use by explicitly setting credentials provider.
+    // This bypasses environment variables (AWS_ACCESS_KEY_ID, etc.) in the default
+    // credential chain, ensuring the profile credentials are used instead.
+    if let Some(profile_name) = &config.profile {
+        let credentials_provider = ProfileFileCredentialsProvider::builder()
+            .profile_name(profile_name)
+            .build();
+        config_loader = config_loader
+            .profile_name(profile_name)
+            .credentials_provider(credentials_provider);
     }
 
+    // Load final config
     let shared_config = config_loader.load().await;
     let client = Client::new(&shared_config);
 

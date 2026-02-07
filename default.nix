@@ -9,7 +9,7 @@
 let
   inherit (pkgs) lib;
   outputHashes = {
-    "ff-1.0.8" = "sha256-dPJZissVpAsVj1fMMw8GEPsywdBmscCkG3FXYoWGhb0=";
+    "ff-1.0.9" = "sha256-mxxibQty8e7YlH18zYiXlHBjbsK0rM3ov4l3gjdSe8s=";
   };
 
   onepasswordSdk = pkgs.callPackage ./nix/onepassword-sdk.nix { };
