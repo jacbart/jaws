@@ -1,3 +1,18 @@
+## [1.2.6] - 2026-02-08
+
+### 🚀 Features
+
+- Add version command
+
+### 💼 Other
+
+- Updates to build system to allow easy cross platform builds
+
+### 🚜 Refactor
+
+- Secret commands are more unified in how they operate and tui is used in default commands to clarify and unknown provider info
+- Simpler config command layout and interaction
+- Better version control
 ## [1.2.5] - 2026-02-07
 
 ### 💼 Other
