@@ -4,6 +4,9 @@
   fetchurl,
   unzip,
   autoPatchelfHook,
+  # Optional: override the target system for cross-compilation
+  # If not provided, defaults to the host platform
+  targetSystem ? null,
 }:
 
 let
@@ -28,8 +31,13 @@ let
     };
   };
 
-  system = stdenv.hostPlatform.system;
+  # Use targetSystem if provided (for cross-compilation), otherwise use host platform
+  system = if targetSystem != null then targetSystem else stdenv.hostPlatform.system;
   src = sources.${system} or (throw "Unsupported system: ${system}");
+
+  # Determine if target is Linux or Darwin for library handling
+  isTargetLinux = builtins.match ".*-linux" system != null;
+  isTargetDarwin = builtins.match ".*-darwin" system != null;
 
 in
 stdenv.mkDerivation {
@@ -40,9 +48,14 @@ stdenv.mkDerivation {
     inherit (src) url sha256;
   };
 
-  nativeBuildInputs = [ unzip ] ++ lib.optionals stdenv.isLinux [ autoPatchelfHook ];
+  # For cross-compilation, we only need unzip on the build machine
+  # autoPatchelfHook is only needed when building for Linux AND running on Linux
+  nativeBuildInputs = [
+    unzip
+  ]
+  ++ lib.optionals (stdenv.isLinux && isTargetLinux) [ autoPatchelfHook ];
 
-  buildInputs = lib.optionals stdenv.isLinux [ stdenv.cc.cc.lib ];
+  buildInputs = lib.optionals (stdenv.isLinux && isTargetLinux) [ stdenv.cc.cc.lib ];
 
   unpackPhase = ''
     unzip $src
@@ -52,4 +65,9 @@ stdenv.mkDerivation {
     mkdir -p $out/lib
     find . -name "*.so" -o -name "*.dylib" -o -name "*.dll" | xargs -I {} cp {} $out/lib/
   '';
+
+  # Metadata for cross-compilation awareness
+  passthru = {
+    inherit system isTargetLinux isTargetDarwin;
+  };
 }

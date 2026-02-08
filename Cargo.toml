@@ -42,3 +42,12 @@ regex = "1"
 bitwarden = { version = "1.0.0", features = ["secrets"] }
 rustls = { version = "0.23", features = ["ring"] }
 rustls-webpki = { version = "0.102.8", features = ["std"] }
+
+# Optional vendored OpenSSL for cross-compilation
+openssl = { version = "0.10", features = ["vendored"], optional = true }
+
+[features]
+default = []
+# Enable vendored OpenSSL for cross-compilation builds
+# This compiles OpenSSL from source instead of linking against system libraries
+vendored-openssl = ["openssl"]

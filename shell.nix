@@ -19,6 +19,8 @@ pkgs.mkShell {
     openssl
     pkg-config
     git-cliff
+    cargo-zigbuild
+    # zig
   ];
   nativeBuildInputs = with pkgs; [
     pkg-config

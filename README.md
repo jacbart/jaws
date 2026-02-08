@@ -17,8 +17,40 @@ A CLI tool and library for managing secrets from multiple providers (AWS Secrets
 
 ## Installation
 
+### Using Cargo
+
 ```bash
 cargo install --path .
+```
+
+### Using Nix
+
+```bash
+# Build and run directly
+nix run github:jacbart/jaws
+
+# Install to profile
+nix profile install github:jacbart/jaws
+
+# Or add to your flake inputs
+{
+  inputs.jaws.url = "github:jacbart/jaws";
+}
+```
+
+### Cross-Compiled Binaries
+
+Pre-built binaries for multiple platforms can be built using the Nix flake:
+
+```bash
+# Build for specific target
+nix build .#jaws-x86_64-linux      # Intel/AMD Linux
+nix build .#jaws-aarch64-linux     # ARM64 Linux (AWS Graviton, etc.)
+nix build .#jaws-x86_64-darwin     # Intel Mac
+nix build .#jaws-aarch64-darwin    # Apple Silicon Mac
+
+# Build native (optimal for current platform)
+nix build .#default
 ```
 
 ## Quick Start
@@ -254,6 +286,47 @@ src/
 ├── secrets/         # Secret providers
 │   └── providers/   # AWS, 1Password, local
 └── utils/           # Utilities
+```
+
+## Development
+
+### Dev Shell
+
+Enter the development environment with all dependencies:
+
+```bash
+nix develop
+```
+
+### Building from Source
+
+```bash
+# Native build
+cargo build --release
+
+# Or using Nix
+nix build
+```
+
+### Cross-Compilation
+
+The project supports cross-compilation using `cargo-zigbuild` for Linux targets and native cargo for Darwin targets:
+
+```bash
+# Build all cross-compiled binaries
+./scripts/release.sh --build-only
+
+# Full release process (updates version, builds all targets, creates tag)
+./scripts/release.sh 1.3.0
+```
+
+Release binaries are output to `dist/`:
+```
+dist/
+├── jaws-x86_64-linux.tar.gz
+├── jaws-aarch64-linux.tar.gz
+├── jaws-x86_64-darwin.tar.gz
+└── jaws-aarch64-darwin.tar.gz
 ```
 
 ## Roadmap
