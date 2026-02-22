@@ -3,7 +3,7 @@ name = "jaws"
 version = "1.2.6"
 edition = "2024"
 description = "A CLI tool and library for managing secrets from multiple providers"
-license = "MIT"
+license = "MPL-2.0"
 
 [lib]
 name = "jaws"

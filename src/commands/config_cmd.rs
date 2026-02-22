@@ -82,6 +82,15 @@ pub async fn handle_interactive_generate(
         }
     }
 
+    // Helper function for y/N confirmation prompts
+    fn confirm(message: &str) -> bool {
+        print!("{} [y/N]: ", message);
+        io::stdout().flush().unwrap();
+        let mut input = String::new();
+        io::stdin().read_line(&mut input).unwrap();
+        matches!(input.trim().to_lowercase().as_str(), "y" | "yes")
+    }
+
     // Get defaults
     let default_editor = std::env::var("EDITOR").unwrap_or_else(|_| "vim".into());
     let editor = prompt("Editor", &default_editor);
@@ -106,60 +115,63 @@ pub async fn handle_interactive_generate(
     println!("Discovering AWS profiles...");
     match Config::discover_aws_profiles() {
         Ok(profiles) if !profiles.is_empty() => {
-            println!(
-                "Found {} AWS profile(s). Select which to add (or none to skip):",
-                profiles.len()
-            );
-            println!("  Tip: Use 'all' option to auto-discover profiles at runtime\n");
+            println!("Found {} AWS profile(s).", profiles.len());
 
-            // Create items for ff selection
-            let mut items: Vec<String> =
-                vec!["[all] - Auto-discover all profiles at runtime".to_string()];
-            for profile in &profiles {
-                let region = Config::get_aws_profile_region(profile)
-                    .map(|r| format!(" ({})", r))
-                    .unwrap_or_default();
-                items.push(format!("{}{}", profile, region));
-            }
+            if confirm("Add AWS provider(s)?") {
+                println!("  Tip: Use 'all' option to auto-discover profiles at runtime\n");
 
-            // Use ff for multi-select
-            let mut tui_config = TuiConfig::with_height(15.min(items.len() as u16 + 3));
-            tui_config.show_help_text = true;
+                // Create items for ff selection
+                let mut items: Vec<String> =
+                    vec!["[all] - Auto-discover all profiles at runtime".to_string()];
+                for profile in &profiles {
+                    let region = Config::get_aws_profile_region(profile)
+                        .map(|r| format!(" ({})", r))
+                        .unwrap_or_default();
+                    items.push(format!("{}{}", profile, region));
+                }
 
-            let (session, tui_future) = FuzzyFinderSession::with_config(true, tui_config);
+                // Use ff for multi-select
+                let mut tui_config = TuiConfig::with_height(15.min(items.len() as u16 + 3));
+                tui_config.show_help_text = true;
 
-            for item in &items {
-                let _ = session.add(item).await;
-            }
-            drop(session);
+                let (session, tui_future) = FuzzyFinderSession::with_config(true, tui_config);
 
-            let selected = tui_future.await.unwrap_or_default();
+                for item in &items {
+                    let _ = session.add(item).await;
+                }
+                drop(session);
 
-            if !selected.is_empty() {
-                // Check if "all" was selected
-                if selected.iter().any(|(_, s)| s.starts_with("[all]")) {
-                    config.providers.push(ProviderConfig::new_aws(
-                        "aws".to_string(),
-                        Some("all".to_string()),
-                        None,
-                    ));
-                    println!("Added AWS provider with auto-discovery");
-                } else {
-                    // Add individual profiles
-                    for (_, selection) in &selected {
-                        // Extract profile name (before any region in parentheses)
-                        let profile_name = selection.split(" (").next().unwrap_or(selection).trim();
-                        let region = Config::get_aws_profile_region(profile_name);
+                let selected = tui_future.await.unwrap_or_default();
+
+                if !selected.is_empty() {
+                    // Check if "all" was selected
+                    if selected.iter().any(|(_, s)| s.starts_with("[all]")) {
                         config.providers.push(ProviderConfig::new_aws(
-                            format!("aws-{}", profile_name),
-                            Some(profile_name.to_string()),
-                            region,
+                            "aws".to_string(),
+                            Some("all".to_string()),
+                            None,
                         ));
+                        println!("Added AWS provider with auto-discovery");
+                    } else {
+                        // Add individual profiles
+                        for (_, selection) in &selected {
+                            // Extract profile name (before any region in parentheses)
+                            let profile_name =
+                                selection.split(" (").next().unwrap_or(selection).trim();
+                            let region = Config::get_aws_profile_region(profile_name);
+                            config.providers.push(ProviderConfig::new_aws(
+                                format!("aws-{}", profile_name),
+                                Some(profile_name.to_string()),
+                                region,
+                            ));
+                        }
+                        println!("Added {} AWS provider(s)", selected.len());
                     }
-                    println!("Added {} AWS provider(s)", selected.len());
+                } else {
+                    println!("No AWS profiles selected");
                 }
             } else {
-                println!("No AWS profiles selected");
+                println!("Skipping AWS");
             }
         }
         Ok(_) => println!("No AWS profiles found in ~/.aws/credentials"),
@@ -176,68 +188,72 @@ pub async fn handle_interactive_generate(
 
         match OnePasswordSecretManager::new(None, op_token_env).await {
             Ok(manager) => {
-                let vaults = match manager.list_vaults() {
-                    Ok(v) => v,
-                    Err(e) => {
-                        println!("Could not list 1Password vaults: {}", e);
-                        return Ok(()); // Continue to next provider check instead of aborting
-                    }
-                };
+                match manager.list_vaults() {
+                    Ok(vaults) if !vaults.is_empty() => {
+                        println!("Found {} vault(s).", vaults.len());
 
-                if !vaults.is_empty() {
-                    println!(
-                        "Found {} vault(s). Select which to add (or none to skip):",
-                        vaults.len()
-                    );
-                    println!("  Tip: Use 'all' option to auto-discover vaults at runtime\n");
+                        if confirm("Add 1Password provider(s)?") {
+                            println!(
+                                "  Tip: Use 'all' option to auto-discover vaults at runtime\n"
+                            );
 
-                    let mut items: Vec<String> =
-                        vec!["[all] - Auto-discover all vaults at runtime".to_string()];
-                    for vault in &vaults {
-                        items.push(format!("{} ({})", vault.title, vault.id));
-                    }
+                            let mut items: Vec<String> =
+                                vec!["[all] - Auto-discover all vaults at runtime".to_string()];
+                            for vault in &vaults {
+                                items.push(format!("{} ({})", vault.title, vault.id));
+                            }
 
-                    let mut tui_config = TuiConfig::with_height(15.min(items.len() as u16 + 3));
-                    tui_config.show_help_text = true;
+                            let mut tui_config =
+                                TuiConfig::with_height(15.min(items.len() as u16 + 3));
+                            tui_config.show_help_text = true;
 
-                    let (session, tui_future) = FuzzyFinderSession::with_config(true, tui_config);
+                            let (session, tui_future) =
+                                FuzzyFinderSession::with_config(true, tui_config);
 
-                    for item in &items {
-                        let _ = session.add(item).await;
-                    }
-                    drop(session);
+                            for item in &items {
+                                let _ = session.add(item).await;
+                            }
+                            drop(session);
 
-                    let selected = tui_future.await.unwrap_or_default();
+                            let selected = tui_future.await.unwrap_or_default();
 
-                    if !selected.is_empty() {
-                        if selected.iter().any(|(_, s)| s.starts_with("[all]")) {
-                            config.providers.push(ProviderConfig::new_onepassword(
-                                "op".to_string(),
-                                Some("all".to_string()),
-                                None,
-                            ));
-                            println!("Added 1Password provider with auto-discovery");
-                        } else {
-                            for (_, selection) in &selected {
-                                // Extract vault name and ID
-                                if let Some((name, rest)) = selection.split_once(" (") {
-                                    let vault_id = rest.trim_end_matches(')');
-                                    let provider_id =
-                                        format!("op-{}", name.to_lowercase().replace(' ', "-"));
+                            if !selected.is_empty() {
+                                if selected.iter().any(|(_, s)| s.starts_with("[all]")) {
                                     config.providers.push(ProviderConfig::new_onepassword(
-                                        provider_id,
-                                        Some(vault_id.to_string()),
+                                        "op".to_string(),
+                                        Some("all".to_string()),
                                         None,
                                     ));
+                                    println!("Added 1Password provider with auto-discovery");
+                                } else {
+                                    for (_, selection) in &selected {
+                                        // Extract vault name and ID
+                                        if let Some((name, rest)) = selection.split_once(" (") {
+                                            let vault_id = rest.trim_end_matches(')');
+                                            let provider_id = format!(
+                                                "op-{}",
+                                                name.to_lowercase().replace(' ', "-")
+                                            );
+                                            config.providers.push(
+                                                ProviderConfig::new_onepassword(
+                                                    provider_id,
+                                                    Some(vault_id.to_string()),
+                                                    None,
+                                                ),
+                                            );
+                                        }
+                                    }
+                                    println!("Added {} 1Password provider(s)", selected.len());
                                 }
+                            } else {
+                                println!("No 1Password vaults selected");
                             }
-                            println!("Added {} 1Password provider(s)", selected.len());
+                        } else {
+                            println!("Skipping 1Password");
                         }
-                    } else {
-                        println!("No 1Password vaults selected");
                     }
-                } else {
-                    println!("No 1Password vaults accessible");
+                    Ok(_) => println!("No 1Password vaults accessible"),
+                    Err(e) => println!("Could not list 1Password vaults: {}", e),
                 }
             }
             Err(e) => println!("Could not initialize 1Password: {}", e),
@@ -277,46 +293,49 @@ pub async fn handle_interactive_generate(
 
         match projects_result {
             Ok(projects) if !projects.is_empty() => {
-                println!(
-                    "Found {} project(s). Select which to add (or none to skip):",
-                    projects.len()
-                );
+                println!("Found {} project(s).", projects.len());
 
-                let mut items: Vec<String> = Vec::new();
-                for (name, id) in &projects {
-                    items.push(format!("{} ({})", name, id));
-                }
-
-                let mut tui_config = TuiConfig::with_height(15.min(items.len() as u16 + 3));
-                tui_config.show_help_text = true;
-
-                let (session, tui_future) = FuzzyFinderSession::with_config(true, tui_config);
-
-                for item in &items {
-                    let _ = session.add(item).await;
-                }
-                drop(session);
-
-                let selected = tui_future.await.unwrap_or_default();
-
-                if !selected.is_empty() {
-                    for (_, selection) in &selected {
-                        // Extract project name and ID
-                        if let Some((name, rest)) = selection.split_once(" (") {
-                            let project_id = rest.trim_end_matches(')');
-                            let provider_id =
-                                format!("bw-{}", name.to_lowercase().replace(' ', "-"));
-                            config.providers.push(ProviderConfig::new_bitwarden(
-                                provider_id,
-                                Some(project_id.to_string()),
-                                organization_id.clone(),
-                                Some(bw_token_env.to_string()),
-                            ));
-                        }
+                if confirm("Add Bitwarden provider(s)?") {
+                    let mut items: Vec<String> = Vec::new();
+                    for (name, id) in &projects {
+                        items.push(format!("{} ({})", name, id));
                     }
-                    println!("Added {} Bitwarden provider(s)", selected.len());
+
+                    let mut tui_config =
+                        TuiConfig::with_height(15.min(items.len() as u16 + 3));
+                    tui_config.show_help_text = true;
+
+                    let (session, tui_future) =
+                        FuzzyFinderSession::with_config(true, tui_config);
+
+                    for item in &items {
+                        let _ = session.add(item).await;
+                    }
+                    drop(session);
+
+                    let selected = tui_future.await.unwrap_or_default();
+
+                    if !selected.is_empty() {
+                        for (_, selection) in &selected {
+                            // Extract project name and ID
+                            if let Some((name, rest)) = selection.split_once(" (") {
+                                let project_id = rest.trim_end_matches(')');
+                                let provider_id =
+                                    format!("bw-{}", name.to_lowercase().replace(' ', "-"));
+                                config.providers.push(ProviderConfig::new_bitwarden(
+                                    provider_id,
+                                    Some(project_id.to_string()),
+                                    organization_id.clone(),
+                                    Some(bw_token_env.to_string()),
+                                ));
+                            }
+                        }
+                        println!("Added {} Bitwarden provider(s)", selected.len());
+                    } else {
+                        println!("No Bitwarden projects selected");
+                    }
                 } else {
-                    println!("No Bitwarden projects selected");
+                    println!("Skipping Bitwarden");
                 }
             }
             Ok(_) => println!("No Bitwarden projects found"),

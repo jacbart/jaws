@@ -2,7 +2,7 @@
 
 Just A Working Secretsmanager
 
-A CLI tool and library for managing secrets from multiple providers (AWS Secrets Manager, 1Password, and local storage) with local version tracking.
+A CLI tool and library for managing secrets from multiple providers (AWS Secrets Manager, 1Password, Bitwarden, and local storage) with local version tracking.
 
 ## Features
 
@@ -57,7 +57,10 @@ nix build .#default
 
 ```bash
 # Generate a config file (interactive mode discovers providers)
-jaws config generate --interactive
+jaws config init
+
+# Or generate a minimal template without prompts
+jaws config init --minimal
 
 # Pull secrets from your providers (opens TUI picker)
 jaws pull
@@ -77,7 +80,7 @@ jaws rollback
 
 ## Commands
 
-### Local Operations
+### Secret Operations
 
 | Command                   | Description                                    |
 | ------------------------- | ---------------------------------------------- |
@@ -86,22 +89,21 @@ jaws rollback
 | `jaws pull -p SECRET`     | Print secret value to stdout (for scripts)     |
 | `jaws pull -i TPL -o OUT` | Inject secrets into a template file            |
 | `jaws push`               | Upload changed secrets to providers            |
-| `jaws create NAME`        | Create a new secret (local or remote)          |
-| `jaws delete`             | Delete a local secret and all its versions     |
+| `jaws create [NAME]`      | Create a new secret (local or remote)          |
+| `jaws delete [SECRET]`    | Delete a secret (prompts for scope)            |
+| `jaws delete -s remote`   | Delete a secret from the remote provider only  |
 | `jaws list`               | List all known secrets (one per line)          |
-| `jaws history`            | View local version history                     |
-| `jaws rollback`           | Rollback to a previous local version           |
-| `jaws log`                | Show operation log                             |
-| `jaws clean`              | Clear local cache and secrets                  |
+| `jaws sync`               | Refresh local cache of remote secrets          |
 
-### Remote/Provider Operations
+### History & Rollback
 
-| Command                | Description                                         |
-| ---------------------- | --------------------------------------------------- |
-| `jaws sync`            | Refresh local cache of remote secrets               |
-| `jaws remote delete`   | Delete a secret from the provider                   |
-| `jaws remote rollback` | Rollback to a previous version on the provider      |
-| `jaws remote history`  | View provider version history (not yet implemented) |
+| Command                  | Description                                    |
+| ------------------------ | ---------------------------------------------- |
+| `jaws history`           | View local version history                     |
+| `jaws history --remote`  | View remote provider version history           |
+| `jaws rollback`          | Rollback to a previous local version           |
+| `jaws rollback --remote` | Rollback to a previous version on the provider |
+| `jaws log`               | Show operation log                             |
 
 ### Archive Operations
 
@@ -110,44 +112,59 @@ jaws rollback
 | `jaws export`      | Export and encrypt secrets to a `.barrel` file |
 | `jaws import FILE` | Import and decrypt a `.barrel` archive         |
 
+### Maintenance
+
+| Command                         | Description                                       |
+| ------------------------------- | ------------------------------------------------- |
+| `jaws clean`                    | Clear local cache and secrets                     |
+| `jaws version`                  | Print version information                         |
+
 ### Configuration
 
-| Command                         | Description                                           |
-| ------------------------------- | ----------------------------------------------------- |
-| `jaws config generate`          | Generate a new config file                            |
-| `jaws config generate -i`       | Interactive config generation with provider discovery |
-| `jaws config list`              | List all configuration settings                       |
-| `jaws config get <key>`         | Get a specific config value                           |
-| `jaws config set <key> <value>` | Set a config value                                    |
-| `jaws config providers`         | List configured providers                             |
+| Command                         | Description                                       |
+| ------------------------------- | ------------------------------------------------- |
+| `jaws config`                   | Show current configuration and providers          |
+| `jaws config init`              | Interactive config generation with auto-discovery |
+| `jaws config init --minimal`    | Generate a minimal config template                |
+| `jaws config get <key>`         | Get a specific config value                       |
+| `jaws config set <key> <value>` | Set a config value                                |
 
 ## Configuration
 
-JAWS uses a `jaws.kdl` config file:
+JAWS uses a `jaws.kdl` config file ([KDL](https://kdl.dev/) format):
 
 ```kdl
-defaults {
-    editor "nvim"
-    secrets_path "./.secrets"
-    cache_ttl 900
-    default_provider "jaws"  // Optional: allows omitting provider prefix
+// jaws configuration file
+// cache_ttl is in seconds (default: 900 = 15 minutes)
+
+defaults editor="nvim" secrets_path="./.secrets" cache_ttl=900 default_provider="jaws"
+
+// AWS with auto-discovery of all profiles
+provider "aws" kind="aws" {
+    profile "all"
 }
 
-providers {
-    // AWS with auto-discovery of all profiles
-    aws id="aws" profile="all"
+// Or a specific AWS profile
+provider "aws-prod" kind="aws" {
+    profile "production"
+    region "us-east-1"
+}
 
-    // Or specific AWS profile
-    aws id="aws-prod" profile="production" region="us-east-1"
+// 1Password with auto-discovery of all vaults
+provider "op" kind="onepassword" {
+    vault "all"
+}
 
-    // 1Password with auto-discovery of all vaults
-    onepassword id="op" vault="all"
+// Or a specific 1Password vault
+provider "op-dev" kind="onepassword" {
+    vault "abc123"
+}
 
-    // Or specific 1Password vault
-    onepassword id="op-dev" vault="abc123"
-
-    // Bitwarden
-    bitwarden id="bw" project="all"
+// Bitwarden Secrets Manager
+provider "bw-myproject" kind="bw" {
+    vault "project-uuid-here"
+    organization "org-uuid-here"
+    token-env "BWS_ACCESS_TOKEN"
 }
 ```
 
@@ -284,7 +301,7 @@ src/
 ├── config/          # Configuration
 ├── db/              # SQLite database
 ├── secrets/         # Secret providers
-│   └── providers/   # AWS, 1Password, local
+│   └── providers/   # AWS, 1Password, Bitwarden, local
 └── utils/           # Utilities
 ```
 
@@ -321,6 +338,7 @@ The project supports cross-compilation using `cargo-zigbuild` for Linux targets 
 ```
 
 Release binaries are output to `dist/`:
+
 ```
 dist/
 ├── jaws-x86_64-linux.tar.gz
@@ -329,13 +347,6 @@ dist/
 └── jaws-aarch64-darwin.tar.gz
 ```
 
-## Roadmap
-
-- [ ] `jaws serve` - Self-hostable secrets management API
-- [ ] Remote version history from providers
-- [ ] Hardware key encryption support
-- [ ] Secret rotation scheduling
-
 ## License
 
-MIT
+MPL 2.0
