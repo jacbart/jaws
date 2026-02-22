@@ -124,6 +124,14 @@
         }
       );
 
+      overlays.default = final: prev: {
+        jaws = final.callPackage ./default.nix {
+          inherit pname version self;
+          pkgs = final;
+          rustVersion = final.rust-bin.stable.${projectRustVersion}.default;
+        };
+      };
+
       homeManagerModules.default = import ./nix/hm-module.nix;
     };
 }
