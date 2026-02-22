@@ -81,7 +81,7 @@ pub async fn handle_delete(
         }
 
         // Parse selection "PROVIDER | NAME"
-        let selected_str = &selected[0];
+        let (_, selected_str) = &selected[0];
         let parts: Vec<&str> = selected_str.split(" | ").collect();
         if parts.len() != 2 {
             return Err("Failed to parse selection".into());
@@ -195,7 +195,7 @@ fn prompt_delete_scope(
         return Err("Cancelled".into());
     }
 
-    let selected = &result[0];
+    let (_, selected) = &result[0];
     if selected.starts_with("local") {
         Ok(DeleteScope::Local)
     } else if selected.starts_with("remote") {

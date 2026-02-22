@@ -46,7 +46,7 @@ pub async fn handle_interactive_generate(
         }
 
         // Find the selected path
-        let selected_str = &selected[0];
+        let (_, selected_str) = &selected[0];
         options
             .into_iter()
             .find(|(path, desc)| {
@@ -137,7 +137,7 @@ pub async fn handle_interactive_generate(
 
             if !selected.is_empty() {
                 // Check if "all" was selected
-                if selected.iter().any(|s| s.starts_with("[all]")) {
+                if selected.iter().any(|(_, s)| s.starts_with("[all]")) {
                     config.providers.push(ProviderConfig::new_aws(
                         "aws".to_string(),
                         Some("all".to_string()),
@@ -146,7 +146,7 @@ pub async fn handle_interactive_generate(
                     println!("Added AWS provider with auto-discovery");
                 } else {
                     // Add individual profiles
-                    for selection in &selected {
+                    for (_, selection) in &selected {
                         // Extract profile name (before any region in parentheses)
                         let profile_name = selection.split(" (").next().unwrap_or(selection).trim();
                         let region = Config::get_aws_profile_region(profile_name);
@@ -210,7 +210,7 @@ pub async fn handle_interactive_generate(
                     let selected = tui_future.await.unwrap_or_default();
 
                     if !selected.is_empty() {
-                        if selected.iter().any(|s| s.starts_with("[all]")) {
+                        if selected.iter().any(|(_, s)| s.starts_with("[all]")) {
                             config.providers.push(ProviderConfig::new_onepassword(
                                 "op".to_string(),
                                 Some("all".to_string()),
@@ -218,7 +218,7 @@ pub async fn handle_interactive_generate(
                             ));
                             println!("Added 1Password provider with auto-discovery");
                         } else {
-                            for selection in &selected {
+                            for (_, selection) in &selected {
                                 // Extract vault name and ID
                                 if let Some((name, rest)) = selection.split_once(" (") {
                                     let vault_id = rest.trim_end_matches(')');
@@ -300,7 +300,7 @@ pub async fn handle_interactive_generate(
                 let selected = tui_future.await.unwrap_or_default();
 
                 if !selected.is_empty() {
-                    for selection in &selected {
+                    for (_, selection) in &selected {
                         // Extract project name and ID
                         if let Some((name, rest)) = selection.split_once(" (") {
                             let project_id = rest.trim_end_matches(')');

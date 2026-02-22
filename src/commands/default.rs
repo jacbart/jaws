@@ -54,7 +54,7 @@ pub async fn handle_default_command(
     let mut files_to_open: Vec<String> = Vec::new();
     let mut selected_secret_ids: Vec<i64> = Vec::new();
 
-    for selected_display in &selected {
+    for (_, selected_display) in &selected {
         for (secret, download) in &downloaded {
             let display = format!("{} | {}", secret.provider_id, secret.display_name);
             if &display == selected_display {

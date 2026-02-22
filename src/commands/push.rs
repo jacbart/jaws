@@ -258,7 +258,7 @@ async fn select_dirty_secrets(
         .into_iter()
         .filter(|(s, _)| {
             let display = format!("{} | {} (modified)", s.provider_id, s.display_name);
-            selected.contains(&display)
+            selected.iter().any(|(_, sel)| sel == &display)
         })
         .collect();
 

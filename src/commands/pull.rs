@@ -175,7 +175,7 @@ pub async fn handle_pull(
     let map = secret_map.lock().await;
     let selected_secrets: Vec<_> = selected
         .iter()
-        .filter_map(|display| map.get(display).cloned())
+        .filter_map(|(_, display)| map.get(display).cloned())
         .collect();
     drop(map);
 

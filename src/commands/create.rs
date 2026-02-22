@@ -131,7 +131,7 @@ async fn select_provider(providers: &[Provider]) -> Result<String, Box<dyn std::
     }
 
     // Parse provider ID from selection "PROVIDER_ID [kind]"
-    let selected_str = &selected[0];
+    let (_, selected_str) = &selected[0];
     let provider_id = selected_str
         .split(" [")
         .next()

@@ -90,7 +90,7 @@ async fn handle_local_history(
             .into_iter()
             .filter(|(s, _)| {
                 let display = format!("{} | {}", s.provider_id, s.display_name);
-                selected.contains(&display)
+                selected.iter().any(|(_, sel)| sel == &display)
             })
             .collect()
     };

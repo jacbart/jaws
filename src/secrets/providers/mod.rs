@@ -177,7 +177,7 @@ pub async fn select_from_all_providers(
 
     let map = display_to_full.lock().await;
     let mut result = Vec::new();
-    for item in selected_items {
+    for (_, item) in selected_items {
         if let Some((prov_id, _secret_display)) = item.split_once(" | ") {
             // Look up the full reference from our map
             let full_ref = map.get(&item).cloned().unwrap_or_else(|| {

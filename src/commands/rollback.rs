@@ -98,7 +98,7 @@ async fn handle_local_rollback(
             .into_iter()
             .find(|(s, _)| {
                 let display = format!("{} | {}", s.provider_id, s.display_name);
-                selected.contains(&display)
+                selected.iter().any(|(_, sel)| sel == &display)
             })
             .ok_or("Secret not found")?
     };
@@ -184,7 +184,7 @@ async fn handle_local_rollback(
         }
 
         // Parse version from selection "v{version} - ..."
-        let selected_str = &selected[0];
+        let (_, selected_str) = &selected[0];
         let version_str = selected_str
             .strip_prefix("v")
             .and_then(|s| s.split(" - ").next())
