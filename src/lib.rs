@@ -14,7 +14,7 @@
 //! #[tokio::main]
 //! async fn main() -> Result<(), Box<dyn std::error::Error>> {
 //!     let config = Config::load()?;
-//!     let providers = detect_providers(&config).await?;
+//!     let providers = detect_providers(&config, None).await?;
 //!     
 //!     for provider in &providers {
 //!         println!("Provider: {} ({})", provider.id(), provider.kind());
@@ -28,6 +28,7 @@ pub mod archive;
 pub mod cli;
 pub mod commands;
 pub mod config;
+pub mod credentials;
 pub mod db;
 pub mod secrets;
 pub mod utils;

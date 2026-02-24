@@ -3,7 +3,7 @@
 use rusqlite::{Connection, Result};
 use std::path::Path;
 
-const SCHEMA_VERSION: i32 = 2;
+const SCHEMA_VERSION: i32 = 3;
 
 /// Initialize the database at the given path, creating tables if needed.
 pub fn init_db(path: &Path) -> Result<Connection> {
@@ -108,6 +108,21 @@ fn create_tables(conn: &Connection) -> Result<()> {
 
         CREATE INDEX idx_operations_created ON operations(created_at DESC);
         CREATE INDEX idx_operations_provider ON operations(provider_id);
+
+        -- Encrypted credentials for provider authentication tokens
+        CREATE TABLE credentials (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            provider_id TEXT NOT NULL,
+            credential_key TEXT NOT NULL,
+            encrypted_value BLOB NOT NULL,
+            encryption_method TEXT NOT NULL,
+            ssh_pubkey_fingerprint TEXT,
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+            UNIQUE(provider_id, credential_key)
+        );
+
+        CREATE INDEX idx_credentials_provider ON credentials(provider_id);
         "#,
     )?;
     Ok(())
@@ -138,6 +153,27 @@ fn migrate(conn: &Connection, from_version: i32, to_version: i32) -> Result<()> 
 
                     CREATE INDEX IF NOT EXISTS idx_operations_created ON operations(created_at DESC);
                     CREATE INDEX IF NOT EXISTS idx_operations_provider ON operations(provider_id);
+                    "#,
+                )?;
+            }
+            2 => {
+                // Migration from v2 to v3:
+                // - Add credentials table for encrypted provider auth tokens
+                conn.execute_batch(
+                    r#"
+                    CREATE TABLE IF NOT EXISTS credentials (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        provider_id TEXT NOT NULL,
+                        credential_key TEXT NOT NULL,
+                        encrypted_value BLOB NOT NULL,
+                        encryption_method TEXT NOT NULL,
+                        ssh_pubkey_fingerprint TEXT,
+                        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+                        UNIQUE(provider_id, credential_key)
+                    );
+
+                    CREATE INDEX IF NOT EXISTS idx_credentials_provider ON credentials(provider_id);
                     "#,
                 )?;
             }

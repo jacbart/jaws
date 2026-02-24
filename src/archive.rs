@@ -126,7 +126,7 @@ fn extract_tar_archive(
 }
 
 /// Encrypt data with a passphrase using age
-fn encrypt_with_passphrase(
+pub(crate) fn encrypt_with_passphrase(
     data: &[u8],
     passphrase: SecretString,
 ) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
@@ -141,7 +141,7 @@ fn encrypt_with_passphrase(
 }
 
 /// Encrypt data with an SSH public key using age
-fn encrypt_with_ssh_pubkey(
+pub(crate) fn encrypt_with_ssh_pubkey(
     data: &[u8],
     key_path: &Path,
 ) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
@@ -205,7 +205,7 @@ fn encrypt_with_ssh_pubkey(
 }
 
 /// Find the public key path for a given private key path
-fn find_public_key_path(private_key_path: &Path) -> Option<std::path::PathBuf> {
+pub(crate) fn find_public_key_path(private_key_path: &Path) -> Option<std::path::PathBuf> {
     // First, try appending .pub to the path
     let pub_path = std::path::PathBuf::from(format!("{}.pub", private_key_path.display()));
     if pub_path.exists() {
@@ -232,7 +232,7 @@ fn find_public_key_path(private_key_path: &Path) -> Option<std::path::PathBuf> {
 }
 
 /// Decrypt data with a passphrase using age
-fn decrypt_with_passphrase(
+pub(crate) fn decrypt_with_passphrase(
     encrypted_data: &[u8],
     passphrase: SecretString,
 ) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
@@ -248,7 +248,7 @@ fn decrypt_with_passphrase(
 }
 
 /// Decrypt data with an SSH private key using age
-fn decrypt_with_ssh_privkey(
+pub(crate) fn decrypt_with_ssh_privkey(
     encrypted_data: &[u8],
     privkey_path: &Path,
 ) -> Result<Vec<u8>, Box<dyn std::error::Error>> {

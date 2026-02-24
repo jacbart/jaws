@@ -11,6 +11,8 @@ pub use jaws::JawsSecretManager;
 pub use onepassword::{OnePasswordSecretManager, SecretRef};
 
 use crate::config::{Config, ProviderConfig};
+use crate::credentials::retrieve_credential;
+use crate::db::SecretRepository;
 use crate::secrets::manager::SecretManager;
 
 use aws_config::meta::region::RegionProviderChain;
@@ -195,8 +197,12 @@ pub async fn select_from_all_providers(
 
 /// Detect and initialize all available providers.
 /// The jaws provider is always available and is added first.
+///
+/// If a `SecretRepository` is provided, stored encrypted credentials will be
+/// used as a fallback when environment variables are not set.
 pub async fn detect_providers(
     config: &Config,
+    repo: Option<&SecretRepository>,
 ) -> Result<Vec<Provider>, Box<dyn std::error::Error>> {
     let mut providers = Vec::new();
 
@@ -229,7 +235,7 @@ pub async fn detect_providers(
                                     token_env: None,
                                 };
 
-                                match init_aws_provider(&expanded_config).await {
+                                match init_aws_provider(&expanded_config, repo).await {
                                     Ok(aws_provider) => {
                                         providers
                                             .push(Provider::Aws(aws_provider, expanded_config.id));
@@ -245,7 +251,7 @@ pub async fn detect_providers(
                     }
                 } else {
                     // Normal single profile
-                    match init_aws_provider(provider_config).await {
+                    match init_aws_provider(provider_config, repo).await {
                         Ok(aws_provider) => {
                             providers.push(Provider::Aws(aws_provider, provider_config.id.clone()));
                         }
@@ -259,7 +265,7 @@ pub async fn detect_providers(
             "onepassword" | "1password" | "op" => {
                 // Check if vault is "all" - discover all 1Password vaults
                 if provider_config.vault.as_deref() == Some("all") {
-                    match init_onepassword_all_vaults(provider_config).await {
+                    match init_onepassword_all_vaults(provider_config, repo).await {
                         Ok(vault_providers) => {
                             for (op_provider, vault_id) in vault_providers {
                                 providers.push(Provider::OnePassword(op_provider, vault_id));
@@ -269,7 +275,7 @@ pub async fn detect_providers(
                     }
                 } else {
                     // Normal single vault
-                    match init_onepassword_provider(provider_config).await {
+                    match init_onepassword_provider(provider_config, repo).await {
                         Ok(op_provider) => {
                             providers.push(Provider::OnePassword(
                                 op_provider,
@@ -283,15 +289,18 @@ pub async fn detect_providers(
                     }
                 }
             }
-            "bitwarden" | "bws" | "bw" => match init_bitwarden_provider(provider_config).await {
-                Ok(bw_provider) => {
-                    providers.push(Provider::Bitwarden(bw_provider, provider_config.id.clone()));
+            "bitwarden" | "bws" | "bw" => {
+                match init_bitwarden_provider(provider_config, repo).await {
+                    Ok(bw_provider) => {
+                        providers
+                            .push(Provider::Bitwarden(bw_provider, provider_config.id.clone()));
+                    }
+                    Err(e) => eprintln!(
+                        "Failed to init Bitwarden provider '{}': {}",
+                        provider_config.id, e
+                    ),
                 }
-                Err(e) => eprintln!(
-                    "Failed to init Bitwarden provider '{}': {}",
-                    provider_config.id, e
-                ),
-            },
+            }
             "jaws" => {
                 // Future: remote jaws instance
                 eprintln!(
@@ -307,14 +316,61 @@ pub async fn detect_providers(
     Ok(providers)
 }
 
+/// Try to restore a credential from the database into an environment variable.
+/// Returns true if the env var was set from stored credentials.
+fn try_restore_credential_to_env(
+    repo: Option<&SecretRepository>,
+    provider_id: &str,
+    credential_key: &str,
+    env_var: &str,
+) -> bool {
+    // Only attempt if the env var is not already set
+    if std::env::var(env_var).is_ok() {
+        return false;
+    }
+
+    let repo = match repo {
+        Some(r) => r,
+        None => return false,
+    };
+
+    match retrieve_credential(repo, provider_id, credential_key) {
+        Ok(Some(value)) => {
+            // SAFETY: This is called during single-threaded provider initialization
+            // before any provider threads are spawned. The env var is set to provide
+            // credentials to provider constructors that read from the environment.
+            unsafe {
+                std::env::set_var(env_var, &value);
+            }
+            eprintln!(
+                "  Restored {} from encrypted storage for provider '{}'",
+                env_var, provider_id
+            );
+            true
+        }
+        Ok(None) => false,
+        Err(e) => {
+            eprintln!(
+                "  Failed to decrypt stored {} for '{}': {}",
+                credential_key, provider_id, e
+            );
+            false
+        }
+    }
+}
+
 /// Initialize 1Password providers for all accessible vaults
 async fn init_onepassword_all_vaults(
     config: &ProviderConfig,
+    repo: Option<&SecretRepository>,
 ) -> Result<Vec<(OnePasswordSecretManager, String)>, Box<dyn std::error::Error>> {
     let token_env = config
         .token_env
         .as_deref()
         .unwrap_or("OP_SERVICE_ACCOUNT_TOKEN");
+
+    // Try credential fallback if env var is missing
+    try_restore_credential_to_env(repo, &config.id, "token", token_env);
 
     // First, create a temporary manager to list vaults
     let temp_manager = OnePasswordSecretManager::new(None, token_env).await?;
@@ -342,9 +398,22 @@ async fn init_onepassword_all_vaults(
 
 async fn init_aws_provider(
     config: &ProviderConfig,
+    repo: Option<&SecretRepository>,
 ) -> Result<AwsSecretManager, Box<dyn std::error::Error>> {
+    // For AWS without a profile, try credential fallback for env-var-based auth
+    if config.profile.is_none() {
+        try_restore_credential_to_env(repo, &config.id, "access_key_id", "AWS_ACCESS_KEY_ID");
+        try_restore_credential_to_env(
+            repo,
+            &config.id,
+            "secret_access_key",
+            "AWS_SECRET_ACCESS_KEY",
+        );
+    }
+
     // Set up region with fallback
-    let region_provider = config.region
+    let region_provider = config
+        .region
         .clone()
         .map(Region::new)
         .map(RegionProviderChain::first_try)
@@ -375,6 +444,7 @@ async fn init_aws_provider(
 
 async fn init_onepassword_provider(
     config: &ProviderConfig,
+    repo: Option<&SecretRepository>,
 ) -> Result<OnePasswordSecretManager, Box<dyn std::error::Error>> {
     let vault = config.vault.clone();
     let token_env = config
@@ -382,15 +452,22 @@ async fn init_onepassword_provider(
         .as_deref()
         .unwrap_or("OP_SERVICE_ACCOUNT_TOKEN");
 
+    // Try credential fallback if env var is missing
+    try_restore_credential_to_env(repo, &config.id, "token", token_env);
+
     OnePasswordSecretManager::new(vault, token_env).await
 }
 
 async fn init_bitwarden_provider(
     config: &ProviderConfig,
+    repo: Option<&SecretRepository>,
 ) -> Result<BitwardenSecretManager, Box<dyn std::error::Error>> {
     let project_id = config.vault.clone(); // Map vault to project_id for config consistency
     let token_env = config.token_env.as_deref().unwrap_or("BWS_ACCESS_TOKEN");
     let organization_id = config.organization.clone();
+
+    // Try credential fallback if env var is missing
+    try_restore_credential_to_env(repo, &config.id, "token", token_env);
 
     BitwardenSecretManager::new(project_id, token_env, organization_id).await
 }

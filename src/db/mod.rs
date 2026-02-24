@@ -5,6 +5,6 @@ mod repository;
 mod schema;
 
 #[allow(unused_imports)]
-pub use models::{DbDownload, DbProvider, DbSecret, SecretInput};
+pub use models::{DbDownload, DbProvider, DbSecret, SecretInput, StoredCredential};
 pub use repository::SecretRepository;
 pub use schema::init_db;

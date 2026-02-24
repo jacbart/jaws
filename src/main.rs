@@ -154,7 +154,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // Detect and initialize all available providers (jaws is always available)
-    let providers = detect_providers(&config).await?;
+    // Pass the repository so stored credentials can be used as fallback
+    let providers = detect_providers(&config, Some(&repo)).await?;
 
     // Ensure providers are registered in the database
     for provider in &providers {

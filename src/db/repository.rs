@@ -1,6 +1,6 @@
 //! Repository for database CRUD operations.
 
-use super::models::{DbDownload, DbOperation, DbProvider, DbSecret, SecretInput};
+use super::models::{DbDownload, DbOperation, DbProvider, DbSecret, SecretInput, StoredCredential};
 use chrono::{DateTime, Utc};
 use rusqlite::{params, Connection, OptionalExtension};
 use std::sync::{Arc, Mutex};
@@ -538,6 +538,98 @@ impl SecretRepository {
         };
 
         Ok(operations)
+    }
+
+    // ========================================================================
+    // Credential operations (encrypted provider auth tokens)
+    // ========================================================================
+
+    /// Store or update an encrypted credential for a provider.
+    pub fn store_credential(
+        &self,
+        provider_id: &str,
+        credential_key: &str,
+        encrypted_value: &[u8],
+        encryption_method: &str,
+        ssh_pubkey_fingerprint: Option<&str>,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        let now = Utc::now().to_rfc3339();
+        conn.execute(
+            r#"
+            INSERT INTO credentials (provider_id, credential_key, encrypted_value, encryption_method, ssh_pubkey_fingerprint, created_at, updated_at)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?6)
+            ON CONFLICT(provider_id, credential_key) DO UPDATE SET
+                encrypted_value = excluded.encrypted_value,
+                encryption_method = excluded.encryption_method,
+                ssh_pubkey_fingerprint = excluded.ssh_pubkey_fingerprint,
+                updated_at = excluded.updated_at
+            "#,
+            params![
+                provider_id,
+                credential_key,
+                encrypted_value,
+                encryption_method,
+                ssh_pubkey_fingerprint,
+                now,
+            ],
+        )?;
+        Ok(())
+    }
+
+    /// Get all stored credentials for a provider.
+    pub fn get_credentials(
+        &self,
+        provider_id: &str,
+    ) -> Result<Vec<StoredCredential>, Box<dyn std::error::Error>> {
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        let mut stmt = conn.prepare(
+            r#"
+            SELECT id, provider_id, credential_key, encrypted_value, encryption_method, ssh_pubkey_fingerprint, created_at, updated_at
+            FROM credentials WHERE provider_id = ?
+            ORDER BY credential_key
+            "#,
+        )?;
+
+        let creds = stmt
+            .query_map([provider_id], |row| {
+                Ok(StoredCredential {
+                    id: row.get(0)?,
+                    provider_id: row.get(1)?,
+                    credential_key: row.get(2)?,
+                    encrypted_value: row.get(3)?,
+                    encryption_method: row.get(4)?,
+                    ssh_pubkey_fingerprint: row.get(5)?,
+                    created_at: row
+                        .get::<_, String>(6)
+                        .ok()
+                        .and_then(|s| chrono::DateTime::parse_from_rfc3339(&s).ok())
+                        .map(|dt| dt.with_timezone(&Utc))
+                        .unwrap_or_else(Utc::now),
+                    updated_at: row
+                        .get::<_, String>(7)
+                        .ok()
+                        .and_then(|s| chrono::DateTime::parse_from_rfc3339(&s).ok())
+                        .map(|dt| dt.with_timezone(&Utc))
+                        .unwrap_or_else(Utc::now),
+                })
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+
+        Ok(creds)
+    }
+
+    /// Delete all stored credentials for a provider.
+    pub fn delete_credentials(
+        &self,
+        provider_id: &str,
+    ) -> Result<usize, Box<dyn std::error::Error>> {
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        let deleted = conn.execute(
+            "DELETE FROM credentials WHERE provider_id = ?",
+            [provider_id],
+        )?;
+        Ok(deleted)
     }
 
     // ========================================================================

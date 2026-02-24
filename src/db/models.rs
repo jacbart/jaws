@@ -56,3 +56,22 @@ pub struct DbOperation {
     pub details: Option<String>,
     pub created_at: DateTime<Utc>,
 }
+
+/// An encrypted credential stored for a provider.
+/// Used to persist authentication tokens (e.g., 1Password service account token,
+/// Bitwarden access token, AWS long-lived keys) encrypted with age.
+#[derive(Debug, Clone)]
+pub struct StoredCredential {
+    pub id: i64,
+    pub provider_id: String,
+    /// Key identifying this credential, e.g. "token", "access_key_id", "secret_access_key"
+    pub credential_key: String,
+    /// The age-encrypted credential value
+    pub encrypted_value: Vec<u8>,
+    /// Encryption method used: "passphrase" or "ssh"
+    pub encryption_method: String,
+    /// For SSH encryption, the path/fingerprint of the public key used
+    pub ssh_pubkey_fingerprint: Option<String>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
