@@ -30,6 +30,7 @@ pub mod commands;
 pub mod config;
 pub mod credentials;
 pub mod db;
+pub mod keychain;
 pub mod secrets;
 pub mod utils;
 

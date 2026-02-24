@@ -115,7 +115,10 @@ async fn handle_local_history(
         }
 
         println!("\n{}://{}", secret.provider_id, secret.display_name);
-        println!("{}", "-".repeat((secret.provider_id.len() + secret.display_name.len() + 3).min(60)));
+        println!(
+            "{}",
+            "-".repeat((secret.provider_id.len() + secret.display_name.len() + 3).min(60))
+        );
 
         // Check for uncommitted changes
         if is_dirty(config, &latest_download) {
@@ -175,7 +178,10 @@ async fn handle_remote_history(
             .ok_or_else(|| format!("Provider '{}' not found", provider_id))?;
 
         println!("\n{}://{}", provider_id, secret_ref);
-        println!("{}", "-".repeat((provider_id.len() + secret_ref.len() + 3).min(60)));
+        println!(
+            "{}",
+            "-".repeat((provider_id.len() + secret_ref.len() + 3).min(60))
+        );
 
         match provider.kind() {
             "jaws" => {
@@ -183,19 +189,25 @@ async fn handle_remote_history(
             }
             "aws" => {
                 // AWS Secrets Manager supports versioning
-                println!("  Remote version history for AWS Secrets Manager is available via the AWS Console.");
+                println!(
+                    "  Remote version history for AWS Secrets Manager is available via the AWS Console."
+                );
                 println!("  Use 'jaws rollback --remote' to restore a previous version.");
                 println!();
                 println!("  Tip: AWS maintains AWSCURRENT and AWSPREVIOUS version labels.");
                 println!("  When you update a secret, the previous value becomes AWSPREVIOUS.");
             }
             "onepassword" => {
-                println!("  1Password item history is available via the 1Password app or web interface.");
+                println!(
+                    "  1Password item history is available via the 1Password app or web interface."
+                );
                 println!("  The op CLI and service accounts have limited version history support.");
             }
             "bitwarden" => {
                 println!("  Bitwarden Secrets Manager does not currently support version history.");
-                println!("  Use local history ('jaws history' without --remote) to track your changes.");
+                println!(
+                    "  Use local history ('jaws history' without --remote) to track your changes."
+                );
             }
             _ => {
                 println!("  Remote version history is not yet implemented for this provider.");

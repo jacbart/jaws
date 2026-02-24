@@ -5,6 +5,7 @@ use std::io::{self, Write};
 use crate::config::{Config, Defaults, ProviderConfig};
 use crate::credentials::{prompt_encryption_method, store_encrypted_credential};
 use crate::db::{SecretRepository, init_db};
+use crate::keychain;
 use crate::secrets::{BitwardenSecretManager, OnePasswordSecretManager};
 
 /// Credentials pending storage, collected during interactive config setup.
@@ -114,7 +115,8 @@ pub async fn handle_interactive_generate(
             secrets_path: Some(secrets_path),
             cache_ttl: Some(cache_ttl),
             default_provider: None,
-            max_versions: None, // Use default (10)
+            max_versions: None,   // Use default (10)
+            keychain_cache: None, // Use default (true)
         }),
         providers: Vec::new(),
     };
@@ -290,13 +292,11 @@ pub async fn handle_interactive_generate(
                                                 "op-{}",
                                                 name.to_lowercase().replace(' ', "-")
                                             );
-                                            config.providers.push(
-                                                ProviderConfig::new_onepassword(
-                                                    provider_id,
-                                                    Some(vault_id.to_string()),
-                                                    None,
-                                                ),
-                                            );
+                                            config.providers.push(ProviderConfig::new_onepassword(
+                                                provider_id,
+                                                Some(vault_id.to_string()),
+                                                None,
+                                            ));
                                         }
                                     }
                                     println!("Added {} 1Password provider(s)", selected.len());
@@ -316,9 +316,11 @@ pub async fn handle_interactive_generate(
         }
 
         // Offer to store the 1Password token if any OP providers were added
-        if config.providers.iter().any(|p| {
-            matches!(p.kind.as_str(), "onepassword" | "1password" | "op")
-        }) {
+        if config
+            .providers
+            .iter()
+            .any(|p| matches!(p.kind.as_str(), "onepassword" | "1password" | "op"))
+        {
             if let Ok(token) = std::env::var(op_token_env) {
                 if confirm("Store encrypted copy of 1Password service account token?") {
                     // For all OP providers, store against a canonical provider ID.
@@ -380,12 +382,10 @@ pub async fn handle_interactive_generate(
                         items.push(format!("{} ({})", name, id));
                     }
 
-                    let mut tui_config =
-                        TuiConfig::with_height(15.min(items.len() as u16 + 3));
+                    let mut tui_config = TuiConfig::with_height(15.min(items.len() as u16 + 3));
                     tui_config.show_help_text = true;
 
-                    let (session, tui_future) =
-                        FuzzyFinderSession::with_config(true, tui_config);
+                    let (session, tui_future) = FuzzyFinderSession::with_config(true, tui_config);
 
                     for item in &items {
                         let _ = session.add(item).await;
@@ -485,6 +485,7 @@ pub async fn handle_interactive_generate(
         let conn = init_db(&config.db_path())?;
         let repo = SecretRepository::new(conn);
 
+        let use_keychain = config.keychain_cache();
         for cred in &pending_credentials {
             match store_encrypted_credential(
                 &repo,
@@ -494,6 +495,8 @@ pub async fn handle_interactive_generate(
                 &method,
                 &method_tag,
                 ssh_fingerprint.as_deref(),
+                use_keychain,
+                &secrets_path,
             ) {
                 Ok(()) => {
                     println!(
@@ -520,5 +523,31 @@ pub async fn handle_interactive_generate(
         );
     }
 
+    Ok(())
+}
+
+/// Handle `jaws config clear-cache` -- remove all jaws entries from the OS keychain.
+pub fn handle_clear_cache(config: &Config) -> Result<(), Box<dyn std::error::Error>> {
+    if !keychain::keychain_available() {
+        eprintln!("OS keychain is not available on this system.");
+        return Ok(());
+    }
+
+    // We need the database to enumerate known credential keys
+    let db_path = config.db_path();
+    if !db_path.exists() {
+        println!("No database found -- nothing to clear.");
+        return Ok(());
+    }
+
+    let conn = init_db(&db_path)?;
+    let repo = SecretRepository::new(conn);
+
+    let cleared = keychain::keychain_clear_all(&config.secrets_path(), &repo);
+    if cleared > 0 {
+        println!("Cleared {} cached credential(s) from OS keychain.", cleared);
+    } else {
+        println!("No cached credentials found in OS keychain.");
+    }
     Ok(())
 }

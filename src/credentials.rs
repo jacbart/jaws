@@ -24,7 +24,7 @@
 use age::secrecy::SecretString;
 use std::collections::HashMap;
 use std::io::{self, Write};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 use crate::archive::{
@@ -32,6 +32,7 @@ use crate::archive::{
     encrypt_with_ssh_pubkey, prompt_passphrase, prompt_passphrase_with_confirm,
 };
 use crate::db::SecretRepository;
+use crate::keychain;
 
 /// Maximum number of passphrase attempts before giving up.
 const MAX_PASSPHRASE_ATTEMPTS: usize = 3;
@@ -175,8 +176,8 @@ pub fn decrypt_token(
 /// The returned tuple is (method, method_tag, ssh_fingerprint):
 /// - method_tag: "passphrase" or "ssh"
 /// - ssh_fingerprint: None for passphrase, Some(path_string) for SSH
-pub fn prompt_encryption_method(
-) -> Result<(CredentialEncryptionMethod, String, Option<String>), Box<dyn std::error::Error>> {
+pub fn prompt_encryption_method()
+-> Result<(CredentialEncryptionMethod, String, Option<String>), Box<dyn std::error::Error>> {
     println!("  Choose encryption method:");
     println!("    1) Passphrase (age scrypt)");
     println!("    2) SSH public key");
@@ -289,6 +290,9 @@ pub fn build_decryption_method(
 /// Encrypt and store a credential for a provider.
 ///
 /// This is the high-level function used during `config init` and provider addition.
+/// When `use_keychain` is true, the plaintext is also cached in the OS keychain
+/// (scoped to `secrets_path`) so the next invocation can retrieve it without
+/// prompting.
 pub fn store_encrypted_credential(
     repo: &SecretRepository,
     provider_id: &str,
@@ -297,6 +301,8 @@ pub fn store_encrypted_credential(
     method: &CredentialEncryptionMethod,
     method_tag: &str,
     ssh_fingerprint: Option<&str>,
+    use_keychain: bool,
+    secrets_path: &Path,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let encrypted = encrypt_token(plaintext_value, method)?;
     repo.store_credential(
@@ -306,6 +312,12 @@ pub fn store_encrypted_credential(
         method_tag,
         ssh_fingerprint,
     )?;
+
+    // Also cache in the OS keychain for future invocations
+    if use_keychain {
+        keychain::keychain_store(secrets_path, provider_id, credential_key, plaintext_value);
+    }
+
     Ok(())
 }
 
@@ -316,31 +328,47 @@ pub fn store_encrypted_credential(
 /// Returns `Err` if stored but all decryption attempts fail.
 ///
 /// Caching behaviour:
-/// - Checks the decrypted value cache first to avoid redundant decryption.
+/// - Checks the in-process decrypted value cache first.
+/// - If `use_keychain` is true, checks the OS keychain next (respecting `cache_ttl`).
 /// - For passphrase encryption: uses the cached passphrase if available. If
 ///   decryption fails with the cached passphrase (wrong passphrase), the cache
 ///   is invalidated and the user is prompted for a fresh passphrase, with up to
 ///   [`MAX_PASSPHRASE_ATTEMPTS`] total attempts.
 /// - For SSH encryption: uses the cached key path if available.
-/// - On success, caches both the passphrase/key path and the decrypted value.
+/// - On success, caches both the passphrase/key path and the decrypted value,
+///   and stores in the OS keychain if enabled.
 pub fn retrieve_credential(
     repo: &SecretRepository,
     provider_id: &str,
     credential_key: &str,
+    use_keychain: bool,
+    cache_ttl: u64,
+    secrets_path: &Path,
 ) -> Result<Option<String>, Box<dyn std::error::Error>> {
-    // 1. Check the decrypted value cache
+    // 1. Check the in-process decrypted value cache
     if let Some(cached) = get_cached_decrypted_value(provider_id, credential_key) {
         return Ok(Some(cached));
     }
 
-    // 2. Look up the stored credential in the DB
+    // 2. Check the OS keychain cache (scoped to secrets_path)
+    if use_keychain {
+        if let Some(cached) =
+            keychain::keychain_retrieve(secrets_path, provider_id, credential_key, cache_ttl)
+        {
+            // Populate the in-process cache so we don't hit the keychain again
+            cache_decrypted_value(provider_id, credential_key, &cached);
+            return Ok(Some(cached));
+        }
+    }
+
+    // 3. Look up the stored credential in the DB
     let creds = repo.get_credentials(provider_id)?;
     let cred = match creds.iter().find(|c| c.credential_key == credential_key) {
         Some(c) => c,
         None => return Ok(None),
     };
 
-    // 3. Decrypt with retry logic for passphrase method
+    // 4. Decrypt with retry logic for passphrase method
     let plaintext = if cred.encryption_method == "passphrase" {
         decrypt_with_passphrase_retry(
             &cred.encrypted_value,
@@ -355,8 +383,13 @@ pub fn retrieve_credential(
         decrypt_token(&cred.encrypted_value, &method)?
     };
 
-    // 4. Cache the decrypted value for the rest of this session
+    // 5. Cache the decrypted value for the rest of this session
     cache_decrypted_value(provider_id, credential_key, &plaintext);
+
+    // 6. Store in OS keychain for future invocations (scoped to secrets_path)
+    if use_keychain {
+        keychain::keychain_store(secrets_path, provider_id, credential_key, &plaintext);
+    }
 
     Ok(Some(plaintext))
 }

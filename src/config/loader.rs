@@ -155,8 +155,10 @@ impl Config {
         let kdl_content = r#"// Global defaults
 // cache_ttl is in seconds (default: 900 = 15 minutes)
 // default_provider allows omitting the provider:// prefix in commands (e.g., jaws pull my-secret -p)
+// keychain_cache caches decrypted credentials in the OS keychain (default: true)
 defaults editor="vim" secrets_path="./.secrets" cache_ttl=900
 // default_provider="jaws"
+// keychain_cache=false
 
 // Example AWS Provider
 // provider "aws-dev" kind="aws" {
@@ -208,6 +210,9 @@ defaults editor="vim" secrets_path="./.secrets" cache_ttl=900
             }
             if let Some(default_provider) = &d.default_provider {
                 output.push_str(&format!(" default_provider=\"{}\"", default_provider));
+            }
+            if let Some(keychain_cache) = d.keychain_cache {
+                output.push_str(&format!(" keychain_cache={}", keychain_cache));
             }
         }
         output.push('\n');

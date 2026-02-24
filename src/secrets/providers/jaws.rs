@@ -10,7 +10,9 @@ use uuid::Uuid;
 
 use crate::db::{SecretInput, SecretRepository, init_db};
 use crate::secrets::manager::SecretManager;
-use crate::secrets::storage::{compute_content_hash, get_secret_path, hash_api_ref, load_secret_file, save_secret_file};
+use crate::secrets::storage::{
+    compute_content_hash, get_secret_path, hash_api_ref, load_secret_file, save_secret_file,
+};
 
 /// Filter for jaws secrets (future use for pattern matching, tags, etc.)
 #[derive(Debug, Clone, Default)]

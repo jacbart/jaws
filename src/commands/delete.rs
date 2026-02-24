@@ -48,9 +48,14 @@ pub async fn handle_delete(
 
         // Also sync and add remote secrets that aren't downloaded
         for provider in providers {
-            let cached = repo.list_secrets_by_provider(provider.id()).unwrap_or_default();
+            let cached = repo
+                .list_secrets_by_provider(provider.id())
+                .unwrap_or_default();
             for secret in cached {
-                if !items.iter().any(|(p, n)| p == &secret.provider_id && n == &secret.display_name) {
+                if !items
+                    .iter()
+                    .any(|(p, n)| p == &secret.provider_id && n == &secret.display_name)
+                {
                     items.push((secret.provider_id.clone(), secret.display_name.clone()));
                 }
             }
@@ -109,7 +114,14 @@ pub async fn handle_delete(
     // Execute deletion based on scope
     match delete_scope {
         DeleteScope::Local => {
-            delete_local(config, repo, &provider_id, &secret_display_name, db_secret.as_ref()).await?;
+            delete_local(
+                config,
+                repo,
+                &provider_id,
+                &secret_display_name,
+                db_secret.as_ref(),
+            )
+            .await?;
         }
         DeleteScope::Remote => {
             delete_remote(providers, &provider_id, &secret_display_name, force).await?;
@@ -118,7 +130,14 @@ pub async fn handle_delete(
             // Delete remote first, then local
             delete_remote(providers, &provider_id, &secret_display_name, force).await?;
             if db_secret.is_some() {
-                delete_local(config, repo, &provider_id, &secret_display_name, db_secret.as_ref()).await?;
+                delete_local(
+                    config,
+                    repo,
+                    &provider_id,
+                    &secret_display_name,
+                    db_secret.as_ref(),
+                )
+                .await?;
             }
         }
     }
@@ -139,16 +158,16 @@ fn prompt_delete_scope(
 
     // Build options based on what's available
     let mut options = Vec::new();
-    
+
     if has_local {
         options.push(("local", "Delete local cached files only"));
     }
-    
+
     // Remote is always an option (assuming secret exists on provider)
     if provider_id != "jaws" {
         options.push(("remote", "Delete from remote provider only"));
     }
-    
+
     if has_local && provider_id != "jaws" {
         options.push(("both", "Delete from both local and remote"));
     } else if provider_id == "jaws" {
@@ -174,22 +193,24 @@ fn prompt_delete_scope(
 
     // Use TUI for selection
     let rt = tokio::runtime::Handle::current();
-    let result = rt.block_on(async {
-        let (tx, rx) = create_items_channel();
+    let result = rt
+        .block_on(async {
+            let (tx, rx) = create_items_channel();
 
-        for (key, desc) in &options {
-            let display = format!("{} - {}", key, desc);
-            if tx.send(display).await.is_err() {
-                break;
+            for (key, desc) in &options {
+                let display = format!("{} - {}", key, desc);
+                if tx.send(display).await.is_err() {
+                    break;
+                }
             }
-        }
-        drop(tx);
+            drop(tx);
 
-        let mut tui_config = TuiConfig::with_height((options.len() as u16 + 2).min(10));
-        tui_config.show_help_text = false;
+            let mut tui_config = TuiConfig::with_height((options.len() as u16 + 2).min(10));
+            tui_config.show_help_text = false;
 
-        run_tui_with_config(rx, false, tui_config).await
-    }).map_err(|e| e as Box<dyn std::error::Error>)?;
+            run_tui_with_config(rx, false, tui_config).await
+        })
+        .map_err(|e| e as Box<dyn std::error::Error>)?;
 
     if result.is_empty() {
         return Err("Cancelled".into());
@@ -218,7 +239,10 @@ async fn delete_local(
     let secret = match db_secret {
         Some(s) => s.clone(),
         None => {
-            println!("No local files found for '{}://{}'", provider_id, secret_name);
+            println!(
+                "No local files found for '{}://{}'",
+                provider_id, secret_name
+            );
             return Ok(());
         }
     };
@@ -289,7 +313,10 @@ async fn delete_remote(
     match provider.delete(secret_name, force).await {
         Ok(()) => {
             if force {
-                println!("{}://{} deleted from remote (force)", provider_id, secret_name);
+                println!(
+                    "{}://{} deleted from remote (force)",
+                    provider_id, secret_name
+                );
             } else {
                 println!(
                     "{}://{} deleted from remote (recovery period: 7-30 days)",

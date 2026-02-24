@@ -285,7 +285,9 @@ async fn handle_remote_rollback(
             .ok_or_else(|| format!("Provider {} not found", provider_id))?;
 
         if provider_id == "jaws" {
-            println!("Note: 'jaws' is a local-only provider. Use 'jaws rollback' without --remote for local rollback.");
+            println!(
+                "Note: 'jaws' is a local-only provider. Use 'jaws rollback' without --remote for local rollback."
+            );
             continue;
         }
 

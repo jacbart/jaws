@@ -7,9 +7,9 @@ use clap::Parser;
 use jaws::DbProvider;
 use jaws::cli::{Cli, Commands, ConfigCommands};
 use jaws::commands::{
-    handle_clean, handle_create, handle_default_command, handle_delete, handle_export,
-    handle_history, handle_import, handle_interactive_generate, handle_list, handle_log,
-    handle_pull, handle_pull_inject, handle_push, handle_rollback, handle_sync,
+    handle_clean, handle_clear_cache, handle_create, handle_default_command, handle_delete,
+    handle_export, handle_history, handle_import, handle_interactive_generate, handle_list,
+    handle_log, handle_pull, handle_pull_inject, handle_push, handle_rollback, handle_sync,
 };
 use jaws::config::Config;
 use jaws::db::{SecretRepository, init_db};
@@ -47,6 +47,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 println!("  editor: {}", config.editor());
                 println!("  secrets_path: {}", config.secrets_path().display());
                 println!("  cache_ttl: {}s", config.cache_ttl());
+                println!("  keychain_cache: {}", config.keychain_cache());
                 if let Some(max_v) = config.max_versions() {
                     println!("  max_versions: {}", max_v);
                 }
@@ -117,6 +118,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     Err(e) => eprintln!("{}", e),
                 }
                 return Ok(());
+            }
+            Some(ConfigCommands::ClearCache) => {
+                return handle_clear_cache(&config);
             }
         }
     }
@@ -229,7 +233,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             limit,
             remote,
         } => {
-            handle_history(&config, &repo, &providers, secret_name, verbose, limit, remote).await?;
+            handle_history(
+                &config,
+                &repo,
+                &providers,
+                secret_name,
+                verbose,
+                limit,
+                remote,
+            )
+            .await?;
         }
 
         Commands::Rollback {

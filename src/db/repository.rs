@@ -2,7 +2,7 @@
 
 use super::models::{DbDownload, DbOperation, DbProvider, DbSecret, SecretInput, StoredCredential};
 use chrono::{DateTime, Utc};
-use rusqlite::{params, Connection, OptionalExtension};
+use rusqlite::{Connection, OptionalExtension, params};
 use std::sync::{Arc, Mutex};
 
 /// Repository for managing secrets in the database.
@@ -617,6 +617,23 @@ impl SecretRepository {
             .collect::<Result<Vec<_>, _>>()?;
 
         Ok(creds)
+    }
+
+    /// Get all (provider_id, credential_key) pairs across all providers.
+    ///
+    /// Used by keychain cache clearing to enumerate entries that may exist
+    /// in the OS credential store.
+    pub fn get_all_stored_credential_keys(
+        &self,
+    ) -> Result<Vec<(String, String)>, Box<dyn std::error::Error>> {
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        let mut stmt = conn.prepare(
+            "SELECT provider_id, credential_key FROM credentials ORDER BY provider_id, credential_key",
+        )?;
+        let keys = stmt
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(keys)
     }
 
     /// Delete all stored credentials for a provider.

@@ -18,7 +18,7 @@ pub mod snapshot;
 mod sync;
 
 pub use clean::handle_clean;
-pub use config_cmd::handle_interactive_generate;
+pub use config_cmd::{handle_clear_cache, handle_interactive_generate};
 pub use create::handle_create;
 pub use default::handle_default_command;
 pub use delete::handle_delete;
@@ -29,5 +29,7 @@ pub use log::handle_log;
 pub use pull::{handle_pull, handle_pull_inject};
 pub use push::handle_push;
 pub use rollback::handle_rollback;
-pub use snapshot::{check_and_snapshot, is_dirty, print_snapshot_summary, snapshot_all_modified, snapshot_secrets};
+pub use snapshot::{
+    check_and_snapshot, is_dirty, print_snapshot_summary, snapshot_all_modified, snapshot_secrets,
+};
 pub use sync::handle_sync;

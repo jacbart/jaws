@@ -46,11 +46,7 @@ pub async fn handle_push(
 
     if secrets_to_push.is_empty() {
         if secret_name.is_some() {
-            return Err(format!(
-                "No matching secrets found for '{}'",
-                secret_name.unwrap()
-            )
-            .into());
+            return Err(format!("No matching secrets found for '{}'", secret_name.unwrap()).into());
         } else {
             println!("No modified secrets to push.");
             return Ok(());
@@ -141,12 +137,7 @@ pub async fn handle_push(
                 pushed_count += 1;
 
                 // Log the operation
-                let _ = repo.log_operation(
-                    "push",
-                    &secret.provider_id,
-                    &secret.display_name,
-                    None,
-                );
+                let _ = repo.log_operation("push", &secret.provider_id, &secret.display_name, None);
             }
             Err(e) => {
                 let error_msg = e.to_string();
@@ -234,7 +225,10 @@ async fn select_dirty_secrets(
     let (tx, rx) = create_items_channel();
 
     for (secret, _download) in &dirty_secrets {
-        let display = format!("{} | {} (modified)", secret.provider_id, secret.display_name);
+        let display = format!(
+            "{} | {} (modified)",
+            secret.provider_id, secret.display_name
+        );
         if tx.send(display).await.is_err() {
             break;
         }

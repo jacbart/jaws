@@ -207,6 +207,8 @@ pub enum ConfigCommands {
         /// Setting key (e.g., "editor", "secrets_path", "cache_ttl")
         key: String,
     },
+    /// Clear cached credentials from the OS keychain
+    ClearCache,
     /// Set a configuration value
     Set {
         /// Setting key

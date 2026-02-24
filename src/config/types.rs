@@ -50,6 +50,15 @@ pub struct Defaults {
     /// Default: 10
     #[knuffel(property(name = "max_versions"))]
     pub max_versions: Option<u32>,
+
+    /// Whether to cache decrypted credentials in the OS keychain.
+    /// When enabled (the default), the first successful decryption stores the
+    /// plaintext in the native credential store (e.g. macOS Keychain) so that
+    /// subsequent invocations don't prompt for a passphrase until the cache_ttl
+    /// expires.  Set to `false` to disable.
+    /// Default: true
+    #[knuffel(property(name = "keychain_cache"))]
+    pub keychain_cache: Option<bool>,
 }
 
 /// Configuration for a secrets provider.
@@ -170,6 +179,14 @@ impl Config {
             .or(Some(10)) // Default to 10 versions
     }
 
+    /// Whether OS keychain caching is enabled (default: true).
+    pub fn keychain_cache(&self) -> bool {
+        self.defaults
+            .as_ref()
+            .and_then(|d| d.keychain_cache)
+            .unwrap_or(true)
+    }
+
     /// Get the path to the database file
     pub fn db_path(&self) -> PathBuf {
         self.secrets_path().join("jaws.db")
@@ -187,15 +204,24 @@ impl Config {
             }
             "default_provider" => defaults.default_provider = Some(value.to_string()),
             "max_versions" => {
-                let v: u32 = value.parse().map_err(|_| "Invalid number for max_versions")?;
+                let v: u32 = value
+                    .parse()
+                    .map_err(|_| "Invalid number for max_versions")?;
                 if v == 0 {
                     return Err("max_versions must be at least 1".to_string());
                 }
                 defaults.max_versions = Some(v);
             }
+            "keychain_cache" => {
+                defaults.keychain_cache = Some(
+                    value
+                        .parse()
+                        .map_err(|_| "Invalid boolean for keychain_cache (use true/false)")?,
+                );
+            }
             _ => {
                 return Err(format!(
-                    "Unknown setting: {}. Valid settings: editor, secrets_path, cache_ttl, default_provider, max_versions",
+                    "Unknown setting: {}. Valid settings: editor, secrets_path, cache_ttl, default_provider, max_versions, keychain_cache",
                     key
                 ));
             }
@@ -216,8 +242,9 @@ impl Config {
                 .max_versions()
                 .map(|v| v.to_string())
                 .unwrap_or_else(|| "unlimited".to_string())),
+            "keychain_cache" => Ok(self.keychain_cache().to_string()),
             _ => Err(format!(
-                "Unknown setting: {}. Valid settings: editor, secrets_path, cache_ttl, default_provider, max_versions",
+                "Unknown setting: {}. Valid settings: editor, secrets_path, cache_ttl, default_provider, max_versions, keychain_cache",
                 key
             )),
         }
