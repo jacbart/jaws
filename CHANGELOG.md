@@ -1,3 +1,20 @@
+## [1.3.0] - 2026-02-24
+
+### 🚀 Features
+
+- Handle config generation and encryption methods
+- Authentication saving and session caching, also ran cargo fmt
+## [1.2.7] - 2026-02-22
+
+### 🚀 Features
+
+- Update Cargo.lock dependencies to reflect updated versions
+- Update project configuration and README
+- Updating home-manager module
+
+### ⚙️ Miscellaneous Tasks
+
+- Release 1.2.7
 ## [1.2.6] - 2026-02-08
 
 ### 🚀 Features
