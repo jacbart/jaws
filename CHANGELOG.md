@@ -1,3 +1,8 @@
+## [1.3.1] - 2026-02-25
+
+### 🚀 Features
+
+- Update bitwarden sdk to v2
 ## [1.3.0] - 2026-02-24
 
 ### 🚀 Features
