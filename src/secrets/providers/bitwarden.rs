@@ -7,8 +7,8 @@ use bitwarden::{
         ClientProjectsExt, ClientSecretsExt,
         projects::ProjectsListRequest,
         secrets::{
-            SecretCreateRequest, SecretGetRequest, SecretIdentifiersRequest, SecretPutRequest,
-            SecretsDeleteRequest,
+            SecretCreateRequest, SecretGetRequest, SecretIdentifiersByProjectRequest,
+            SecretIdentifiersRequest, SecretPutRequest, SecretsDeleteRequest,
         },
     },
 };
@@ -67,6 +67,7 @@ impl BitwardenSecretManager {
         let settings = ClientSettings {
             device_type: DeviceType::SDK,
             user_agent: format!("jaws/{}", env!("CARGO_PKG_VERSION")),
+            bitwarden_client_version: Some(env!("CARGO_PKG_VERSION").to_string()),
             ..Default::default()
         };
 
@@ -96,19 +97,42 @@ impl BitwardenSecretManager {
         })
     }
 
+    /// List secret identifiers, preferring project-scoped listing when a project_id is configured.
+    ///
+    /// The Bitwarden API returns 404 when an access token only has project-level access
+    /// but `secrets().list()` (organization-scoped) is called. Using `list_by_project()`
+    /// avoids this by querying only the secrets within the configured project.
+    async fn list_secret_identifiers(
+        &self,
+    ) -> Result<
+        Vec<bitwarden::secrets_manager::secrets::SecretIdentifiersResponse>,
+        Box<dyn std::error::Error>,
+    > {
+        if let Some(project_id) = self.project_id {
+            // Project-scoped listing -- avoids 404 for project-only access tokens
+            let request = SecretIdentifiersByProjectRequest { project_id };
+            let response = self.client.secrets().list_by_project(&request).await?;
+            Ok(vec![response])
+        } else {
+            // Organization-scoped listing -- requires org-wide access
+            let request = SecretIdentifiersRequest {
+                organization_id: self.organization_id.unwrap_or(Uuid::nil()),
+            };
+            let response = self.client.secrets().list(&request).await?;
+            Ok(vec![response])
+        }
+    }
+
     /// Helper to find a secret ID by name
     /// This is necessary because the SDK operates on UUIDs, but jaws uses human-readable names
     async fn find_secret_id(&self, name: &str) -> Result<Uuid, Box<dyn std::error::Error>> {
-        // List all secrets to find the one with the matching name
-        // Use Nil UUID for organization_id to infer from context (standard SDK practice)
-        let request = SecretIdentifiersRequest {
-            organization_id: self.organization_id.unwrap_or(Uuid::nil()),
-        };
-        let response = self.client.secrets().list(&request).await?;
+        let responses = self.list_secret_identifiers().await?;
 
-        for secret in response.data {
-            if secret.key == name {
-                return Ok(secret.id);
+        for response in responses {
+            for secret in response.data {
+                if secret.key == name {
+                    return Ok(secret.id);
+                }
             }
         }
 
@@ -150,21 +174,13 @@ impl SecretManager for BitwardenSecretManager {
         &self,
         _filters: Option<Vec<Self::Filter>>,
     ) -> Result<Vec<String>, Box<dyn std::error::Error>> {
-        let request = SecretIdentifiersRequest {
-            organization_id: self.organization_id.unwrap_or(Uuid::nil()),
-        };
-        let response = self.client.secrets().list(&request).await?;
+        let responses = self.list_secret_identifiers().await?;
 
         let mut names = Vec::new();
-        for secret in response.data {
-            // Filter by project if configured
-            if let Some(_project_id) = self.project_id {
-                // TODO: Verify if secret belongs to project.
-                // The list response might not contain project info efficiently.
-                // For now, return all accessible secrets.
+        for response in responses {
+            for secret in response.data {
+                names.push(secret.key);
             }
-
-            names.push(secret.key);
         }
 
         Ok(names)
@@ -176,18 +192,35 @@ impl SecretManager for BitwardenSecretManager {
     ) -> Box<dyn Stream<Item = Result<String, Box<dyn std::error::Error + Send>>> + Send + Unpin>
     {
         let client = self.client.clone();
+        let project_id = self.project_id;
         let organization_id = self.organization_id.unwrap_or(Uuid::nil());
 
-        // Create a stream that yields the list of secrets
+        // Create a stream that yields the list of secrets.
+        // Prefer project-scoped listing when a project_id is configured to avoid
+        // 404 errors from the Bitwarden API for project-only access tokens.
         let stream = stream::once(async move {
-            let request = SecretIdentifiersRequest { organization_id };
+            let result = if let Some(pid) = project_id {
+                let request = SecretIdentifiersByProjectRequest { project_id: pid };
+                client
+                    .secrets()
+                    .list_by_project(&request)
+                    .await
+                    .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send>)
+            } else {
+                let request = SecretIdentifiersRequest { organization_id };
+                client
+                    .secrets()
+                    .list(&request)
+                    .await
+                    .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send>)
+            };
 
-            match client.secrets().list(&request).await {
+            match result {
                 Ok(response) => {
                     let names: Vec<String> = response.data.into_iter().map(|s| s.key).collect();
                     Ok(names)
                 }
-                Err(e) => Err(Box::new(e) as Box<dyn std::error::Error + Send>),
+                Err(e) => Err(e),
             }
         })
         .flat_map(
