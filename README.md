@@ -12,6 +12,7 @@ A CLI tool and library for managing secrets from multiple providers (AWS Secrets
 - **Template injection** - Inject secrets into config files with `--inject`
 - **Script-friendly** - Print secrets to stdout with `--print` for shell scripts
 - **Encrypted export/import** - Archive secrets with passphrase or SSH key encryption
+- **Credential storage** - Encrypt and store provider tokens locally with passphrase or SSH key, cached in the OS keychain
 - **TUI picker** - Interactive fuzzy finder for secret selection
 - **Library support** - Use as a Rust library in your own projects
 
@@ -121,13 +122,19 @@ jaws rollback
 
 ### Configuration
 
-| Command                         | Description                                       |
-| ------------------------------- | ------------------------------------------------- |
-| `jaws config`                   | Show current configuration and providers          |
-| `jaws config init`              | Interactive config generation with auto-discovery |
-| `jaws config init --minimal`    | Generate a minimal config template                |
-| `jaws config get <key>`         | Get a specific config value                       |
-| `jaws config set <key> <value>` | Set a config value                                |
+| Command                           | Description                                       |
+| --------------------------------- | ------------------------------------------------- |
+| `jaws config`                     | Show current configuration and providers          |
+| `jaws config init`                | Interactive config generation with auto-discovery |
+| `jaws config init --minimal`      | Generate a minimal config template                |
+| `jaws config get <key>`           | Get a specific config value                       |
+| `jaws config set <key> <value>`   | Set a config value                                |
+| `jaws config provider`            | List configured providers                         |
+| `jaws config provider add`        | Add a provider (interactive discovery)            |
+| `jaws config provider add -k aws` | Add a specific provider type                      |
+| `jaws config provider remove`     | Remove a provider (interactive picker)            |
+| `jaws config provider remove <id>`| Remove a provider by ID                           |
+| `jaws config clear-cache`         | Clear cached credentials from the OS keychain     |
 
 ## Configuration
 
@@ -295,11 +302,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 src/
 ├── main.rs          # CLI entry point
 ├── lib.rs           # Library exports
-├── archive.rs       # Encryption/archiving
-├── cli/             # CLI definitions
+├── archive.rs       # Encryption/archiving (age-based)
+├── credentials.rs   # Credential encryption, decryption, and session caching
+├── keychain.rs      # OS keychain integration (TTL-based cache)
+├── cli/             # CLI argument and command definitions
 ├── commands/        # Command handlers
-├── config/          # Configuration
-├── db/              # SQLite database
+├── config/          # Configuration loading, types, and provider discovery
+├── db/              # SQLite database (schema, models, repository)
 ├── secrets/         # Secret providers
 │   └── providers/   # AWS, 1Password, Bitwarden, local
 └── utils/           # Utilities

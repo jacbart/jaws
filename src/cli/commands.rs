@@ -216,4 +216,25 @@ pub enum ConfigCommands {
         /// New value
         value: String,
     },
+    /// Manage providers (lists providers if no subcommand given)
+    Provider {
+        #[command(subcommand)]
+        command: Option<ProviderCommands>,
+    },
+}
+
+/// Subcommands for provider management.
+#[derive(Subcommand, Debug)]
+pub enum ProviderCommands {
+    /// Add a new provider (interactive discovery)
+    Add {
+        /// Provider kind to add (aws, onepassword, bitwarden). If omitted, shows a picker.
+        #[arg(short, long)]
+        kind: Option<String>,
+    },
+    /// Remove a provider from the config
+    Remove {
+        /// Provider ID to remove (e.g., "aws-dev", "op-team"). If omitted, shows a picker.
+        id: Option<String>,
+    },
 }

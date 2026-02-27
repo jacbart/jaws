@@ -28,8 +28,9 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 use crate::archive::{
-    decrypt_with_passphrase, decrypt_with_ssh_privkey, encrypt_with_passphrase,
-    encrypt_with_ssh_pubkey, prompt_passphrase, prompt_passphrase_with_confirm,
+    clear_ssh_key_passphrase_cache, decrypt_with_passphrase, decrypt_with_ssh_privkey,
+    encrypt_with_passphrase, encrypt_with_ssh_pubkey, prompt_passphrase,
+    prompt_passphrase_with_confirm,
 };
 use crate::db::SecretRepository;
 use crate::keychain;
@@ -176,8 +177,8 @@ pub fn decrypt_token(
 /// The returned tuple is (method, method_tag, ssh_fingerprint):
 /// - method_tag: "passphrase" or "ssh"
 /// - ssh_fingerprint: None for passphrase, Some(path_string) for SSH
-pub fn prompt_encryption_method()
--> Result<(CredentialEncryptionMethod, String, Option<String>), Box<dyn std::error::Error>> {
+pub fn prompt_encryption_method(
+) -> Result<(CredentialEncryptionMethod, String, Option<String>), Box<dyn std::error::Error>> {
     println!("  Choose encryption method:");
     println!("    1) Passphrase (age scrypt)");
     println!("    2) SSH public key");
@@ -375,12 +376,19 @@ pub fn retrieve_credential(
             cred.ssh_pubkey_fingerprint.as_deref(),
         )?
     } else {
-        // SSH: single attempt (failures are key-mismatch, retrying won't help)
+        // SSH: try decryption, clearing the cached SSH key passphrase on failure
+        // so the user can be re-prompted on the next credential.
         let method = build_decryption_method(
             &cred.encryption_method,
             cred.ssh_pubkey_fingerprint.as_deref(),
         )?;
-        decrypt_token(&cred.encrypted_value, &method)?
+        match decrypt_token(&cred.encrypted_value, &method) {
+            Ok(plaintext) => plaintext,
+            Err(e) => {
+                clear_ssh_key_passphrase_cache();
+                return Err(e);
+            }
+        }
     };
 
     // 5. Cache the decrypted value for the rest of this session

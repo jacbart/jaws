@@ -1,6 +1,9 @@
 //! Config command handlers - managing configuration.
 
 use std::io::{self, Write};
+use std::path::PathBuf;
+
+use ff::{FuzzyFinderSession, TuiConfig};
 
 use crate::config::{Config, Defaults, ProviderConfig};
 use crate::credentials::{prompt_encryption_method, store_encrypted_credential};
@@ -8,125 +11,105 @@ use crate::db::{SecretRepository, init_db};
 use crate::keychain;
 use crate::secrets::{BitwardenSecretManager, OnePasswordSecretManager};
 
+// ---------------------------------------------------------------------------
+// Shared helpers
+// ---------------------------------------------------------------------------
+
 /// Credentials pending storage, collected during interactive config setup.
-/// Each entry is (provider_id, credential_key, plaintext_value).
 struct PendingCredential {
     provider_id: String,
     credential_key: String,
     plaintext_value: String,
 }
 
-/// Handle interactive config generation
-pub async fn handle_interactive_generate(
-    path: Option<std::path::PathBuf>,
-    overwrite: bool,
-) -> Result<(), Box<dyn std::error::Error>> {
-    use ff::{FuzzyFinderSession, TuiConfig};
-
-    println!("Interactive Configuration Setup");
-    println!("================================\n");
-
-    // Determine config path - either from --path flag or interactive selection
-    let config_path = if let Some(p) = path {
-        p
+/// Read a line of input with a default value shown in brackets.
+fn prompt(message: &str, default: &str) -> String {
+    print!("{} [{}]: ", message, default);
+    io::stdout().flush().unwrap();
+    let mut input = String::new();
+    io::stdin().read_line(&mut input).unwrap();
+    let input = input.trim();
+    if input.is_empty() {
+        default.to_string()
     } else {
-        // Show location picker
-        println!("Select where to save the config file:\n");
+        input.to_string()
+    }
+}
 
-        let options = Config::get_config_location_options();
-        let items: Vec<String> = options
-            .iter()
-            .map(|(path, desc)| format!("{} — {}", path.display(), desc))
-            .collect();
+/// y/N confirmation prompt.
+fn confirm(message: &str) -> bool {
+    print!("{} [y/N]: ", message);
+    io::stdout().flush().unwrap();
+    let mut input = String::new();
+    io::stdin().read_line(&mut input).unwrap();
+    matches!(input.trim().to_lowercase().as_str(), "y" | "yes")
+}
 
-        let mut tui_config = TuiConfig::with_height((items.len() as u16 + 3).min(10));
-        tui_config.show_help_text = false;
-
-        let (session, tui_future) = FuzzyFinderSession::with_config(false, tui_config);
-
-        for item in &items {
-            let _ = session.add(item).await;
-        }
-        drop(session);
-
-        let selected = tui_future.await.unwrap_or_default();
-
-        if selected.is_empty() {
-            println!("No location selected. Cancelled.");
-            return Ok(());
-        }
-
-        // Find the selected path
-        let (_, selected_str) = &selected[0];
-        options
-            .into_iter()
-            .find(|(path, desc)| {
-                let display = format!("{} — {}", path.display(), desc);
-                &display == selected_str
-            })
-            .map(|(path, _)| path)
-            .unwrap_or_else(Config::default_config_path)
-    };
-
-    // Check if file exists and overwrite flag
-    if config_path.exists() && !overwrite {
-        return Err(format!(
-            "Config file already exists at: {}. Use --overwrite to replace it.",
-            config_path.display()
-        )
-        .into());
+/// Encrypt and store any pending credentials collected during provider setup.
+fn store_pending_credentials(
+    config: &Config,
+    pending_credentials: &[PendingCredential],
+) -> Result<(), Box<dyn std::error::Error>> {
+    if pending_credentials.is_empty() {
+        return Ok(());
     }
 
     println!();
+    println!(
+        "Encrypting {} credential(s) for secure storage...",
+        pending_credentials.len()
+    );
 
-    // Helper function to read input with a default
-    fn prompt(message: &str, default: &str) -> String {
-        print!("{} [{}]: ", message, default);
-        io::stdout().flush().unwrap();
-        let mut input = String::new();
-        io::stdin().read_line(&mut input).unwrap();
-        let input = input.trim();
-        if input.is_empty() {
-            default.to_string()
-        } else {
-            input.to_string()
+    let (method, method_tag, ssh_fingerprint) = prompt_encryption_method()?;
+
+    let secrets_path = config.secrets_path();
+    std::fs::create_dir_all(&secrets_path)?;
+    let conn = init_db(&config.db_path())?;
+    let repo = SecretRepository::new(conn);
+
+    let use_keychain = config.keychain_cache();
+    for cred in pending_credentials {
+        match store_encrypted_credential(
+            &repo,
+            &cred.provider_id,
+            &cred.credential_key,
+            &cred.plaintext_value,
+            &method,
+            &method_tag,
+            ssh_fingerprint.as_deref(),
+            use_keychain,
+            &secrets_path,
+        ) {
+            Ok(()) => {
+                println!(
+                    "  Stored encrypted {} for provider '{}'",
+                    cred.credential_key, cred.provider_id
+                );
+            }
+            Err(e) => {
+                eprintln!(
+                    "  Failed to store {} for '{}': {}",
+                    cred.credential_key, cred.provider_id, e
+                );
+            }
         }
     }
+    println!("Credential storage complete.");
+    Ok(())
+}
 
-    // Helper function for y/N confirmation prompts
-    fn confirm(message: &str) -> bool {
-        print!("{} [y/N]: ", message);
-        io::stdout().flush().unwrap();
-        let mut input = String::new();
-        io::stdin().read_line(&mut input).unwrap();
-        matches!(input.trim().to_lowercase().as_str(), "y" | "yes")
-    }
+// ---------------------------------------------------------------------------
+// Provider discovery functions (reusable by both `init` and `add-provider`)
+// ---------------------------------------------------------------------------
 
-    // Get defaults
-    let default_editor = std::env::var("EDITOR").unwrap_or_else(|_| "vim".into());
-    let editor = prompt("Editor", &default_editor);
-    let secrets_path = prompt("Secrets path", "./.secrets");
-    let cache_ttl_str = prompt("Cache TTL (seconds)", "900");
-    let cache_ttl: u64 = cache_ttl_str.parse().unwrap_or(900);
+/// Discover AWS profiles and interactively add them to the config.
+/// Returns the number of providers added.
+async fn discover_and_add_aws(
+    config: &mut Config,
+    pending_credentials: &mut Vec<PendingCredential>,
+) -> Result<usize, Box<dyn std::error::Error>> {
+    let initial_count = config.providers.len();
 
-    let mut config = Config {
-        defaults: Some(Defaults {
-            editor: Some(editor),
-            secrets_path: Some(secrets_path),
-            cache_ttl: Some(cache_ttl),
-            default_provider: None,
-            max_versions: None,   // Use default (10)
-            keychain_cache: None, // Use default (true)
-        }),
-        providers: Vec::new(),
-    };
-
-    // Collect credentials to store after all providers are configured
-    let mut pending_credentials: Vec<PendingCredential> = Vec::new();
-
-    println!();
-
-    // Discover AWS profiles
     println!("Discovering AWS profiles...");
     match Config::discover_aws_profiles() {
         Ok(profiles) if !profiles.is_empty() => {
@@ -135,7 +118,6 @@ pub async fn handle_interactive_generate(
             if confirm("Add AWS provider(s)?") {
                 println!("  Tip: Use 'all' option to auto-discover profiles at runtime\n");
 
-                // Create items for ff selection
                 let mut items: Vec<String> =
                     vec!["[all] - Auto-discover all profiles at runtime".to_string()];
                 for profile in &profiles {
@@ -145,7 +127,6 @@ pub async fn handle_interactive_generate(
                     items.push(format!("{}{}", profile, region));
                 }
 
-                // Use ff for multi-select
                 let mut tui_config = TuiConfig::with_height(15.min(items.len() as u16 + 3));
                 tui_config.show_help_text = true;
 
@@ -159,22 +140,19 @@ pub async fn handle_interactive_generate(
                 let selected = tui_future.await.unwrap_or_default();
 
                 if !selected.is_empty() {
-                    // Check if "all" was selected
                     if selected.iter().any(|(_, s)| s.starts_with("[all]")) {
-                        config.providers.push(ProviderConfig::new_aws(
+                        config.add_provider(ProviderConfig::new_aws(
                             "aws".to_string(),
                             Some("all".to_string()),
                             None,
                         ));
                         println!("Added AWS provider with auto-discovery");
                     } else {
-                        // Add individual profiles
                         for (_, selection) in &selected {
-                            // Extract profile name (before any region in parentheses)
                             let profile_name =
                                 selection.split(" (").next().unwrap_or(selection).trim();
                             let region = Config::get_aws_profile_region(profile_name);
-                            config.providers.push(ProviderConfig::new_aws(
+                            config.add_provider(ProviderConfig::new_aws(
                                 format!("aws-{}", profile_name),
                                 Some(profile_name.to_string()),
                                 region,
@@ -204,14 +182,13 @@ pub async fn handle_interactive_generate(
                     } else {
                         Some(region_input)
                     };
-                    config.providers.push(ProviderConfig::new_aws(
+                    config.add_provider(ProviderConfig::new_aws(
                         "aws".to_string(),
-                        None, // No profile -- uses env vars
+                        None,
                         region,
                     ));
                     println!("Added AWS provider (env var credentials)");
 
-                    // Check for session token (skip if present -- it's temporary)
                     if std::env::var("AWS_SESSION_TOKEN").is_ok() {
                         println!(
                             "  Note: AWS_SESSION_TOKEN detected but will NOT be stored (temporary credential)"
@@ -236,11 +213,19 @@ pub async fn handle_interactive_generate(
         Err(e) => println!("Could not discover AWS profiles: {}", e),
     }
 
-    println!();
+    Ok(config.providers.len() - initial_count)
+}
 
-    // Check for 1Password
-    println!("Checking for 1Password...");
+/// Discover 1Password vaults and interactively add them to the config.
+/// Returns the number of providers added.
+async fn discover_and_add_onepassword(
+    config: &mut Config,
+    pending_credentials: &mut Vec<PendingCredential>,
+) -> Result<usize, Box<dyn std::error::Error>> {
+    let initial_count = config.providers.len();
     let op_token_env = "OP_SERVICE_ACCOUNT_TOKEN";
+
+    println!("Checking for 1Password...");
     if std::env::var(op_token_env).is_ok() {
         println!("Found {}. Discovering vaults...", op_token_env);
 
@@ -277,7 +262,7 @@ pub async fn handle_interactive_generate(
 
                             if !selected.is_empty() {
                                 if selected.iter().any(|(_, s)| s.starts_with("[all]")) {
-                                    config.providers.push(ProviderConfig::new_onepassword(
+                                    config.add_provider(ProviderConfig::new_onepassword(
                                         "op".to_string(),
                                         Some("all".to_string()),
                                         None,
@@ -285,18 +270,19 @@ pub async fn handle_interactive_generate(
                                     println!("Added 1Password provider with auto-discovery");
                                 } else {
                                     for (_, selection) in &selected {
-                                        // Extract vault name and ID
                                         if let Some((name, rest)) = selection.split_once(" (") {
                                             let vault_id = rest.trim_end_matches(')');
                                             let provider_id = format!(
                                                 "op-{}",
                                                 name.to_lowercase().replace(' ', "-")
                                             );
-                                            config.providers.push(ProviderConfig::new_onepassword(
-                                                provider_id,
-                                                Some(vault_id.to_string()),
-                                                None,
-                                            ));
+                                            config.add_provider(
+                                                ProviderConfig::new_onepassword(
+                                                    provider_id,
+                                                    Some(vault_id.to_string()),
+                                                    None,
+                                                ),
+                                            );
                                         }
                                     }
                                     println!("Added {} 1Password provider(s)", selected.len());
@@ -315,7 +301,7 @@ pub async fn handle_interactive_generate(
             Err(e) => println!("Could not initialize 1Password: {}", e),
         }
 
-        // Offer to store the 1Password token if any OP providers were added
+        // Offer to store the token if any OP providers were added
         if config
             .providers
             .iter()
@@ -323,8 +309,6 @@ pub async fn handle_interactive_generate(
         {
             if let Ok(token) = std::env::var(op_token_env) {
                 if confirm("Store encrypted copy of 1Password service account token?") {
-                    // For all OP providers, store against a canonical provider ID.
-                    // If "all" mode, use "op"; otherwise use first OP provider ID.
                     let store_id = config
                         .providers
                         .iter()
@@ -344,11 +328,19 @@ pub async fn handle_interactive_generate(
         println!("  Tip: Set this environment variable and re-run to add 1Password providers");
     }
 
-    println!();
+    Ok(config.providers.len() - initial_count)
+}
 
-    // Check for Bitwarden
-    println!("Checking for Bitwarden...");
+/// Discover Bitwarden projects and interactively add them to the config.
+/// Returns the number of providers added.
+async fn discover_and_add_bitwarden(
+    config: &mut Config,
+    pending_credentials: &mut Vec<PendingCredential>,
+) -> Result<usize, Box<dyn std::error::Error>> {
+    let initial_count = config.providers.len();
     let bw_token_env = "BWS_ACCESS_TOKEN";
+
+    println!("Checking for Bitwarden...");
     if std::env::var(bw_token_env).is_ok() {
         println!("Found {}. Discovering projects...", bw_token_env);
 
@@ -366,7 +358,6 @@ pub async fn handle_interactive_generate(
                 println!("Retrying with Organization ID: {}", org_input);
                 organization_id = Some(org_input.clone());
 
-                // Re-initialize manager with Org ID
                 manager = BitwardenSecretManager::new(None, bw_token_env, Some(org_input)).await?;
                 projects_result = manager.list_projects().await;
             }
@@ -396,12 +387,11 @@ pub async fn handle_interactive_generate(
 
                     if !selected.is_empty() {
                         for (_, selection) in &selected {
-                            // Extract project name and ID
                             if let Some((name, rest)) = selection.split_once(" (") {
                                 let project_id = rest.trim_end_matches(')');
                                 let provider_id =
                                     format!("bw-{}", name.to_lowercase().replace(' ', "-"));
-                                config.providers.push(ProviderConfig::new_bitwarden(
+                                config.add_provider(ProviderConfig::new_bitwarden(
                                     provider_id,
                                     Some(project_id.to_string()),
                                     organization_id.clone(),
@@ -428,7 +418,7 @@ pub async fn handle_interactive_generate(
             }
         }
 
-        // Offer to store the Bitwarden token if any BW providers were added
+        // Offer to store the token if any BW providers were added
         if config
             .providers
             .iter()
@@ -455,6 +445,100 @@ pub async fn handle_interactive_generate(
         println!("  Tip: Set this environment variable and re-run to add Bitwarden providers");
     }
 
+    Ok(config.providers.len() - initial_count)
+}
+
+// ---------------------------------------------------------------------------
+// Command handlers
+// ---------------------------------------------------------------------------
+
+/// Handle interactive config generation (`jaws config init`).
+pub async fn handle_interactive_generate(
+    path: Option<PathBuf>,
+    overwrite: bool,
+) -> Result<(), Box<dyn std::error::Error>> {
+    println!("Interactive Configuration Setup");
+    println!("================================\n");
+
+    // Determine config path
+    let config_path = if let Some(p) = path {
+        p
+    } else {
+        println!("Select where to save the config file:\n");
+
+        let options = Config::get_config_location_options();
+        let items: Vec<String> = options
+            .iter()
+            .map(|(path, desc)| format!("{} — {}", path.display(), desc))
+            .collect();
+
+        let mut tui_config = TuiConfig::with_height((items.len() as u16 + 3).min(10));
+        tui_config.show_help_text = false;
+
+        let (session, tui_future) = FuzzyFinderSession::with_config(false, tui_config);
+
+        for item in &items {
+            let _ = session.add(item).await;
+        }
+        drop(session);
+
+        let selected = tui_future.await.unwrap_or_default();
+
+        if selected.is_empty() {
+            println!("No location selected. Cancelled.");
+            return Ok(());
+        }
+
+        let (_, selected_str) = &selected[0];
+        options
+            .into_iter()
+            .find(|(path, desc)| {
+                let display = format!("{} — {}", path.display(), desc);
+                &display == selected_str
+            })
+            .map(|(path, _)| path)
+            .unwrap_or_else(Config::default_config_path)
+    };
+
+    if config_path.exists() && !overwrite {
+        return Err(format!(
+            "Config file already exists at: {}. Use --overwrite to replace it.",
+            config_path.display()
+        )
+        .into());
+    }
+
+    println!();
+
+    // Prompt for defaults
+    let default_editor = std::env::var("EDITOR").unwrap_or_else(|_| "vim".into());
+    let editor = prompt("Editor", &default_editor);
+    let secrets_path = prompt("Secrets path", "./.secrets");
+    let cache_ttl_str = prompt("Cache TTL (seconds)", "900");
+    let cache_ttl: u64 = cache_ttl_str.parse().unwrap_or(900);
+
+    let mut config = Config {
+        defaults: Some(Defaults {
+            editor: Some(editor),
+            secrets_path: Some(secrets_path),
+            cache_ttl: Some(cache_ttl),
+            default_provider: None,
+            max_versions: None,
+            keychain_cache: None,
+        }),
+        providers: Vec::new(),
+    };
+
+    let mut pending_credentials: Vec<PendingCredential> = Vec::new();
+
+    println!();
+
+    // Discover providers using extracted functions
+    discover_and_add_aws(&mut config, &mut pending_credentials).await?;
+    println!();
+    discover_and_add_onepassword(&mut config, &mut pending_credentials).await?;
+    println!();
+    discover_and_add_bitwarden(&mut config, &mut pending_credentials).await?;
     println!();
 
     // Create parent directories if they don't exist
@@ -468,52 +552,8 @@ pub async fn handle_interactive_generate(
     config.save(&config_path)?;
     println!("Config written to: {}", config_path.display());
 
-    // Store encrypted credentials if any were collected
-    if !pending_credentials.is_empty() {
-        println!();
-        println!(
-            "Encrypting {} credential(s) for secure storage...",
-            pending_credentials.len()
-        );
-
-        // Prompt for encryption method once (reused for all credentials)
-        let (method, method_tag, ssh_fingerprint) = prompt_encryption_method()?;
-
-        // Initialize the database so we can store credentials
-        let secrets_path = config.secrets_path();
-        std::fs::create_dir_all(&secrets_path)?;
-        let conn = init_db(&config.db_path())?;
-        let repo = SecretRepository::new(conn);
-
-        let use_keychain = config.keychain_cache();
-        for cred in &pending_credentials {
-            match store_encrypted_credential(
-                &repo,
-                &cred.provider_id,
-                &cred.credential_key,
-                &cred.plaintext_value,
-                &method,
-                &method_tag,
-                ssh_fingerprint.as_deref(),
-                use_keychain,
-                &secrets_path,
-            ) {
-                Ok(()) => {
-                    println!(
-                        "  Stored encrypted {} for provider '{}'",
-                        cred.credential_key, cred.provider_id
-                    );
-                }
-                Err(e) => {
-                    eprintln!(
-                        "  Failed to store {} for '{}': {}",
-                        cred.credential_key, cred.provider_id, e
-                    );
-                }
-            }
-        }
-        println!("Credential storage complete.");
-    }
+    // Store encrypted credentials
+    store_pending_credentials(&config, &pending_credentials)?;
 
     if config.providers.is_empty() {
         println!();
@@ -526,6 +566,175 @@ pub async fn handle_interactive_generate(
     Ok(())
 }
 
+/// Handle `jaws config add-provider [--kind <type>]`.
+///
+/// Discovers available providers and interactively adds them to an existing
+/// config file. If `--kind` is specified, skips the provider type picker.
+pub async fn handle_add_provider(
+    kind: Option<String>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    // Locate existing config
+    let config_path = match Config::find_existing_config() {
+        Some(path) => path,
+        None => {
+            eprintln!("No config file found. Run 'jaws config init' first.");
+            return Ok(());
+        }
+    };
+
+    let mut config = Config::load_from(Some(&config_path))?;
+    let mut pending_credentials: Vec<PendingCredential> = Vec::new();
+
+    let provider_kind = if let Some(k) = kind {
+        k.to_lowercase()
+    } else {
+        // Show a TUI picker for provider type
+        let provider_types = vec![
+            "aws - Amazon Web Services Secrets Manager".to_string(),
+            "onepassword - 1Password".to_string(),
+            "bitwarden - Bitwarden Secrets Manager".to_string(),
+        ];
+
+        let mut tui_config = TuiConfig::with_height(6);
+        tui_config.show_help_text = false;
+
+        let (session, tui_future) = FuzzyFinderSession::with_config(false, tui_config);
+
+        for item in &provider_types {
+            let _ = session.add(item).await;
+        }
+        drop(session);
+
+        let selected = tui_future.await.unwrap_or_default();
+
+        if selected.is_empty() {
+            println!("No provider type selected. Cancelled.");
+            return Ok(());
+        }
+
+        let (_, selected_str) = &selected[0];
+        selected_str
+            .split(" - ")
+            .next()
+            .unwrap_or("aws")
+            .trim()
+            .to_string()
+    };
+
+    println!();
+
+    let added = match provider_kind.as_str() {
+        "aws" => discover_and_add_aws(&mut config, &mut pending_credentials).await?,
+        "onepassword" | "1password" | "op" => {
+            discover_and_add_onepassword(&mut config, &mut pending_credentials).await?
+        }
+        "bitwarden" | "bw" | "bws" => {
+            discover_and_add_bitwarden(&mut config, &mut pending_credentials).await?
+        }
+        other => {
+            eprintln!(
+                "Unknown provider kind: '{}'. Valid kinds: aws, onepassword, bitwarden",
+                other
+            );
+            return Ok(());
+        }
+    };
+
+    if added > 0 {
+        config.save(&config_path)?;
+        println!();
+        println!(
+            "Config updated: {} provider(s) added to {}",
+            added,
+            config_path.display()
+        );
+
+        store_pending_credentials(&config, &pending_credentials)?;
+    } else {
+        println!("No providers were added.");
+    }
+
+    Ok(())
+}
+
+/// Handle `jaws config remove-provider [id]`.
+///
+/// Removes a provider from the config file. If no ID is given, shows a TUI
+/// selector of existing providers.
+pub async fn handle_remove_provider(
+    config: &Config,
+    id: Option<String>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let config_path = match Config::find_existing_config() {
+        Some(path) => path,
+        None => {
+            eprintln!("No config file found. Run 'jaws config init' first.");
+            return Ok(());
+        }
+    };
+
+    let mut config = config.clone();
+
+    if config.providers.is_empty() {
+        println!("No providers configured.");
+        return Ok(());
+    }
+
+    let provider_id = if let Some(id) = id {
+        id
+    } else {
+        // Show TUI selector of existing providers
+        let items: Vec<String> = config
+            .providers
+            .iter()
+            .map(|p| format!("{} ({})", p.id, p.kind))
+            .collect();
+
+        let mut tui_config = TuiConfig::with_height((items.len() as u16 + 3).min(15));
+        tui_config.show_help_text = false;
+
+        let (session, tui_future) = FuzzyFinderSession::with_config(false, tui_config);
+
+        for item in &items {
+            let _ = session.add(item).await;
+        }
+        drop(session);
+
+        let selected = tui_future.await.unwrap_or_default();
+
+        if selected.is_empty() {
+            println!("No provider selected. Cancelled.");
+            return Ok(());
+        }
+
+        let (_, selected_str) = &selected[0];
+        // Extract provider id (before the " (kind)" part)
+        selected_str
+            .split(" (")
+            .next()
+            .unwrap_or(selected_str)
+            .trim()
+            .to_string()
+    };
+
+    if config.remove_provider(&provider_id) {
+        config.save(&config_path)?;
+        println!(
+            "Removed provider '{}' from {}",
+            provider_id,
+            config_path.display()
+        );
+    } else {
+        eprintln!("Provider '{}' not found in config.", provider_id);
+        println!("Available providers:");
+        for p in &config.providers {
+            println!("  {} ({})", p.id, p.kind);
+        }
+    }
+
+    Ok(())
+}
+
 /// Handle `jaws config clear-cache` -- remove all jaws entries from the OS keychain.
 pub fn handle_clear_cache(config: &Config) -> Result<(), Box<dyn std::error::Error>> {
     if !keychain::keychain_available() {
@@ -533,7 +742,6 @@ pub fn handle_clear_cache(config: &Config) -> Result<(), Box<dyn std::error::Err
         return Ok(());
     }
 
-    // We need the database to enumerate known credential keys
     let db_path = config.db_path();
     if !db_path.exists() {
         println!("No database found -- nothing to clear.");

@@ -7,6 +7,26 @@ use age::secrecy::SecretString;
 use std::fs::{self, File};
 use std::io::{self, BufReader, Read, Write};
 use std::path::Path;
+use std::sync::Mutex;
+
+/// Session-scoped cache for the SSH private key passphrase.
+///
+/// When an SSH key is passphrase-protected, the `age` crate calls
+/// `SshKeyCallbacks::request_passphrase()` for every decrypt operation.
+/// This cache stores the passphrase after the first successful prompt so
+/// subsequent credentials encrypted to the same SSH key can be decrypted
+/// without re-prompting.
+static SSH_KEY_PASSPHRASE_CACHE: Mutex<Option<SecretString>> = Mutex::new(None);
+
+/// Clear the cached SSH key passphrase.
+///
+/// Called when decryption fails with a cached passphrase, so the user can
+/// be re-prompted on the next attempt.
+pub(crate) fn clear_ssh_key_passphrase_cache() {
+    if let Ok(mut cache) = SSH_KEY_PASSPHRASE_CACHE.lock() {
+        *cache = None;
+    }
+}
 
 /// Encryption method for export
 pub enum EncryptionMethod {
@@ -310,6 +330,14 @@ impl age::Callbacks for SshKeyCallbacks {
     }
 
     fn request_passphrase(&self, description: &str) -> Option<SecretString> {
+        // Return the cached passphrase if available (avoids re-prompting
+        // when multiple credentials are encrypted to the same SSH key).
+        if let Ok(cache) = SSH_KEY_PASSPHRASE_CACHE.lock() {
+            if let Some(cached) = cache.as_ref() {
+                return Some(cached.clone());
+            }
+        }
+
         let prompt = if description.is_empty() {
             format!("Enter passphrase for SSH key {}", self.key_path.display())
         } else {
@@ -318,7 +346,14 @@ impl age::Callbacks for SshKeyCallbacks {
         eprint!("{}: ", prompt);
         io::stderr().flush().ok()?;
         let passphrase = rpassword::read_password().ok()?;
-        Some(SecretString::from(passphrase))
+        let secret = SecretString::from(passphrase);
+
+        // Cache for subsequent decrypt calls in this session
+        if let Ok(mut cache) = SSH_KEY_PASSPHRASE_CACHE.lock() {
+            *cache = Some(secret.clone());
+        }
+
+        Some(secret)
     }
 }
 

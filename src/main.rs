@@ -5,11 +5,12 @@ use std::fs;
 use clap::Parser;
 
 use jaws::DbProvider;
-use jaws::cli::{Cli, Commands, ConfigCommands};
+use jaws::cli::{Cli, Commands, ConfigCommands, ProviderCommands};
 use jaws::commands::{
-    handle_clean, handle_clear_cache, handle_create, handle_default_command, handle_delete,
-    handle_export, handle_history, handle_import, handle_interactive_generate, handle_list,
-    handle_log, handle_pull, handle_pull_inject, handle_push, handle_rollback, handle_sync,
+    handle_add_provider, handle_clean, handle_clear_cache, handle_create, handle_default_command,
+    handle_delete, handle_export, handle_history, handle_import, handle_interactive_generate,
+    handle_list, handle_log, handle_pull, handle_pull_inject, handle_push, handle_remove_provider,
+    handle_rollback, handle_sync,
 };
 use jaws::config::Config;
 use jaws::db::{SecretRepository, init_db};
@@ -121,6 +122,45 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
             Some(ConfigCommands::ClearCache) => {
                 return handle_clear_cache(&config);
+            }
+            Some(ConfigCommands::Provider { command }) => {
+                match command {
+                    None => {
+                        // Bare `jaws config provider` — list configured providers
+                        if config.providers.is_empty() {
+                            println!("No providers configured.");
+                            println!();
+                            println!("Run 'jaws config provider add' to add one.");
+                        } else {
+                            println!("Configured providers:\n");
+                            for p in &config.providers {
+                                println!("  {} ({})", p.id, p.kind);
+                                if let Some(profile) = &p.profile {
+                                    println!("    profile: {}", profile);
+                                }
+                                if let Some(region) = &p.region {
+                                    println!("    region: {}", region);
+                                }
+                                if let Some(vault) = &p.vault {
+                                    println!("    vault: {}", vault);
+                                }
+                                if let Some(organization) = &p.organization {
+                                    println!("    organization: {}", organization);
+                                }
+                                if let Some(token_env) = &p.token_env {
+                                    println!("    token_env: {}", token_env);
+                                }
+                            }
+                        }
+                        return Ok(());
+                    }
+                    Some(ProviderCommands::Add { kind }) => {
+                        return handle_add_provider(kind.clone()).await;
+                    }
+                    Some(ProviderCommands::Remove { id }) => {
+                        return handle_remove_provider(&config, id.clone()).await;
+                    }
+                }
             }
         }
     }

@@ -18,7 +18,9 @@ pub mod snapshot;
 mod sync;
 
 pub use clean::handle_clean;
-pub use config_cmd::{handle_clear_cache, handle_interactive_generate};
+pub use config_cmd::{
+    handle_add_provider, handle_clear_cache, handle_interactive_generate, handle_remove_provider,
+};
 pub use create::handle_create;
 pub use default::handle_default_command;
 pub use delete::handle_delete;

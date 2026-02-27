@@ -4,4 +4,4 @@ mod args;
 mod commands;
 
 pub use args::Cli;
-pub use commands::{Commands, ConfigCommands, DeleteScope};
+pub use commands::{Commands, ConfigCommands, DeleteScope, ProviderCommands};
