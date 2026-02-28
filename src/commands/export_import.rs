@@ -3,13 +3,13 @@
 use std::fs;
 
 use crate::archive::{
-    DecryptionMethod, EncryptionMethod, export_secrets, format_size, import_secrets,
-    prompt_passphrase, prompt_passphrase_with_confirm,
+    export_secrets, format_size, import_secrets, prompt_passphrase, prompt_passphrase_with_confirm,
+    DecryptionMethod, EncryptionMethod,
 };
 use crate::config::Config;
 
 /// Handle the export command - archive and encrypt secrets
-pub async fn handle_export(
+pub fn handle_export(
     config: &Config,
     ssh_key: Option<std::path::PathBuf>,
     output: Option<std::path::PathBuf>,
@@ -60,7 +60,7 @@ pub async fn handle_export(
 }
 
 /// Handle the import command - decrypt and extract archive
-pub async fn handle_import(
+pub fn handle_import(
     config: &Config,
     archive_path: &std::path::Path,
     ssh_key: Option<std::path::PathBuf>,

@@ -5,7 +5,7 @@
 
 use async_trait::async_trait;
 use futures::stream::{self, Stream};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use uuid::Uuid;
 
 use crate::db::{SecretInput, SecretRepository, init_db};
@@ -16,9 +16,7 @@ use crate::secrets::storage::{
 
 /// Filter for jaws secrets (future use for pattern matching, tags, etc.)
 #[derive(Debug, Clone, Default)]
-pub struct JawsFilter {
-    pub name_pattern: Option<String>,
-}
+pub struct JawsFilter;
 
 /// Local secret manager that stores secrets in the jaws secrets directory.
 /// This provider is always available without any external configuration.
@@ -291,16 +289,4 @@ impl SecretManager for JawsSecretManager {
     }
 }
 
-/// Get a secret by name (display_name) for the jaws provider.
-/// This is a convenience function for looking up secrets by name rather than api_ref.
-pub fn get_jaws_secret_by_name(
-    secrets_path: &Path,
-    name: &str,
-) -> Result<Option<crate::db::DbSecret>, Box<dyn std::error::Error>> {
-    let db_path = secrets_path.join("jaws.db");
-    let conn = init_db(&db_path)?;
-    let repo = SecretRepository::new(conn);
 
-    let secrets = repo.list_secrets_by_provider("jaws")?;
-    Ok(secrets.into_iter().find(|s| s.display_name == name))
-}

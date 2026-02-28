@@ -252,10 +252,15 @@ async fn handle_local_rollback(
     // Open in editor if requested
     if edit {
         let file_path = get_secret_path(&config.secrets_path(), &new_filename);
-        let _ = Command::new(config.editor())
+        Command::new(config.editor())
             .arg(file_path.to_string_lossy().to_string())
             .status()
-            .expect("failed to launch editor");
+            .map_err(|e| {
+                format!(
+                    "Failed to launch editor '{}': {}. Set a valid editor with 'jaws config set editor <path>'.",
+                    config.editor(), e
+                )
+            })?;
     }
 
     Ok(())

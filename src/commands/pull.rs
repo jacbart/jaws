@@ -274,10 +274,15 @@ pub async fn handle_pull(
 
     // Open in editor if requested
     if edit && !downloaded_files.is_empty() {
-        let _ = Command::new(config.editor())
+        Command::new(config.editor())
             .args(&downloaded_files)
             .status()
-            .expect("failed to launch editor");
+            .map_err(|e| {
+                format!(
+                    "Failed to launch editor '{}': {}. Set a valid editor with 'jaws config set editor <path>'.",
+                    config.editor(), e
+                )
+            })?;
     }
 
     Ok(())
@@ -400,45 +405,10 @@ pub async fn fetch_and_save_secret(
 
     // Prune old versions if max_versions is configured
     if let Some(max) = config.max_versions() {
-        let _ = prune_old_versions_for_secret(config, repo, secret.id, max);
+        let _ = super::snapshot::prune_old_versions(config, repo, secret.id, max);
     }
 
     Ok(content)
-}
-
-/// Prune old versions for a specific secret
-fn prune_old_versions_for_secret(
-    config: &Config,
-    repo: &SecretRepository,
-    secret_id: i64,
-    max_versions: u32,
-) -> Result<usize, Box<dyn std::error::Error>> {
-    if max_versions == 0 {
-        return Ok(0);
-    }
-
-    let downloads = repo.list_downloads(secret_id)?;
-
-    if downloads.len() <= max_versions as usize {
-        return Ok(0);
-    }
-
-    // Downloads are sorted by version DESC, so skip the first max_versions
-    let to_delete: Vec<_> = downloads.into_iter().skip(max_versions as usize).collect();
-    let delete_count = to_delete.len();
-
-    for download in to_delete {
-        // Delete the file
-        let file_path = get_secret_path(&config.secrets_path(), &download.filename);
-        if file_path.exists() {
-            std::fs::remove_file(&file_path)?;
-        }
-
-        // Delete the database record
-        repo.delete_download(download.id)?;
-    }
-
-    Ok(delete_count)
 }
 
 /// Handle pull by name (non-print mode) - download and optionally edit
@@ -494,10 +464,15 @@ async fn handle_pull_by_name(
     if edit {
         // Make sure the content is written before opening editor
         drop(content);
-        let _ = Command::new(config.editor())
+        Command::new(config.editor())
             .arg(&file_path)
             .status()
-            .expect("failed to launch editor");
+            .map_err(|e| {
+                format!(
+                    "Failed to launch editor '{}': {}. Set a valid editor with 'jaws config set editor <path>'.",
+                    config.editor(), e
+                )
+            })?;
     }
 
     Ok(())

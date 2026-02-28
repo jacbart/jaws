@@ -249,6 +249,8 @@ defaults editor="vim" secrets_path="./.secrets" cache_ttl=900
     /// Save config to file
     pub fn save(&self, path: &Path) -> Result<(), Box<dyn std::error::Error>> {
         std::fs::write(path, self.to_kdl())?;
+        // Restrict config file permissions (may contain provider details)
+        crate::utils::restrict_file_permissions(path)?;
         Ok(())
     }
 }

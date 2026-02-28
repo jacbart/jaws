@@ -83,6 +83,9 @@ pub fn save_secret_file(
     let mut file = File::create(&file_path)?;
     file.write_all(content.as_bytes())?;
 
+    // Restrict permissions to owner-only (0600) since this contains secret data
+    crate::utils::restrict_file_permissions(&file_path)?;
+
     let content_hash = compute_content_hash(content);
 
     Ok((filename, content_hash))

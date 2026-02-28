@@ -98,7 +98,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             Some(ConfigCommands::Get { key }) => {
                 match config.get_default(key) {
                     Ok(value) => println!("{}", value),
-                    Err(e) => eprintln!("{}", e),
+                    Err(e) => return Err(e.into()),
                 }
                 return Ok(());
             }
@@ -106,8 +106,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let config_path = match Config::find_existing_config() {
                     Some(path) => path,
                     None => {
-                        eprintln!("Config file not found. Run 'jaws config init' first.");
-                        return Ok(());
+                        return Err("Config file not found. Run 'jaws config init' first.".into());
                     }
                 };
                 let mut config = config;
@@ -116,7 +115,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         config.save(&config_path)?;
                         println!("Updated {} = {} in {}", key, value, config_path.display());
                     }
-                    Err(e) => eprintln!("{}", e),
+                    Err(e) => return Err(e.into()),
                 }
                 return Ok(());
             }
@@ -172,7 +171,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         delete,
     }) = &cli.command
     {
-        return handle_export(&config, ssh_key.clone(), output.clone(), *delete).await;
+        return handle_export(&config, ssh_key.clone(), output.clone(), *delete);
     }
 
     // Handle Import command separately (doesn't require providers)
@@ -182,7 +181,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         delete,
     }) = &cli.command
     {
-        return handle_import(&config, archive, ssh_key.clone(), *delete).await;
+        return handle_import(&config, archive, ssh_key.clone(), *delete);
     }
 
     // Ensure secrets directory exists
@@ -318,7 +317,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
 
         Commands::Log { limit, provider } => {
-            handle_log(&config, limit, provider).await?;
+            handle_log(&repo, limit, provider)?;
         }
 
         Commands::Clean {

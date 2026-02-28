@@ -68,10 +68,15 @@ pub async fn handle_default_command(
 
     if !files_to_open.is_empty() {
         // Open editor
-        let _ = Command::new(config.editor())
+        Command::new(config.editor())
             .args(&files_to_open)
             .status()
-            .expect("failed to launch editor");
+            .map_err(|e| {
+                format!(
+                    "Failed to launch editor '{}': {}. Set a valid editor with 'jaws config set editor <path>'.",
+                    config.editor(), e
+                )
+            })?;
 
         // After editor closes, check for modifications and auto-snapshot
         let results = snapshot_secrets(config, repo, &selected_secret_ids)?;

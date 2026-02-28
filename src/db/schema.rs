@@ -9,6 +9,9 @@ const SCHEMA_VERSION: i32 = 3;
 pub fn init_db(path: &Path) -> Result<Connection> {
     let conn = Connection::open(path)?;
 
+    // Restrict database file permissions to owner-only (contains encrypted credentials)
+    let _ = crate::utils::restrict_file_permissions(path);
+
     // Enable foreign keys
     conn.execute_batch("PRAGMA foreign_keys = ON;")?;
 

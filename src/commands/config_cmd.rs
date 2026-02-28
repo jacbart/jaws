@@ -577,8 +577,7 @@ pub async fn handle_add_provider(
     let config_path = match Config::find_existing_config() {
         Some(path) => path,
         None => {
-            eprintln!("No config file found. Run 'jaws config init' first.");
-            return Ok(());
+            return Err("No config file found. Run 'jaws config init' first.".into());
         }
     };
 
@@ -632,11 +631,11 @@ pub async fn handle_add_provider(
             discover_and_add_bitwarden(&mut config, &mut pending_credentials).await?
         }
         other => {
-            eprintln!(
+            return Err(format!(
                 "Unknown provider kind: '{}'. Valid kinds: aws, onepassword, bitwarden",
                 other
-            );
-            return Ok(());
+            )
+            .into());
         }
     };
 
@@ -668,8 +667,7 @@ pub async fn handle_remove_provider(
     let config_path = match Config::find_existing_config() {
         Some(path) => path,
         None => {
-            eprintln!("No config file found. Run 'jaws config init' first.");
-            return Ok(());
+            return Err("No config file found. Run 'jaws config init' first.".into());
         }
     };
 
@@ -725,11 +723,17 @@ pub async fn handle_remove_provider(
             config_path.display()
         );
     } else {
-        eprintln!("Provider '{}' not found in config.", provider_id);
-        println!("Available providers:");
-        for p in &config.providers {
-            println!("  {} ({})", p.id, p.kind);
-        }
+        let available: Vec<String> = config.providers.iter().map(|p| p.id.clone()).collect();
+        return Err(format!(
+            "Provider '{}' not found in config. Available: {}",
+            provider_id,
+            if available.is_empty() {
+                "(none)".to_string()
+            } else {
+                available.join(", ")
+            }
+        )
+        .into());
     }
 
     Ok(())

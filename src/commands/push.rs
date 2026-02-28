@@ -65,10 +65,15 @@ pub async fn handle_push(
 
     // Open in editor if requested
     if edit && !files.is_empty() {
-        let _ = Command::new(config.editor())
+        Command::new(config.editor())
             .args(&files)
             .status()
-            .expect("failed to launch editor");
+            .map_err(|e| {
+                format!(
+                    "Failed to launch editor '{}': {}. Set a valid editor with 'jaws config set editor <path>'.",
+                    config.editor(), e
+                )
+            })?;
     }
 
     // Auto-snapshot any modified secrets before pushing

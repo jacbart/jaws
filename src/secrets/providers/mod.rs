@@ -353,7 +353,10 @@ pub async fn detect_providers(
                      Future: Configure 'url' to connect to jaws serve."
                 );
             }
-            _ => eprintln!("Unknown provider kind: {}", provider_config.kind),
+            _ => eprintln!(
+                "Unknown provider kind: '{}'. Valid kinds: aws, onepassword, bitwarden",
+                provider_config.kind
+            ),
         }
     }
 

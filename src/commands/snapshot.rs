@@ -155,7 +155,7 @@ pub fn snapshot_secrets(
 /// Prune old versions, keeping only the most recent `max_versions`.
 ///
 /// This deletes both the database records and the files on disk.
-fn prune_old_versions(
+pub(crate) fn prune_old_versions(
     config: &Config,
     repo: &SecretRepository,
     secret_id: i64,

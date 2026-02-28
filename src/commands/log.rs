@@ -1,18 +1,14 @@
 //! Log command handlers - viewing operation history.
 
-use crate::config::Config;
-use crate::db::{SecretRepository, init_db};
+use crate::db::SecretRepository;
 
 /// Handle the log command - show all secret operations from DB
-pub async fn handle_log(
-    config: &Config,
+pub fn handle_log(
+    repo: &SecretRepository,
     limit: Option<usize>,
     provider: Option<String>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     use chrono_humanize::HumanTime;
-
-    let conn = init_db(&config.db_path())?;
-    let repo = SecretRepository::new(conn);
 
     let operations = repo.list_operations(limit, provider.as_deref())?;
 

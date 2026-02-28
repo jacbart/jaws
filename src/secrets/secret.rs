@@ -6,17 +6,11 @@ use std::path::{Path, PathBuf};
 /// get_secret returns the secret's value as a String
 pub async fn get_secret(client: &Client, name: &str) -> Result<String, Box<dyn std::error::Error>> {
     let resp = client.get_secret_value().secret_id(name).send().await?;
-    let secret_value = resp.secret_string().expect("missing secret value");
+    let secret_value = resp.secret_string().ok_or(
+        "Secret is stored as binary, not a string. Binary secrets are not yet supported.",
+    )?;
 
     Ok(secret_value.to_string())
-}
-
-/// print_secret prints the secret's value to stdout
-pub async fn _print_secret(client: &Client, name: &str) -> Result<(), Box<dyn std::error::Error>> {
-    let secret_value = get_secret(client, name).await?;
-    println!("{}", secret_value);
-
-    Ok(())
 }
 
 /// download_secret gets a secret's value and saves it to a file locally, returning the file path

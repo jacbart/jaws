@@ -16,9 +16,8 @@ path = "src/main.rs"
 [dependencies]
 aws-config = { version = "1.8.6", features = ["behavior-version-latest"] }
 aws-sdk-secretsmanager = "1.88.0"
-tokio = { version = "1", features = ["full"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "sync"] }
 ff = { git = "https://github.com/jacbart/ff.git", branch = "main" }
-aws-smithy-async = "1.2.5"
 clap = { version = "4", features = ["derive"] }
 serde = { version = "1", features = ["derive"] }
 async-trait = "0.1"
@@ -35,13 +34,11 @@ age = { version = "0.11", features = ["ssh"] }
 tar = "0.4"
 rpassword = "7.4.0"
 chrono-humanize = "0.2.3"
-hostname = "0.4.2"
 thiserror = "2.0.18"
 uuid = { version = "1", features = ["v4"] }
 regex = "1"
 bitwarden = { version = "2.0.0", features = ["secrets"] }
 rustls = { version = "0.23", features = ["ring"] }
-rustls-webpki = { version = "0.102.8", features = ["std"] }
 keyring = { version = "3", features = ["apple-native", "linux-native"] }
 
 # Optional vendored OpenSSL for cross-compilation
