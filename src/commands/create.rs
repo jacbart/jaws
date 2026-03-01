@@ -89,7 +89,11 @@ pub async fn handle_create(
         remote_updated_at: None,
     };
     repo.upsert_secret(&input)?;
-    repo.log_operation("create", &provider_id, &final_name, None)?;
+    // Only log for remote providers — the jaws provider already logs
+    // inside its own create() method.
+    if provider.kind() != "jaws" {
+        repo.log_operation("create", &provider_id, &final_name, None)?;
+    }
 
     println!("Created {}://{} ({})", provider_id, final_name, result);
 

@@ -8,8 +8,8 @@ use jaws::DbProvider;
 use jaws::cli::{Cli, Commands, ConfigCommands, ProviderCommands};
 use jaws::commands::{
     handle_add_provider, handle_clean, handle_clear_cache, handle_create, handle_default_command,
-    handle_delete, handle_export, handle_history, handle_import, handle_interactive_generate,
-    handle_list, handle_log, handle_pull, handle_pull_inject, handle_push, handle_remove_provider,
+    handle_delete, handle_export, handle_import, handle_interactive_generate, handle_list,
+    handle_log, handle_pull, handle_pull_inject, handle_push, handle_remove_provider,
     handle_rollback, handle_sync,
 };
 use jaws::config::Config;
@@ -272,23 +272,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             handle_sync(&config, &repo, &providers).await?;
         }
 
-        Commands::History {
-            secret_name,
-            verbose,
-            limit,
-            remote,
-        } => {
-            handle_history(
-                &config,
-                &repo,
-                &providers,
-                secret_name,
-                verbose,
-                limit,
-                remote,
-            )
-            .await?;
-        }
+
 
         Commands::Rollback {
             secret_name,
@@ -322,8 +306,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             handle_create(&config, &repo, &providers, name, description, file).await?;
         }
 
-        Commands::Log { limit, provider } => {
-            handle_log(&repo, limit, provider)?;
+        Commands::Log {
+            secret_name,
+            limit,
+            provider,
+            verbose,
+        } => {
+            handle_log(&config, &repo, secret_name, limit, provider, verbose)?;
         }
 
         Commands::Clean {

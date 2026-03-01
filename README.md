@@ -4,6 +4,8 @@ Just A Working Secretsmanager
 
 A CLI tool and library for managing secrets from multiple providers (AWS Secrets Manager, GCP Secret Manager, 1Password, Bitwarden, and local storage) with local version tracking.
 
+![jaws demo](assets/demo.gif)
+
 ## Features
 
 - **Multi-provider support** - AWS Secrets Manager, GCP Secret Manager, 1Password, Bitwarden, and local "jaws" secrets
@@ -73,8 +75,11 @@ jaws pull gcp://my-secret
 # Edit and push changes back
 jaws push
 
-# View local version history
-jaws history
+# View operation log
+jaws log
+
+# View version history for a specific secret
+jaws log my-secret
 
 # Rollback to a previous version
 jaws rollback
@@ -97,15 +102,16 @@ jaws rollback
 | `jaws list`               | List all known secrets (one per line)          |
 | `jaws sync`               | Refresh local cache of remote secrets          |
 
-### History & Rollback
+### Log & Rollback
 
 | Command                  | Description                                    |
 | ------------------------ | ---------------------------------------------- |
-| `jaws history`           | View local version history                     |
-| `jaws history --remote`  | View remote provider version history           |
+| `jaws log`               | Show global operation log                      |
+| `jaws log <SECRET>`      | Show version history for a specific secret     |
+| `jaws log -v <SECRET>`   | Verbose version history (hashes, filenames)    |
+| `jaws log -p <PROVIDER>` | Filter operation log by provider               |
 | `jaws rollback`          | Rollback to a previous local version           |
 | `jaws rollback --remote` | Rollback to a previous version on the provider |
-| `jaws log`               | Show operation log                             |
 
 ### Archive Operations
 
@@ -355,6 +361,16 @@ cargo build --release
 # Or using Nix
 nix build
 ```
+
+### Demo GIF
+
+Regenerate the demo GIF (requires the nix dev shell for `vhs`, `ttyd`, and `ffmpeg`):
+
+```bash
+./scripts/demo.sh
+```
+
+The tape file at `scripts/demo.tape` defines the recorded session. Edit it to change what the demo shows.
 
 ### Cross-Compilation
 

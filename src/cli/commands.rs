@@ -74,23 +74,7 @@ pub enum Commands {
         #[arg(short, long)]
         local: bool,
     },
-    /// View version history (local and remote)
-    History {
-        /// Name of the secret to show history for (optional - if not provided, opens TUI selector)
-        secret_name: Option<String>,
 
-        /// Show full details including file hashes
-        #[arg(short, long)]
-        verbose: bool,
-
-        /// Maximum number of versions to show (default: all)
-        #[arg(short = 'n', long)]
-        limit: Option<usize>,
-
-        /// Show remote provider version history instead of local
-        #[arg(short, long)]
-        remote: bool,
-    },
     /// Rollback a secret to a previous version (local or remote)
     Rollback {
         /// Name of the secret to rollback
@@ -157,15 +141,24 @@ pub enum Commands {
         #[arg(short, long)]
         file: Option<PathBuf>,
     },
-    /// Show operation log (all secret operations)
+    /// Show operation log or version history for a specific secret
     Log {
-        /// Maximum number of operations to show
+        /// Secret reference (e.g., "my-secret", "aws://db-pass"). If provided,
+        /// shows version history for that secret. If omitted, shows the global
+        /// operation log.
+        secret_name: Option<String>,
+
+        /// Maximum number of entries to show
         #[arg(short = 'n', long)]
         limit: Option<usize>,
 
-        /// Filter by provider
+        /// Filter by provider (global log only)
         #[arg(short, long)]
         provider: Option<String>,
+
+        /// Show full details including file hashes (version history only)
+        #[arg(short, long)]
+        verbose: bool,
     },
     /// Clear local cache and secrets
     Clean {

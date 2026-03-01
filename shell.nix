@@ -21,6 +21,10 @@ pkgs.mkShell {
     git-cliff
     cargo-zigbuild
     # zig
+    # Demo GIF recording
+    vhs
+    ttyd
+    ffmpeg
   ];
   nativeBuildInputs = with pkgs; [
     pkg-config
