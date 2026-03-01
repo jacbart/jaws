@@ -275,8 +275,7 @@ async fn handle_remote_rollback(
 ) -> Result<(), Box<dyn std::error::Error>> {
     let selected = if let Some(name) = secret_name {
         // Parse the secret reference to identify provider
-        let (provider_id, secret) = parse_secret_ref(&name, config.default_provider().as_deref())
-            .map_err(|e| -> Box<dyn std::error::Error> { e.into() })?;
+        let (provider_id, secret) = parse_secret_ref(&name, config.default_provider().as_deref())?;
 
         vec![(provider_id, secret)]
     } else {

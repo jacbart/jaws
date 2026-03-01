@@ -9,25 +9,23 @@ use std::path::PathBuf;
 use uuid::Uuid;
 
 use crate::db::{SecretInput, SecretRepository, init_db};
+use crate::error::JawsError;
 use crate::secrets::manager::SecretManager;
 use crate::secrets::storage::{
     compute_content_hash, get_secret_path, hash_api_ref, load_secret_file, save_secret_file,
 };
 
-/// Filter for jaws secrets (future use for pattern matching, tags, etc.)
-#[derive(Debug, Clone, Default)]
-pub struct JawsFilter;
-
 /// Local secret manager that stores secrets in the jaws secrets directory.
 /// This provider is always available without any external configuration.
 pub struct JawsSecretManager {
     secrets_path: PathBuf,
+    id: String,
 }
 
 impl JawsSecretManager {
     /// Create a new JawsSecretManager.
-    pub fn new(secrets_path: PathBuf) -> Self {
-        Self { secrets_path }
+    pub fn new(secrets_path: PathBuf, id: String) -> Self {
+        Self { secrets_path, id }
     }
 
     /// Generate a unique API reference for local secrets.
@@ -41,7 +39,7 @@ impl JawsSecretManager {
     }
 
     /// Get a repository connection.
-    fn get_repo(&self) -> Result<SecretRepository, Box<dyn std::error::Error>> {
+    fn get_repo(&self) -> Result<SecretRepository, JawsError> {
         let db_path = self.secrets_path.join("jaws.db");
         let conn = init_db(&db_path)?;
         Ok(SecretRepository::new(conn))
@@ -54,31 +52,42 @@ impl JawsSecretManager {
         name: &str,
         value: &str,
         description: Option<&str>,
-    ) -> Result<String, Box<dyn std::error::Error>> {
+    ) -> Result<String, JawsError> {
         <Self as SecretManager>::create(self, name, value, description).await
     }
 }
 
 #[async_trait]
 impl SecretManager for JawsSecretManager {
-    type Filter = JawsFilter;
+    fn id(&self) -> &str {
+        &self.id
+    }
 
-    async fn get_secret(&self, api_ref: &str) -> Result<String, Box<dyn std::error::Error>> {
+    fn kind(&self) -> &str {
+        "jaws"
+    }
+
+    fn supports_rollback(&self) -> bool {
+        true
+    }
+
+    fn supports_remote_history(&self) -> bool {
+        true // Local history is always available
+    }
+
+    async fn get_secret(&self, api_ref: &str) -> Result<String, JawsError> {
         let repo = self.get_repo()?;
         let secret = repo
             .get_secret_by_api_ref("jaws", api_ref)?
-            .ok_or_else(|| format!("Secret not found: {}", api_ref))?;
+            .ok_or_else(|| JawsError::not_found(format!("Secret not found: {}", api_ref)))?;
         let download = repo
             .get_latest_download(secret.id)?
-            .ok_or("No downloaded version found")?;
+            .ok_or_else(|| JawsError::not_found("No downloaded version found"))?;
         let content = load_secret_file(&self.secrets_path, &download.filename)?;
         Ok(content)
     }
 
-    async fn list_all(
-        &self,
-        _filters: Option<Vec<Self::Filter>>,
-    ) -> Result<Vec<String>, Box<dyn std::error::Error>> {
+    async fn list_all(&self) -> Result<Vec<String>, JawsError> {
         let repo = self.get_repo()?;
         let secrets = repo.list_secrets_by_provider("jaws")?;
         Ok(secrets.into_iter().map(|s| s.display_name).collect())
@@ -86,10 +95,8 @@ impl SecretManager for JawsSecretManager {
 
     fn list_secrets_stream(
         &self,
-        _filters: Option<Vec<Self::Filter>>,
     ) -> Box<dyn Stream<Item = Result<String, Box<dyn std::error::Error + Send>>> + Send + Unpin>
     {
-        // Synchronously load secrets and return as a simple stream
         let db_path = self.secrets_path.join("jaws.db");
 
         let secrets: Vec<Result<String, Box<dyn std::error::Error + Send>>> =
@@ -106,28 +113,12 @@ impl SecretManager for JawsSecretManager {
                     }
                 }
                 Err(e) => {
-                    vec![Err(Box::new(e) as Box<dyn std::error::Error + Send>)]
+                    vec![Err(Box::new(std::io::Error::other(e.to_string()))
+                        as Box<dyn std::error::Error + Send>)]
                 }
             };
 
         Box::new(stream::iter(secrets))
-    }
-
-    async fn download(
-        &self,
-        api_ref: &str,
-        dir: PathBuf,
-    ) -> Result<String, Box<dyn std::error::Error>> {
-        // For local secrets, "download" means copy to the target directory
-        let content = self.get_secret(api_ref).await?;
-        let repo = self.get_repo()?;
-        let secret = repo
-            .get_secret_by_api_ref("jaws", api_ref)?
-            .ok_or("Secret not found")?;
-
-        let dest = dir.join(&secret.display_name);
-        std::fs::write(&dest, &content)?;
-        Ok(dest.to_string_lossy().to_string())
     }
 
     async fn create(
@@ -135,17 +126,14 @@ impl SecretManager for JawsSecretManager {
         name: &str,
         value: &str,
         description: Option<&str>,
-    ) -> Result<String, Box<dyn std::error::Error>> {
+    ) -> Result<String, JawsError> {
         let api_ref = Self::generate_api_ref();
         let hash = hash_api_ref(&api_ref);
 
-        // Ensure secrets directory exists
         std::fs::create_dir_all(&self.secrets_path)?;
 
-        // Save file
         let (filename, content_hash) = save_secret_file(&self.secrets_path, name, &hash, 1, value)?;
 
-        // Save to DB
         let repo = self.get_repo()?;
         let input = SecretInput {
             provider_id: "jaws".to_string(),
@@ -162,18 +150,14 @@ impl SecretManager for JawsSecretManager {
         Ok(api_ref)
     }
 
-    async fn update(
-        &self,
-        api_ref: &str,
-        value: &str,
-    ) -> Result<String, Box<dyn std::error::Error>> {
+    async fn update(&self, api_ref: &str, value: &str) -> Result<String, JawsError> {
         let repo = self.get_repo()?;
         let secret = repo
             .get_secret_by_api_ref("jaws", api_ref)?
-            .ok_or_else(|| format!("Secret not found: {}", api_ref))?;
+            .ok_or_else(|| JawsError::not_found(format!("Secret not found: {}", api_ref)))?;
         let latest = repo
             .get_latest_download(secret.id)?
-            .ok_or("No version exists")?;
+            .ok_or_else(|| JawsError::not_found("No version exists"))?;
 
         let new_version = latest.version + 1;
         let (filename, content_hash) = save_secret_file(
@@ -195,13 +179,12 @@ impl SecretManager for JawsSecretManager {
         Ok(format!("v{}", new_version))
     }
 
-    async fn delete(&self, api_ref: &str, _force: bool) -> Result<(), Box<dyn std::error::Error>> {
+    async fn delete(&self, api_ref: &str, _force: bool) -> Result<(), JawsError> {
         let repo = self.get_repo()?;
         let secret = repo
             .get_secret_by_api_ref("jaws", api_ref)?
-            .ok_or_else(|| format!("Secret not found: {}", api_ref))?;
+            .ok_or_else(|| JawsError::not_found(format!("Secret not found: {}", api_ref)))?;
 
-        // Delete all version files
         let downloads = repo.list_downloads(secret.id)?;
         for download in downloads {
             let path = get_secret_path(&self.secrets_path, &download.filename);
@@ -217,39 +200,33 @@ impl SecretManager for JawsSecretManager {
         Ok(())
     }
 
-    async fn rollback(
-        &self,
-        api_ref: &str,
-        version_id: Option<&str>,
-    ) -> Result<String, Box<dyn std::error::Error>> {
+    async fn rollback(&self, api_ref: &str, version_id: Option<&str>) -> Result<String, JawsError> {
         let repo = self.get_repo()?;
         let secret = repo
             .get_secret_by_api_ref("jaws", api_ref)?
-            .ok_or_else(|| format!("Secret not found: {}", api_ref))?;
+            .ok_or_else(|| JawsError::not_found(format!("Secret not found: {}", api_ref)))?;
 
         let downloads = repo.list_downloads(secret.id)?;
         if downloads.len() <= 1 {
-            return Err("Only one version exists, nothing to rollback to".into());
+            return Err(JawsError::Validation(
+                "Only one version exists, nothing to rollback to".into(),
+            ));
         }
 
-        // Determine target version
         let target = if let Some(v) = version_id {
             let version: i32 = v.parse()?;
             repo.get_download_by_version(secret.id, version)?
-                .ok_or_else(|| format!("Version {} not found", v))?
+                .ok_or_else(|| JawsError::not_found(format!("Version {} not found", v)))?
         } else {
-            // Default to previous version
             downloads
                 .get(1)
                 .cloned()
-                .ok_or("No previous version found")?
+                .ok_or_else(|| JawsError::not_found("No previous version found"))?
         };
 
-        // Read old content
         let content = load_secret_file(&self.secrets_path, &target.filename)?;
         let target_content_hash = compute_content_hash(&content);
 
-        // Compare with current version's hash - skip if identical
         let current = &downloads[0];
         if let Some(current_hash) = &current.file_hash {
             if current_hash == &target_content_hash {
@@ -260,7 +237,6 @@ impl SecretManager for JawsSecretManager {
             }
         }
 
-        // Content differs - create new version
         let new_version = current.version + 1;
 
         let (filename, content_hash) = save_secret_file(
@@ -288,5 +264,3 @@ impl SecretManager for JawsSecretManager {
         ))
     }
 }
-
-

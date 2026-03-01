@@ -1,5 +1,6 @@
 mod ffi;
 
+use crate::error::JawsError;
 use crate::secrets::manager::SecretManager;
 use async_trait::async_trait;
 use ffi::{
@@ -8,11 +9,6 @@ use ffi::{
 };
 use futures::stream::{self, Stream, StreamExt};
 use std::fmt;
-use std::path::PathBuf;
-
-/// A unit type for 1Password filters (not currently supported by the SDK)
-#[derive(Debug, Clone)]
-pub struct OnePasswordFilter;
 
 /// Separator used between display path and API reference in combined format
 const REF_SEPARATOR: &str = "|||";
@@ -52,7 +48,6 @@ impl SecretRef {
                 api_ref: api.to_string(),
             }
         } else {
-            // Fallback for old-style references without separator
             let display = combined.strip_prefix("op://").unwrap_or(combined);
             Self {
                 display_path: display.to_string(),
@@ -72,7 +67,6 @@ impl SecretRef {
 }
 
 impl fmt::Display for SecretRef {
-    /// Display shows only the human-readable path
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.display_path)
     }
@@ -82,31 +76,30 @@ pub struct OnePasswordSecretManager {
     sdk_client: SharedSdkClient,
     vault_id: String,
     vault_name: String,
+    id: String,
 }
 
 impl OnePasswordSecretManager {
     /// Create a new 1Password secret manager
     /// If vault is None, the manager can still list vaults but cannot access secrets
     pub async fn new(
+        provider_id: String,
         vault: Option<String>,
         token_env: &str,
-    ) -> Result<Self, Box<dyn std::error::Error>> {
-        // Create the SDK client
+    ) -> Result<Self, JawsError> {
         let client = OnePasswordSdkClient::from_env(token_env)
             .await
-            .map_err(|e| e as Box<dyn std::error::Error>)?;
+            .map_err(|e| JawsError::provider("onepassword", e.to_string()))?;
 
         let sdk_client = SharedSdkClient::new(client);
 
-        // If vault is specified, resolve it; otherwise create with empty vault (for vault discovery)
         let (vault_id, vault_name) = if let Some(vault_ref) = vault {
             let vault_info = sdk_client
                 .find_vault(&vault_ref)
                 .await
-                .map_err(|e| e as Box<dyn std::error::Error>)?;
+                .map_err(|e| JawsError::provider("onepassword", e.to_string()))?;
             (vault_info.id, vault_info.title)
         } else {
-            // No vault specified - manager can only be used for vault discovery
             (String::new(), String::new())
         };
 
@@ -114,75 +107,40 @@ impl OnePasswordSecretManager {
             sdk_client,
             vault_id,
             vault_name,
+            id: provider_id,
         })
     }
 
     /// Create a new 1Password secret manager with a specific vault ID
     pub async fn with_vault_id(
+        provider_id: String,
         vault_id: String,
         token_env: &str,
-    ) -> Result<Self, Box<dyn std::error::Error>> {
-        // Create the SDK client
+    ) -> Result<Self, JawsError> {
         let client = OnePasswordSdkClient::from_env(token_env)
             .await
-            .map_err(|e| e as Box<dyn std::error::Error>)?;
+            .map_err(|e| JawsError::provider("onepassword", e.to_string()))?;
 
         let sdk_client = SharedSdkClient::new(client);
 
-        // Find the vault to get its name
         let vault_info = sdk_client
             .find_vault(&vault_id)
             .await
-            .map_err(|e| e as Box<dyn std::error::Error>)?;
+            .map_err(|e| JawsError::provider("onepassword", e.to_string()))?;
 
         Ok(Self {
             sdk_client,
             vault_id: vault_info.id,
             vault_name: vault_info.title,
+            id: provider_id,
         })
     }
 
     /// List all vaults accessible to the service account
-    pub fn list_vaults(&self) -> Result<Vec<VaultOverview>, Box<dyn std::error::Error>> {
+    pub fn list_vaults(&self) -> Result<Vec<VaultOverview>, JawsError> {
         self.sdk_client
             .list_vaults_sync()
-            .map_err(|e| e as Box<dyn std::error::Error>)
-    }
-
-    /// Download a secret to a local file
-    async fn download_secret(
-        &self,
-        name: &str,
-        dir: PathBuf,
-    ) -> Result<String, Box<dyn std::error::Error>> {
-        use std::fs::{self, File};
-        use std::io::Write;
-        use std::path::Path;
-
-        // Parse the combined reference
-        let secret_ref = SecretRef::parse(name);
-
-        // Resolve the secret using the API reference (with IDs)
-        let secret_value = self
-            .sdk_client
-            .resolve_secret(&secret_ref.api_ref)
-            .await
-            .map_err(|e| e as Box<dyn std::error::Error>)?;
-
-        // Use display path for the filename (preserves folder structure)
-        let path = dir.join(Path::new(&secret_ref.display_path));
-        let path_string = path.display().to_string();
-
-        // Create parent directories if needed
-        if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent)?;
-        }
-
-        // Write the secret to file
-        let mut file = File::create(path.as_path())?;
-        file.write_all(secret_value.as_bytes())?;
-
-        Ok(path_string)
+            .map_err(|e| JawsError::provider("onepassword", e.to_string()))
     }
 
     /// Resolve vault ID and item details from a path string
@@ -190,14 +148,14 @@ impl OnePasswordSecretManager {
     async fn resolve_context(
         &self,
         path: &str,
-    ) -> Result<(String, String, Option<String>), Box<dyn std::error::Error>> {
+    ) -> Result<(String, String, Option<String>), JawsError> {
         let parts: Vec<&str> = path.split('/').collect();
         match parts.len() {
             1 => {
                 if self.vault_id.is_empty() {
-                    return Err(
-                        "No default vault configured. Please specify path as 'Vault/Item'".into(),
-                    );
+                    return Err(JawsError::validation(
+                        "No default vault configured. Please specify path as 'Vault/Item'",
+                    ));
                 }
                 Ok((self.vault_id.clone(), parts[0].to_string(), None))
             }
@@ -210,74 +168,73 @@ impl OnePasswordSecretManager {
                     None
                 };
 
-                // If the name matches current vault, use cached ID
                 if !self.vault_name.is_empty() && vault_name == self.vault_name {
                     return Ok((self.vault_id.clone(), item_title.to_string(), field_name));
                 }
 
-                // Otherwise resolve vault ID
                 let vault = self
                     .sdk_client
                     .find_vault(vault_name)
                     .await
-                    .map_err(|e| e as Box<dyn std::error::Error>)?;
+                    .map_err(|e| JawsError::provider("onepassword", e.to_string()))?;
                 Ok((vault.id, item_title.to_string(), field_name))
             }
-            _ => Err(
-                "Invalid path format. Expected 'Item', 'Vault/Item', or 'Vault/Item/Field'".into(),
-            ),
+            _ => Err(JawsError::validation(
+                "Invalid path format. Expected 'Item', 'Vault/Item', or 'Vault/Item/Field'",
+            )),
         }
     }
 
     /// Find an item ID by title in a specific vault
-    async fn find_item_id(
-        &self,
-        vault_id: &str,
-        title: &str,
-    ) -> Result<String, Box<dyn std::error::Error>> {
+    async fn find_item_id(&self, vault_id: &str, title: &str) -> Result<String, JawsError> {
         let items = self
             .sdk_client
             .list_items(vault_id)
             .await
-            .map_err(|e| e as Box<dyn std::error::Error>)?;
+            .map_err(|e| JawsError::provider("onepassword", e.to_string()))?;
 
         for item in items {
             if item.title == title {
                 return Ok(item.id);
             }
         }
-        Err(format!("Item '{}' not found in vault", title).into())
+        Err(JawsError::not_found(format!(
+            "Item '{}' not found in vault",
+            title
+        )))
     }
 }
 
 #[async_trait]
 impl SecretManager for OnePasswordSecretManager {
-    type Filter = OnePasswordFilter;
+    fn id(&self) -> &str {
+        &self.id
+    }
 
-    async fn get_secret(&self, name: &str) -> Result<String, Box<dyn std::error::Error>> {
+    fn kind(&self) -> &str {
+        "onepassword"
+    }
+
+    async fn get_secret(&self, name: &str) -> Result<String, JawsError> {
         let secret_ref = SecretRef::parse(name);
         self.sdk_client
             .resolve_secret(&secret_ref.api_ref)
             .await
-            .map_err(|e| e as Box<dyn std::error::Error>)
+            .map_err(|e| JawsError::provider("onepassword", e.to_string()))
     }
 
-    async fn list_all(
-        &self,
-        _filters: Option<Vec<OnePasswordFilter>>,
-    ) -> Result<Vec<String>, Box<dyn std::error::Error>> {
+    async fn list_all(&self) -> Result<Vec<String>, JawsError> {
         list_items_for_stream(
             self.sdk_client.clone(),
             self.vault_id.clone(),
             self.vault_name.clone(),
         )
         .await
-        .map_err(|e| e as Box<dyn std::error::Error>)
+        .map_err(|e| JawsError::Other(e.to_string()))
     }
 
     fn list_secrets_stream(
         &self,
-        _filters: Option<Vec<OnePasswordFilter>>,
     ) -> Box<dyn Stream<Item = Result<String, Box<dyn std::error::Error + Send>>> + Send + Unpin>
     {
         let sdk_client = self.sdk_client.clone();
@@ -301,26 +258,16 @@ impl SecretManager for OnePasswordSecretManager {
         )
     }
 
-    async fn download(
-        &self,
-        name: &str,
-        dir: PathBuf,
-    ) -> Result<String, Box<dyn std::error::Error>> {
-        self.download_secret(name, dir).await
-    }
-
     async fn create(
         &self,
         name: &str,
         value: &str,
         description: Option<&str>,
-    ) -> Result<String, Box<dyn std::error::Error>> {
+    ) -> Result<String, JawsError> {
         let (vault_id, item_title, _) = self.resolve_context(name).await?;
 
-        // Create a new item
-        // We create a "Login" item which is the most standard type for secrets
         let item = Item {
-            id: String::new(), // ID is ignored on create
+            id: String::new(),
             title: item_title.clone(),
             category: ItemCategory::Login,
             vault_id: vault_id.clone(),
@@ -355,7 +302,7 @@ impl SecretManager for OnePasswordSecretManager {
             .sdk_client
             .create_item(&item)
             .await
-            .map_err(|e| e as Box<dyn std::error::Error>)?;
+            .map_err(|e| JawsError::provider("onepassword", e.to_string()))?;
 
         Ok(format!(
             "Created item '{}' ({}) in vault {}",
@@ -363,9 +310,7 @@ impl SecretManager for OnePasswordSecretManager {
         ))
     }
 
-    async fn update(&self, name: &str, value: &str) -> Result<String, Box<dyn std::error::Error>> {
-        // Check if this is an op:// reference format (used when pushing from DB)
-        // Format: op://vault_id/item_id/field_id
+    async fn update(&self, name: &str, value: &str) -> Result<String, JawsError> {
         let (vault_id, item_id, field_name) = if name.starts_with("op://") {
             let path = name.strip_prefix("op://").unwrap();
             let parts: Vec<&str> = path.split('/').collect();
@@ -377,33 +322,28 @@ impl SecretManager for OnePasswordSecretManager {
                     Some(parts[2].to_string()),
                 ),
                 _ => {
-                    return Err(format!(
+                    return Err(JawsError::validation(format!(
                         "Invalid op:// reference format. Expected 'op://vault/item' or 'op://vault/item/field', got: {}",
                         name
-                    )
-                    .into())
+                    )));
                 }
             }
         } else {
-            // Display path format - resolve to IDs
             let (vault_id, item_title, field_name) = self.resolve_context(name).await?;
             let item_id = self.find_item_id(&vault_id, &item_title).await?;
             (vault_id, item_id, field_name)
         };
 
-        // Get full item to update
         let mut item = self
             .sdk_client
             .get_item(&vault_id, &item_id)
             .await
-            .map_err(|e| e as Box<dyn std::error::Error>)?;
+            .map_err(|e| JawsError::provider("onepassword", e.to_string()))?;
 
-        // Find the field to update
         let target_field_id = field_name.unwrap_or_else(|| "password".to_string());
         let mut updated = false;
 
         for field in &mut item.fields {
-            // Check by ID or Title
             if field.id == target_field_id || field.title == target_field_id {
                 field.value = value.to_string();
                 updated = true;
@@ -411,7 +351,6 @@ impl SecretManager for OnePasswordSecretManager {
             }
         }
 
-        // If not found and we were looking for "password", try to find any concealed field
         if !updated && target_field_id == "password" {
             for field in &mut item.fields {
                 if let ItemFieldType::Concealed = field.field_type {
@@ -422,7 +361,6 @@ impl SecretManager for OnePasswordSecretManager {
             }
         }
 
-        // If still not updated, add the field
         if !updated {
             item.fields.push(ItemField {
                 id: target_field_id.clone(),
@@ -437,7 +375,7 @@ impl SecretManager for OnePasswordSecretManager {
             .sdk_client
             .put_item(&item)
             .await
-            .map_err(|e| e as Box<dyn std::error::Error>)?;
+            .map_err(|e| JawsError::provider("onepassword", e.to_string()))?;
 
         Ok(format!(
             "Updated item '{}' ({})",
@@ -445,7 +383,7 @@ impl SecretManager for OnePasswordSecretManager {
         ))
     }
 
-    async fn delete(&self, name: &str, force: bool) -> Result<(), Box<dyn std::error::Error>> {
+    async fn delete(&self, name: &str, force: bool) -> Result<(), JawsError> {
         let (vault_id, item_title, _) = self.resolve_context(name).await?;
         let item_id = self.find_item_id(&vault_id, &item_title).await?;
 
@@ -453,28 +391,25 @@ impl SecretManager for OnePasswordSecretManager {
             self.sdk_client
                 .delete_item(&vault_id, &item_id)
                 .await
-                .map_err(|e| e as Box<dyn std::error::Error>)?;
+                .map_err(|e| JawsError::provider("onepassword", e.to_string()))?;
         } else {
             self.sdk_client
                 .archive_item(&vault_id, &item_id)
                 .await
-                .map_err(|e| e as Box<dyn std::error::Error>)?;
+                .map_err(|e| JawsError::provider("onepassword", e.to_string()))?;
         }
 
         Ok(())
     }
 
-    async fn rollback(
-        &self,
-        _name: &str,
-        _version_id: Option<&str>,
-    ) -> Result<String, Box<dyn std::error::Error>> {
-        Err("1Password SDK does not support rollback operations. Please use the 1Password app or CLI.".into())
+    async fn rollback(&self, _name: &str, _version_id: Option<&str>) -> Result<String, JawsError> {
+        Err(JawsError::unsupported(
+            "1Password SDK does not support rollback operations. Please use the 1Password app or CLI.",
+        ))
     }
 }
 
 /// Helper function for streaming - separated to avoid lifetime issues
-/// Uses item IDs instead of titles in the op:// reference to handle items with slashes in names
 async fn list_items_for_stream(
     sdk_client: SharedSdkClient,
     vault_id: String,
@@ -489,10 +424,6 @@ async fn list_items_for_stream(
     for item in items {
         match sdk_client.get_item(&vault_id, &item.id).await {
             Ok(full_item) => {
-                // Use item ID instead of title to avoid issues with slashes in item names
-                // Format for display: "vault_name/item_title/field_title" (human readable)
-                // Format for API: "op://vault_id/item_id/field_id" (uses IDs)
-
                 for field in &full_item.fields {
                     if !field.value.is_empty() && !field.title.is_empty() {
                         let secret_ref = SecretRef::new(
@@ -521,9 +452,7 @@ async fn list_items_for_stream(
                     secret_refs.push(secret_ref.to_combined());
                 }
             }
-            Err(_) => {
-                // Silently skip items we can't access (permissions, etc.)
-            }
+            Err(_) => {}
         }
     }
 

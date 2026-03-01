@@ -1,12 +1,14 @@
 //! Database schema and initialization.
 
-use rusqlite::{Connection, Result};
+use rusqlite::Connection;
 use std::path::Path;
+
+use crate::error::JawsError;
 
 const SCHEMA_VERSION: i32 = 3;
 
 /// Initialize the database at the given path, creating tables if needed.
-pub fn init_db(path: &Path) -> Result<Connection> {
+pub fn init_db(path: &Path) -> Result<Connection, JawsError> {
     let conn = Connection::open(path)?;
 
     // Restrict database file permissions to owner-only (contains encrypted credentials)
@@ -30,7 +32,7 @@ pub fn init_db(path: &Path) -> Result<Connection> {
     Ok(conn)
 }
 
-fn get_schema_version(conn: &Connection) -> Result<i32> {
+fn get_schema_version(conn: &Connection) -> rusqlite::Result<i32> {
     // Check if schema_version table exists
     let exists: bool = conn.query_row(
         "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='schema_version')",
@@ -45,7 +47,7 @@ fn get_schema_version(conn: &Connection) -> Result<i32> {
     conn.query_row("SELECT version FROM schema_version", [], |row| row.get(0))
 }
 
-fn set_schema_version(conn: &Connection, version: i32) -> Result<()> {
+fn set_schema_version(conn: &Connection, version: i32) -> rusqlite::Result<()> {
     conn.execute(
         "INSERT OR REPLACE INTO schema_version (id, version) VALUES (1, ?)",
         [version],
@@ -53,7 +55,7 @@ fn set_schema_version(conn: &Connection, version: i32) -> Result<()> {
     Ok(())
 }
 
-fn create_tables(conn: &Connection) -> Result<()> {
+fn create_tables(conn: &Connection) -> rusqlite::Result<()> {
     conn.execute_batch(
         r#"
         -- Schema version tracking
@@ -131,7 +133,7 @@ fn create_tables(conn: &Connection) -> Result<()> {
     Ok(())
 }
 
-fn migrate(conn: &Connection, from_version: i32, to_version: i32) -> Result<()> {
+fn migrate(conn: &Connection, from_version: i32, to_version: i32) -> rusqlite::Result<()> {
     for version in from_version..to_version {
         match version {
             0 => {

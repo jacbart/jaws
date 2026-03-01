@@ -2,11 +2,13 @@
 
 use std::path::Path;
 
+use crate::error::JawsError;
+
 /// Set restrictive permissions (owner-only read/write) on a file.
 ///
 /// On Unix systems this sets mode 0o600. On other platforms this is a no-op
 /// since the permission model differs.
-pub fn restrict_file_permissions(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
+pub fn restrict_file_permissions(path: &Path) -> Result<(), JawsError> {
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;

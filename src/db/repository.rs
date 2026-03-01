@@ -5,9 +5,16 @@ use chrono::{DateTime, Utc};
 use rusqlite::{Connection, OptionalExtension, params};
 use std::sync::{Arc, Mutex};
 
+use crate::error::JawsError;
+
 /// Repository for managing secrets in the database.
 pub struct SecretRepository {
     conn: Arc<Mutex<Connection>>,
+}
+
+/// Helper to convert PoisonError from Mutex::lock() into JawsError.
+fn lock_err<T>(e: std::sync::PoisonError<T>) -> JawsError {
+    JawsError::Other(e.to_string())
 }
 
 impl SecretRepository {
@@ -23,8 +30,8 @@ impl SecretRepository {
     // ========================================================================
 
     /// Insert or update a provider.
-    pub fn upsert_provider(&self, provider: &DbProvider) -> Result<(), Box<dyn std::error::Error>> {
-        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+    pub fn upsert_provider(&self, provider: &DbProvider) -> Result<(), JawsError> {
+        let conn = self.conn.lock().map_err(lock_err)?;
         conn.execute(
             r#"
             INSERT INTO providers (id, kind, last_sync_at, config_json)
@@ -45,8 +52,8 @@ impl SecretRepository {
     }
 
     /// Get a provider by ID.
-    pub fn get_provider(&self, id: &str) -> Result<Option<DbProvider>, Box<dyn std::error::Error>> {
-        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+    pub fn get_provider(&self, id: &str) -> Result<Option<DbProvider>, JawsError> {
+        let conn = self.conn.lock().map_err(lock_err)?;
         let result = conn
             .query_row(
                 "SELECT id, kind, last_sync_at, config_json FROM providers WHERE id = ?",
@@ -68,8 +75,8 @@ impl SecretRepository {
     }
 
     /// Update the last sync time for a provider to now.
-    pub fn update_provider_sync_time(&self, id: &str) -> Result<(), Box<dyn std::error::Error>> {
-        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+    pub fn update_provider_sync_time(&self, id: &str) -> Result<(), JawsError> {
+        let conn = self.conn.lock().map_err(lock_err)?;
         let now = Utc::now().to_rfc3339();
         conn.execute(
             "UPDATE providers SET last_sync_at = ? WHERE id = ?",
@@ -83,8 +90,8 @@ impl SecretRepository {
     // ========================================================================
 
     /// Insert or update a secret. Returns the secret ID.
-    pub fn upsert_secret(&self, secret: &SecretInput) -> Result<i64, Box<dyn std::error::Error>> {
-        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+    pub fn upsert_secret(&self, secret: &SecretInput) -> Result<i64, JawsError> {
+        let conn = self.conn.lock().map_err(lock_err)?;
         conn.execute(
             r#"
             INSERT INTO secrets (provider_id, api_ref, display_name, hash, description, remote_updated_at)
@@ -116,11 +123,8 @@ impl SecretRepository {
     }
 
     /// Get a secret by its hash.
-    pub fn get_secret_by_hash(
-        &self,
-        hash: &str,
-    ) -> Result<Option<DbSecret>, Box<dyn std::error::Error>> {
-        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+    pub fn get_secret_by_hash(&self, hash: &str) -> Result<Option<DbSecret>, JawsError> {
+        let conn = self.conn.lock().map_err(lock_err)?;
         let result = conn
             .query_row(
                 r#"
@@ -139,8 +143,8 @@ impl SecretRepository {
         &self,
         provider_id: &str,
         api_ref: &str,
-    ) -> Result<Option<DbSecret>, Box<dyn std::error::Error>> {
-        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+    ) -> Result<Option<DbSecret>, JawsError> {
+        let conn = self.conn.lock().map_err(lock_err)?;
         let result = conn
             .query_row(
                 r#"
@@ -155,11 +159,8 @@ impl SecretRepository {
     }
 
     /// List all secrets for a provider.
-    pub fn list_secrets_by_provider(
-        &self,
-        provider_id: &str,
-    ) -> Result<Vec<DbSecret>, Box<dyn std::error::Error>> {
-        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+    pub fn list_secrets_by_provider(&self, provider_id: &str) -> Result<Vec<DbSecret>, JawsError> {
+        let conn = self.conn.lock().map_err(lock_err)?;
         let mut stmt = conn.prepare(
             r#"
             SELECT id, provider_id, api_ref, display_name, hash, description, remote_updated_at, created_at
@@ -180,8 +181,8 @@ impl SecretRepository {
         &self,
         provider_id: &str,
         display_name: &str,
-    ) -> Result<Option<DbSecret>, Box<dyn std::error::Error>> {
-        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+    ) -> Result<Option<DbSecret>, JawsError> {
+        let conn = self.conn.lock().map_err(lock_err)?;
         let result = conn
             .query_row(
                 r#"
@@ -197,11 +198,8 @@ impl SecretRepository {
 
     /// List all known secrets, optionally filtered by provider.
     /// Returns all secrets from the database regardless of download status.
-    pub fn list_all_secrets(
-        &self,
-        provider_id: Option<&str>,
-    ) -> Result<Vec<DbSecret>, Box<dyn std::error::Error>> {
-        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+    pub fn list_all_secrets(&self, provider_id: Option<&str>) -> Result<Vec<DbSecret>, JawsError> {
+        let conn = self.conn.lock().map_err(lock_err)?;
 
         let secrets = if let Some(provider) = provider_id {
             let mut stmt = conn.prepare(
@@ -229,10 +227,8 @@ impl SecretRepository {
     }
 
     /// List all downloaded secrets with their latest download info.
-    pub fn list_all_downloaded_secrets(
-        &self,
-    ) -> Result<Vec<(DbSecret, DbDownload)>, Box<dyn std::error::Error>> {
-        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+    pub fn list_all_downloaded_secrets(&self) -> Result<Vec<(DbSecret, DbDownload)>, JawsError> {
+        let conn = self.conn.lock().map_err(lock_err)?;
         let mut stmt = conn.prepare(
             r#"
             SELECT 
@@ -287,11 +283,8 @@ impl SecretRepository {
 
     /// Delete all secrets and their downloads for a specific provider.
     /// Returns the number of secrets deleted.
-    pub fn delete_secrets_by_provider(
-        &self,
-        provider_id: &str,
-    ) -> Result<usize, Box<dyn std::error::Error>> {
-        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+    pub fn delete_secrets_by_provider(&self, provider_id: &str) -> Result<usize, JawsError> {
+        let conn = self.conn.lock().map_err(lock_err)?;
 
         // First delete all downloads for secrets of this provider
         conn.execute(
@@ -311,8 +304,8 @@ impl SecretRepository {
 
     /// Delete all secrets and downloads (full reset).
     /// Returns the number of secrets deleted.
-    pub fn delete_all_secrets(&self) -> Result<usize, Box<dyn std::error::Error>> {
-        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+    pub fn delete_all_secrets(&self) -> Result<usize, JawsError> {
+        let conn = self.conn.lock().map_err(lock_err)?;
 
         // Delete all downloads first (foreign key constraint)
         conn.execute("DELETE FROM downloads", [])?;
@@ -336,8 +329,8 @@ impl SecretRepository {
         secret_id: i64,
         filename: &str,
         file_hash: &str,
-    ) -> Result<DbDownload, Box<dyn std::error::Error>> {
-        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+    ) -> Result<DbDownload, JawsError> {
+        let conn = self.conn.lock().map_err(lock_err)?;
 
         // Get next version number
         let next_version: i32 = conn
@@ -376,11 +369,8 @@ impl SecretRepository {
     }
 
     /// Get the latest download for a secret.
-    pub fn get_latest_download(
-        &self,
-        secret_id: i64,
-    ) -> Result<Option<DbDownload>, Box<dyn std::error::Error>> {
-        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+    pub fn get_latest_download(&self, secret_id: i64) -> Result<Option<DbDownload>, JawsError> {
+        let conn = self.conn.lock().map_err(lock_err)?;
         let result = conn
             .query_row(
                 r#"
@@ -398,11 +388,8 @@ impl SecretRepository {
     }
 
     /// List all downloads for a secret.
-    pub fn list_downloads(
-        &self,
-        secret_id: i64,
-    ) -> Result<Vec<DbDownload>, Box<dyn std::error::Error>> {
-        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+    pub fn list_downloads(&self, secret_id: i64) -> Result<Vec<DbDownload>, JawsError> {
+        let conn = self.conn.lock().map_err(lock_err)?;
         let mut stmt = conn.prepare(
             r#"
             SELECT id, secret_id, version, filename, downloaded_at, file_hash
@@ -423,8 +410,8 @@ impl SecretRepository {
         &self,
         secret_id: i64,
         version: i32,
-    ) -> Result<Option<DbDownload>, Box<dyn std::error::Error>> {
-        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+    ) -> Result<Option<DbDownload>, JawsError> {
+        let conn = self.conn.lock().map_err(lock_err)?;
         let result = conn
             .query_row(
                 r#"
@@ -440,18 +427,15 @@ impl SecretRepository {
     }
 
     /// Delete a specific download record by ID.
-    pub fn delete_download(&self, download_id: i64) -> Result<(), Box<dyn std::error::Error>> {
-        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+    pub fn delete_download(&self, download_id: i64) -> Result<(), JawsError> {
+        let conn = self.conn.lock().map_err(lock_err)?;
         conn.execute("DELETE FROM downloads WHERE id = ?", [download_id])?;
         Ok(())
     }
 
     /// Get a secret by its ID.
-    pub fn get_secret_by_id(
-        &self,
-        id: i64,
-    ) -> Result<Option<DbSecret>, Box<dyn std::error::Error>> {
-        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+    pub fn get_secret_by_id(&self, id: i64) -> Result<Option<DbSecret>, JawsError> {
+        let conn = self.conn.lock().map_err(lock_err)?;
         let result = conn
             .query_row(
                 r#"
@@ -466,8 +450,8 @@ impl SecretRepository {
     }
 
     /// Delete a secret and all its download records.
-    pub fn delete_secret(&self, id: i64) -> Result<(), Box<dyn std::error::Error>> {
-        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+    pub fn delete_secret(&self, id: i64) -> Result<(), JawsError> {
+        let conn = self.conn.lock().map_err(lock_err)?;
         // Downloads are deleted via CASCADE (foreign key constraint)
         conn.execute("DELETE FROM secrets WHERE id = ?", [id])?;
         Ok(())
@@ -484,8 +468,8 @@ impl SecretRepository {
         provider_id: &str,
         secret_name: &str,
         details: Option<&str>,
-    ) -> Result<(), Box<dyn std::error::Error>> {
-        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+    ) -> Result<(), JawsError> {
+        let conn = self.conn.lock().map_err(lock_err)?;
         conn.execute(
             r#"
             INSERT INTO operations (operation_type, provider_id, secret_name, details)
@@ -501,8 +485,8 @@ impl SecretRepository {
         &self,
         limit: Option<usize>,
         provider_filter: Option<&str>,
-    ) -> Result<Vec<DbOperation>, Box<dyn std::error::Error>> {
-        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+    ) -> Result<Vec<DbOperation>, JawsError> {
+        let conn = self.conn.lock().map_err(lock_err)?;
 
         let query = if provider_filter.is_some() {
             format!(
@@ -552,8 +536,8 @@ impl SecretRepository {
         encrypted_value: &[u8],
         encryption_method: &str,
         ssh_pubkey_fingerprint: Option<&str>,
-    ) -> Result<(), Box<dyn std::error::Error>> {
-        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+    ) -> Result<(), JawsError> {
+        let conn = self.conn.lock().map_err(lock_err)?;
         let now = Utc::now().to_rfc3339();
         conn.execute(
             r#"
@@ -578,11 +562,8 @@ impl SecretRepository {
     }
 
     /// Get all stored credentials for a provider.
-    pub fn get_credentials(
-        &self,
-        provider_id: &str,
-    ) -> Result<Vec<StoredCredential>, Box<dyn std::error::Error>> {
-        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+    pub fn get_credentials(&self, provider_id: &str) -> Result<Vec<StoredCredential>, JawsError> {
+        let conn = self.conn.lock().map_err(lock_err)?;
         let mut stmt = conn.prepare(
             r#"
             SELECT id, provider_id, credential_key, encrypted_value, encryption_method, ssh_pubkey_fingerprint, created_at, updated_at
@@ -623,10 +604,8 @@ impl SecretRepository {
     ///
     /// Used by keychain cache clearing to enumerate entries that may exist
     /// in the OS credential store.
-    pub fn get_all_stored_credential_keys(
-        &self,
-    ) -> Result<Vec<(String, String)>, Box<dyn std::error::Error>> {
-        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+    pub fn get_all_stored_credential_keys(&self) -> Result<Vec<(String, String)>, JawsError> {
+        let conn = self.conn.lock().map_err(lock_err)?;
         let mut stmt = conn.prepare(
             "SELECT provider_id, credential_key FROM credentials ORDER BY provider_id, credential_key",
         )?;
@@ -637,11 +616,8 @@ impl SecretRepository {
     }
 
     /// Delete all stored credentials for a provider.
-    pub fn delete_credentials(
-        &self,
-        provider_id: &str,
-    ) -> Result<usize, Box<dyn std::error::Error>> {
-        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+    pub fn delete_credentials(&self, provider_id: &str) -> Result<usize, JawsError> {
+        let conn = self.conn.lock().map_err(lock_err)?;
         let deleted = conn.execute(
             "DELETE FROM credentials WHERE provider_id = ?",
             [provider_id],

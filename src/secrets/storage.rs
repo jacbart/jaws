@@ -8,6 +8,8 @@ use std::fs::{self, File};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
+use crate::error::JawsError;
+
 /// Length of the hash prefix used for filenames (16 hex chars = 64 bits).
 const HASH_LENGTH: usize = 16;
 
@@ -73,7 +75,7 @@ pub fn save_secret_file(
     hash: &str,
     version: i32,
     content: &str,
-) -> Result<(String, String), Box<dyn std::error::Error>> {
+) -> Result<(String, String), JawsError> {
     // Ensure directory exists
     fs::create_dir_all(secrets_path)?;
 
@@ -92,10 +94,7 @@ pub fn save_secret_file(
 }
 
 /// Load a secret from the filesystem.
-pub fn load_secret_file(
-    secrets_path: &Path,
-    filename: &str,
-) -> Result<String, Box<dyn std::error::Error>> {
+pub fn load_secret_file(secrets_path: &Path, filename: &str) -> Result<String, JawsError> {
     let file_path = secrets_path.join(filename);
     let content = fs::read_to_string(&file_path)?;
     Ok(content)
@@ -119,10 +118,7 @@ pub fn secret_file_exists(secrets_path: &Path, filename: &str) -> bool {
 }
 
 /// Delete a secret file.
-pub fn delete_secret_file(
-    secrets_path: &Path,
-    filename: &str,
-) -> Result<(), Box<dyn std::error::Error>> {
+pub fn delete_secret_file(secrets_path: &Path, filename: &str) -> Result<(), JawsError> {
     let file_path = secrets_path.join(filename);
     if file_path.exists() {
         fs::remove_file(&file_path)?;
@@ -134,7 +130,7 @@ pub fn delete_secret_file(
 /// Returns a list of (display_name, hash, version, filename) tuples.
 pub fn list_secret_files(
     secrets_path: &Path,
-) -> Result<Vec<(String, String, i32, String)>, Box<dyn std::error::Error>> {
+) -> Result<Vec<(String, String, i32, String)>, JawsError> {
     let mut results = Vec::new();
 
     if !secrets_path.exists() {

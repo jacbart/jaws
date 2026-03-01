@@ -14,7 +14,7 @@ use crate::db::{DbSecret, SecretInput, SecretRepository};
 use crate::secrets::{
     Provider, SecretRef, get_secret_path, hash_api_ref, load_secret_file, save_secret_file,
 };
-use crate::utils::{format_error, parse_secret_ref};
+use crate::utils::parse_secret_ref;
 
 use super::snapshot::{check_and_snapshot, is_dirty};
 
@@ -241,12 +241,7 @@ pub async fn handle_pull(
                             }
                         }
                         Err(e) => {
-                            eprintln!(
-                                "✗ {} [{}]: {}",
-                                display_name,
-                                provider_id,
-                                format_error(e.as_ref())
-                            );
+                            eprintln!("✗ {} [{}]: {}", display_name, provider_id, e);
                             fail_count.fetch_add(1, Ordering::Relaxed);
                         }
                     }
@@ -296,8 +291,7 @@ async fn handle_pull_print(
     name: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
     // Parse the secret reference
-    let (provider_id, secret_name) = parse_secret_ref(name, config.default_provider().as_deref())
-        .map_err(|e| -> Box<dyn std::error::Error> { e.into() })?;
+    let (provider_id, secret_name) = parse_secret_ref(name, config.default_provider().as_deref())?;
 
     // Find the provider
     let provider = providers
@@ -420,8 +414,7 @@ async fn handle_pull_by_name(
     edit: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
     // Parse the secret reference
-    let (provider_id, secret_name) = parse_secret_ref(name, config.default_provider().as_deref())
-        .map_err(|e| -> Box<dyn std::error::Error> { e.into() })?;
+    let (provider_id, secret_name) = parse_secret_ref(name, config.default_provider().as_deref())?;
 
     // Find the provider
     let provider = providers

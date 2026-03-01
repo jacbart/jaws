@@ -24,8 +24,7 @@ pub async fn handle_delete(
     // Select secret to delete
     let (provider_id, secret_display_name, db_secret) = if let Some(name) = &secret_name {
         // Parse the secret reference
-        let (pid, sname) = parse_secret_ref(name, config.default_provider().as_deref())
-            .map_err(|e| -> Box<dyn std::error::Error> { e.into() })?;
+        let (pid, sname) = parse_secret_ref(name, config.default_provider().as_deref())?;
 
         // Try to find in downloaded secrets first
         let db_secret = downloaded

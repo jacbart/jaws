@@ -28,9 +28,8 @@ async fn test_handle_pull_inject_or_logic() {
     let repo = SecretRepository::new(conn);
 
     // 4. Setup Provider (Jaws)
-    let jaws_manager = JawsSecretManager::new(secrets_dir.clone());
-    let provider = Provider::Jaws(jaws_manager, "jaws".to_string());
-    let providers = vec![provider];
+    let jaws_manager = JawsSecretManager::new(secrets_dir.clone(), "jaws".to_string());
+    let providers: Vec<Provider> = vec![Box::new(jaws_manager)];
 
     // Ensure provider exists in DB (to satisfy FKs)
     repo.upsert_provider(&jaws::db::DbProvider {
@@ -42,20 +41,13 @@ async fn test_handle_pull_inject_or_logic() {
     .unwrap();
 
     // 5. Create some secrets
-    // Secret 1: Exists
     let secret1_name = "secret1";
     let secret1_val = "value1";
-    // We can use repo to insert secret directly to avoid JawsSecretManager internal connection issues if any,
-    // BUT we need the file to exist on disk.
-    // JawsSecretManager::create does both. Let's try it.
     providers[0]
         .create(secret1_name, secret1_val, None)
         .await
         .unwrap();
 
-    // No need to manually upsert secret to repo, create() does it.
-
-    // Secret 2: Exists
     let secret2_name = "secret2";
     let secret2_val = "value2";
     providers[0]

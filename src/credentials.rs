@@ -177,8 +177,8 @@ pub fn decrypt_token(
 /// The returned tuple is (method, method_tag, ssh_fingerprint):
 /// - method_tag: "passphrase" or "ssh"
 /// - ssh_fingerprint: None for passphrase, Some(path_string) for SSH
-pub fn prompt_encryption_method(
-) -> Result<(CredentialEncryptionMethod, String, Option<String>), Box<dyn std::error::Error>> {
+pub fn prompt_encryption_method()
+-> Result<(CredentialEncryptionMethod, String, Option<String>), Box<dyn std::error::Error>> {
     println!("  Choose encryption method:");
     println!("    1) Passphrase (age scrypt)");
     println!("    2) SSH public key");

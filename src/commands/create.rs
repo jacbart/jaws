@@ -30,8 +30,7 @@ pub async fn handle_create(
     // 3. Otherwise, prompt user to select a provider
     let (provider_id, final_name) = if secret_name.contains("://") {
         // Name contains provider prefix
-        parse_secret_ref(&secret_name, None)
-            .map_err(|e| -> Box<dyn std::error::Error> { e.into() })?
+        parse_secret_ref(&secret_name, None)?
     } else if let Some(default) = config.default_provider() {
         // Use default provider from config
         (default, secret_name.clone())

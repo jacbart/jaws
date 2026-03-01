@@ -5,6 +5,7 @@ use std::process::Command;
 
 use super::permissions::restrict_file_permissions;
 use crate::config::Config;
+use crate::error::JawsError;
 
 /// Open an editor to edit a secret value.
 /// If initial_content is provided, it's pre-populated in the temp file.
@@ -12,7 +13,7 @@ use crate::config::Config;
 pub fn edit_secret_value(
     config: &Config,
     initial_content: Option<&str>,
-) -> Result<String, Box<dyn std::error::Error>> {
+) -> Result<String, JawsError> {
     // Create a temp file with a random suffix to avoid predictable names
     let temp_dir = std::env::temp_dir();
     let random_suffix: u64 = std::hash::Hasher::finish(&std::hash::BuildHasher::build_hasher(
@@ -37,15 +38,17 @@ pub fn edit_secret_value(
         .map_err(|e| {
             // Clean up temp file on editor launch failure
             let _ = std::fs::remove_file(&temp_path);
-            format!(
+            JawsError::Other(format!(
                 "Failed to launch editor '{}': {}. Set a valid editor with 'jaws config set editor <path>'.",
                 config.editor(), e
-            )
+            ))
         })?;
 
     if !status.success() {
         let _ = std::fs::remove_file(&temp_path);
-        return Err("Editor exited with non-zero status".into());
+        return Err(JawsError::Other(
+            "Editor exited with non-zero status".into(),
+        ));
     }
 
     // Read the result

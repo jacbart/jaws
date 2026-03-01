@@ -160,8 +160,7 @@ async fn handle_remote_history(
     secret_name: Option<String>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let selected = if let Some(name) = secret_name {
-        let (provider_id, secret) = parse_secret_ref(&name, config.default_provider().as_deref())
-            .map_err(|e| -> Box<dyn std::error::Error> { e.into() })?;
+        let (provider_id, secret) = parse_secret_ref(&name, config.default_provider().as_deref())?;
         vec![(provider_id, secret)]
     } else {
         crate::secrets::select_from_all_providers(providers).await?

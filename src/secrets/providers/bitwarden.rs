@@ -1,3 +1,4 @@
+use crate::error::JawsError;
 use crate::secrets::manager::SecretManager;
 use async_trait::async_trait;
 use bitwarden::{
@@ -14,56 +15,58 @@ use bitwarden::{
 };
 use futures::stream::{self, Stream, StreamExt};
 use std::env;
-use std::path::PathBuf;
 use std::sync::Arc;
 use uuid::Uuid;
-
-/// A unit type for Bitwarden filters (not currently supported)
-#[derive(Debug, Clone)]
-pub struct BitwardenFilter;
 
 pub struct BitwardenSecretManager {
     client: Arc<Client>,
     project_id: Option<Uuid>,
     organization_id: Option<Uuid>,
+    id: String,
 }
 
 impl BitwardenSecretManager {
     /// Create a new Bitwarden secret manager
     pub async fn new(
+        provider_id: String,
         project_id: Option<String>,
         token_env: &str,
         organization_id: Option<String>,
-    ) -> Result<Self, Box<dyn std::error::Error>> {
+    ) -> Result<Self, JawsError> {
         // Get token from environment
         let token = env::var(token_env).map_err(|_| {
-            format!(
-                "Environment variable '{}' not set. Please set it to your Bitwarden Access Token.",
-                token_env
+            JawsError::provider(
+                "bitwarden",
+                format!(
+                    "Environment variable '{}' not set. Please set it to your Bitwarden Access Token.",
+                    token_env
+                ),
             )
         })?;
 
         if token.is_empty() {
-            return Err(format!(
-                "Environment variable '{}' is empty. Please set it to your Bitwarden Access Token.",
-                token_env
-            )
-            .into());
+            return Err(JawsError::provider(
+                "bitwarden",
+                format!(
+                    "Environment variable '{}' is empty. Please set it to your Bitwarden Access Token.",
+                    token_env
+                ),
+            ));
         }
 
-        // Try to get organization ID from argument first, then environment
         let organization_id = if let Some(id) = organization_id {
-            Some(
-                Uuid::parse_str(&id)
-                    .map_err(|e| format!("Invalid Organization ID '{}': {}", id, e))?,
-            )
+            Some(Uuid::parse_str(&id).map_err(|e| {
+                JawsError::provider(
+                    "bitwarden",
+                    format!("Invalid Organization ID '{}': {}", id, e),
+                )
+            })?)
         } else {
             env::var("BWS_ORGANIZATION_ID")
                 .ok()
                 .and_then(|id| Uuid::parse_str(&id).ok())
         };
 
-        // Initialize client
         let settings = ClientSettings {
             device_type: DeviceType::SDK,
             user_agent: format!("jaws/{}", env!("CARGO_PKG_VERSION")),
@@ -73,19 +76,23 @@ impl BitwardenSecretManager {
 
         let client = Client::new(Some(settings));
 
-        // Authenticate
         let request = AccessTokenLoginRequest {
             access_token: token,
             state_file: None,
         };
-        client.auth().login_access_token(&request).await?;
+        client
+            .auth()
+            .login_access_token(&request)
+            .await
+            .map_err(|e| JawsError::provider("bitwarden", e.to_string()))?;
 
-        // Parse project ID if provided
         let parsed_project_id = if let Some(id_str) = project_id {
-            Some(
-                Uuid::parse_str(&id_str)
-                    .map_err(|e| format!("Invalid Project ID '{}': {}", id_str, e))?,
-            )
+            Some(Uuid::parse_str(&id_str).map_err(|e| {
+                JawsError::provider(
+                    "bitwarden",
+                    format!("Invalid Project ID '{}': {}", id_str, e),
+                )
+            })?)
         } else {
             None
         };
@@ -94,38 +101,40 @@ impl BitwardenSecretManager {
             client: Arc::new(client),
             project_id: parsed_project_id,
             organization_id,
+            id: provider_id,
         })
     }
 
     /// List secret identifiers, preferring project-scoped listing when a project_id is configured.
-    ///
-    /// The Bitwarden API returns 404 when an access token only has project-level access
-    /// but `secrets().list()` (organization-scoped) is called. Using `list_by_project()`
-    /// avoids this by querying only the secrets within the configured project.
     async fn list_secret_identifiers(
         &self,
-    ) -> Result<
-        Vec<bitwarden::secrets_manager::secrets::SecretIdentifiersResponse>,
-        Box<dyn std::error::Error>,
-    > {
+    ) -> Result<Vec<bitwarden::secrets_manager::secrets::SecretIdentifiersResponse>, JawsError>
+    {
         if let Some(project_id) = self.project_id {
-            // Project-scoped listing -- avoids 404 for project-only access tokens
             let request = SecretIdentifiersByProjectRequest { project_id };
-            let response = self.client.secrets().list_by_project(&request).await?;
+            let response = self
+                .client
+                .secrets()
+                .list_by_project(&request)
+                .await
+                .map_err(|e| JawsError::provider("bitwarden", e.to_string()))?;
             Ok(vec![response])
         } else {
-            // Organization-scoped listing -- requires org-wide access
             let request = SecretIdentifiersRequest {
                 organization_id: self.organization_id.unwrap_or(Uuid::nil()),
             };
-            let response = self.client.secrets().list(&request).await?;
+            let response = self
+                .client
+                .secrets()
+                .list(&request)
+                .await
+                .map_err(|e| JawsError::provider("bitwarden", e.to_string()))?;
             Ok(vec![response])
         }
     }
 
     /// Helper to find a secret ID by name
-    /// This is necessary because the SDK operates on UUIDs, but jaws uses human-readable names
-    async fn find_secret_id(&self, name: &str) -> Result<Uuid, Box<dyn std::error::Error>> {
+    async fn find_secret_id(&self, name: &str) -> Result<Uuid, JawsError> {
         let responses = self.list_secret_identifiers().await?;
 
         for response in responses {
@@ -136,15 +145,20 @@ impl BitwardenSecretManager {
             }
         }
 
-        Err(format!("Secret '{}' not found", name).into())
+        Err(JawsError::not_found(format!("Secret '{}' not found", name)))
     }
 
     /// List all projects accessible to the service account
-    pub async fn list_projects(&self) -> Result<Vec<(String, Uuid)>, Box<dyn std::error::Error>> {
+    pub async fn list_projects(&self) -> Result<Vec<(String, Uuid)>, JawsError> {
         let request = ProjectsListRequest {
             organization_id: self.organization_id.unwrap_or(Uuid::nil()),
         };
-        let response = self.client.projects().list(&request).await?;
+        let response = self
+            .client
+            .projects()
+            .list(&request)
+            .await
+            .map_err(|e| JawsError::provider("bitwarden", e.to_string()))?;
 
         let mut projects = Vec::new();
         for project in response.data {
@@ -156,24 +170,31 @@ impl BitwardenSecretManager {
 
 #[async_trait]
 impl SecretManager for BitwardenSecretManager {
-    type Filter = BitwardenFilter;
+    fn id(&self) -> &str {
+        &self.id
+    }
 
-    async fn get_secret(&self, name: &str) -> Result<String, Box<dyn std::error::Error>> {
-        // If the name looks like a UUID, try to use it directly
+    fn kind(&self) -> &str {
+        "bitwarden"
+    }
+
+    async fn get_secret(&self, name: &str) -> Result<String, JawsError> {
         let id = if let Ok(uuid) = Uuid::parse_str(name) {
             uuid
         } else {
             self.find_secret_id(name).await?
         };
 
-        let response = self.client.secrets().get(&SecretGetRequest { id }).await?;
+        let response = self
+            .client
+            .secrets()
+            .get(&SecretGetRequest { id })
+            .await
+            .map_err(|e| JawsError::provider("bitwarden", e.to_string()))?;
         Ok(response.value)
     }
 
-    async fn list_all(
-        &self,
-        _filters: Option<Vec<Self::Filter>>,
-    ) -> Result<Vec<String>, Box<dyn std::error::Error>> {
+    async fn list_all(&self) -> Result<Vec<String>, JawsError> {
         let responses = self.list_secret_identifiers().await?;
 
         let mut names = Vec::new();
@@ -188,16 +209,12 @@ impl SecretManager for BitwardenSecretManager {
 
     fn list_secrets_stream(
         &self,
-        _filters: Option<Vec<Self::Filter>>,
     ) -> Box<dyn Stream<Item = Result<String, Box<dyn std::error::Error + Send>>> + Send + Unpin>
     {
         let client = self.client.clone();
         let project_id = self.project_id;
         let organization_id = self.organization_id.unwrap_or(Uuid::nil());
 
-        // Create a stream that yields the list of secrets.
-        // Prefer project-scoped listing when a project_id is configured to avoid
-        // 404 errors from the Bitwarden API for project-only access tokens.
         let stream = stream::once(async move {
             let result = if let Some(pid) = project_id {
                 let request = SecretIdentifiersByProjectRequest { project_id: pid };
@@ -237,38 +254,17 @@ impl SecretManager for BitwardenSecretManager {
         Box::new(Box::pin(stream))
     }
 
-    async fn download(
-        &self,
-        name: &str,
-        dir: PathBuf,
-    ) -> Result<String, Box<dyn std::error::Error>> {
-        use std::fs::{self, File};
-        use std::io::Write;
-
-        let content = self.get_secret(name).await?;
-
-        // Use secret name for filename
-        let path = dir.join(name);
-
-        if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent)?;
-        }
-
-        let mut file = File::create(&path)?;
-        file.write_all(content.as_bytes())?;
-
-        Ok(path.display().to_string())
-    }
-
     async fn create(
         &self,
         name: &str,
         value: &str,
         description: Option<&str>,
-    ) -> Result<String, Box<dyn std::error::Error>> {
-        let project_id = self.project_id.ok_or(
-            "Project ID is required to create secrets. Configure 'vault' (project_id) in jaws.kdl",
-        )?;
+    ) -> Result<String, JawsError> {
+        let project_id = self.project_id.ok_or_else(|| {
+            JawsError::validation(
+                "Project ID is required to create secrets. Configure 'vault' (project_id) in jaws.kdl",
+            )
+        })?;
 
         let request = SecretCreateRequest {
             organization_id: self.organization_id.unwrap_or(Uuid::nil()),
@@ -278,15 +274,24 @@ impl SecretManager for BitwardenSecretManager {
             note: description.unwrap_or("").to_string(),
         };
 
-        let response = self.client.secrets().create(&request).await?;
+        let response = self
+            .client
+            .secrets()
+            .create(&request)
+            .await
+            .map_err(|e| JawsError::provider("bitwarden", e.to_string()))?;
         Ok(response.id.to_string())
     }
 
-    async fn update(&self, name: &str, value: &str) -> Result<String, Box<dyn std::error::Error>> {
+    async fn update(&self, name: &str, value: &str) -> Result<String, JawsError> {
         let id = self.find_secret_id(name).await?;
 
-        // We need to get the secret first to preserve other fields
-        let current = self.client.secrets().get(&SecretGetRequest { id }).await?;
+        let current = self
+            .client
+            .secrets()
+            .get(&SecretGetRequest { id })
+            .await
+            .map_err(|e| JawsError::provider("bitwarden", e.to_string()))?;
 
         let request = SecretPutRequest {
             id,
@@ -297,22 +302,29 @@ impl SecretManager for BitwardenSecretManager {
             note: current.note,
         };
 
-        let response = self.client.secrets().update(&request).await?;
+        let response = self
+            .client
+            .secrets()
+            .update(&request)
+            .await
+            .map_err(|e| JawsError::provider("bitwarden", e.to_string()))?;
         Ok(response.id.to_string())
     }
 
-    async fn delete(&self, name: &str, _force: bool) -> Result<(), Box<dyn std::error::Error>> {
+    async fn delete(&self, name: &str, _force: bool) -> Result<(), JawsError> {
         let id = self.find_secret_id(name).await?;
         let request = SecretsDeleteRequest { ids: vec![id] };
-        self.client.secrets().delete(request).await?;
+        self.client
+            .secrets()
+            .delete(request)
+            .await
+            .map_err(|e| JawsError::provider("bitwarden", e.to_string()))?;
         Ok(())
     }
 
-    async fn rollback(
-        &self,
-        _name: &str,
-        _version_id: Option<&str>,
-    ) -> Result<String, Box<dyn std::error::Error>> {
-        Err("Bitwarden SDK does not support rollback/history operations.".into())
+    async fn rollback(&self, _name: &str, _version_id: Option<&str>) -> Result<String, JawsError> {
+        Err(JawsError::unsupported(
+            "Bitwarden SDK does not support rollback/history operations.",
+        ))
     }
 }
