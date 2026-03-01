@@ -79,6 +79,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         if let Some(project) = &p.project {
                             println!("    project: {}", project);
                         }
+                        if let Some(address) = &p.address {
+                            println!("    address: {}", address);
+                        }
+                        if let Some(mount) = &p.mount {
+                            println!("    mount: {}", mount);
+                        }
                     }
                 }
                 return Ok(());
@@ -154,6 +160,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 }
                                 if let Some(project) = &p.project {
                                     println!("    project: {}", project);
+                                }
+                                if let Some(address) = &p.address {
+                                    println!("    address: {}", address);
+                                }
+                                if let Some(mount) = &p.mount {
+                                    println!("    mount: {}", mount);
                                 }
                             }
                         }
@@ -271,8 +283,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Commands::Sync => {
             handle_sync(&config, &repo, &providers).await?;
         }
-
-
 
         Commands::Rollback {
             secret_name,

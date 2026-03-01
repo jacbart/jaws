@@ -186,6 +186,13 @@ defaults editor="vim" secrets_path="./.secrets" cache_ttl=900
 // provider "gcp-prod" kind="gcp" {
 //     project "my-gcp-project-id"
 // }
+
+// Example HashiCorp Vault Provider (KV v2 secrets engine)
+// provider "vault-prod" kind="vault" {
+//     address "https://vault.example.com:8200"
+//     mount "secret"
+//     token-env "VAULT_TOKEN"
+// }
 "#;
 
         std::fs::write(&config_path, kdl_content)?;
@@ -247,6 +254,12 @@ defaults editor="vim" secrets_path="./.secrets" cache_ttl=900
             }
             if let Some(project) = &provider.project {
                 output.push_str(&format!("    project \"{}\"\n", project));
+            }
+            if let Some(address) = &provider.address {
+                output.push_str(&format!("    address \"{}\"\n", address));
+            }
+            if let Some(mount) = &provider.mount {
+                output.push_str(&format!("    mount \"{}\"\n", mount));
             }
 
             output.push_str("}\n");

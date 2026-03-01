@@ -123,8 +123,15 @@ pub async fn handle_delete(
             .await?;
         }
         DeleteScope::Remote | DeleteScope::Both => {
-            delete_remote(config, repo, providers, &provider_id, &secret_display_name, force)
-                .await?;
+            delete_remote(
+                config,
+                repo,
+                providers,
+                &provider_id,
+                &secret_display_name,
+                force,
+            )
+            .await?;
         }
     }
 

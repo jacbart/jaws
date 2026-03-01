@@ -68,7 +68,7 @@ pub struct ProviderConfig {
     pub id: String,
 
     #[knuffel(property)]
-    pub kind: String, // "aws", "onepassword", "bw", or "gcp"
+    pub kind: String, // "aws", "onepassword", "bw", "gcp", or "vault"
 
     #[knuffel(child, unwrap(argument))]
     pub profile: Option<String>,
@@ -90,6 +90,14 @@ pub struct ProviderConfig {
     /// GCP project ID for Google Cloud Secret Manager
     #[knuffel(child, unwrap(argument))]
     pub project: Option<String>,
+
+    /// HashiCorp Vault server address (e.g., "https://vault.example.com:8200")
+    #[knuffel(child, unwrap(argument))]
+    pub address: Option<String>,
+
+    /// HashiCorp Vault KV secrets engine mount path (default: "secret")
+    #[knuffel(child, unwrap(argument))]
+    pub mount: Option<String>,
 }
 
 impl ProviderConfig {
@@ -104,6 +112,8 @@ impl ProviderConfig {
             organization: None,
             token_env: None,
             project: None,
+            address: None,
+            mount: None,
         }
     }
 
@@ -118,6 +128,8 @@ impl ProviderConfig {
             organization: None,
             token_env,
             project: None,
+            address: None,
+            mount: None,
         }
     }
 
@@ -137,6 +149,8 @@ impl ProviderConfig {
             organization: organization_id,
             token_env,
             project: None,
+            address: None,
+            mount: None,
         }
     }
 
@@ -151,6 +165,29 @@ impl ProviderConfig {
             organization: None,
             token_env: None,
             project: project_id,
+            address: None,
+            mount: None,
+        }
+    }
+
+    /// Create a new HashiCorp Vault provider config
+    pub fn new_vault(
+        id: String,
+        address: Option<String>,
+        mount: Option<String>,
+        token_env: Option<String>,
+    ) -> Self {
+        Self {
+            id,
+            kind: "vault".to_string(),
+            profile: None,
+            region: None,
+            vault: None,
+            organization: None,
+            token_env,
+            project: None,
+            address,
+            mount,
         }
     }
 }

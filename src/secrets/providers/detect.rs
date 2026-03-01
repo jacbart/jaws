@@ -15,7 +15,7 @@ use google_cloud_secretmanager_v1::client::SecretManagerService;
 
 use super::{
     AwsSecretManager, BitwardenSecretManager, GcpSecretManager, JawsSecretManager,
-    OnePasswordSecretManager, Provider,
+    OnePasswordSecretManager, Provider, VaultSecretManager,
 };
 
 /// Detect and initialize all available providers.
@@ -58,6 +58,8 @@ pub async fn detect_providers(
                                     organization: None,
                                     token_env: None,
                                     project: None,
+                                    address: None,
+                                    mount: None,
                                 };
 
                                 match init_aws_provider(
@@ -158,13 +160,28 @@ pub async fn detect_providers(
                     ),
                 }
             }
-            "gcp" | "gcloud" | "google" => {
-                match init_gcp_provider(provider_config).await {
-                    Ok(gcp_provider) => {
-                        providers.push(Box::new(gcp_provider));
+            "gcp" | "gcloud" | "google" => match init_gcp_provider(provider_config).await {
+                Ok(gcp_provider) => {
+                    providers.push(Box::new(gcp_provider));
+                }
+                Err(e) => eprintln!(
+                    "Failed to init GCP provider '{}': {}",
+                    provider_config.id, e
+                ),
+            },
+            "vault" | "hashicorp" | "hcv" => {
+                match init_vault_provider(
+                    provider_config,
+                    repo,
+                    use_keychain,
+                    cache_ttl,
+                    &secrets_path,
+                ) {
+                    Ok(vault_provider) => {
+                        providers.push(Box::new(vault_provider));
                     }
                     Err(e) => eprintln!(
-                        "Failed to init GCP provider '{}': {}",
+                        "Failed to init Vault provider '{}': {}",
                         provider_config.id, e
                     ),
                 }
@@ -176,7 +193,7 @@ pub async fn detect_providers(
                 );
             }
             _ => eprintln!(
-                "Unknown provider kind: '{}'. Valid kinds: aws, onepassword, bitwarden, gcp",
+                "Unknown provider kind: '{}'. Valid kinds: aws, onepassword, bitwarden, gcp, vault",
                 provider_config.kind
             ),
         }
@@ -382,6 +399,51 @@ async fn init_bitwarden_provider(
     );
 
     BitwardenSecretManager::new(config.id.clone(), project_id, token_env, organization_id).await
+}
+
+fn init_vault_provider(
+    config: &ProviderConfig,
+    repo: Option<&SecretRepository>,
+    use_keychain: bool,
+    cache_ttl: u64,
+    secrets_path: &Path,
+) -> Result<VaultSecretManager, JawsError> {
+    let token_env = config.token_env.as_deref().unwrap_or("VAULT_TOKEN");
+
+    // Try to restore the token from encrypted storage if not in env
+    try_restore_credential_to_env(
+        repo,
+        &config.id,
+        "token",
+        token_env,
+        use_keychain,
+        cache_ttl,
+        secrets_path,
+    );
+
+    // Resolve the Vault address: config field > VAULT_ADDR env var
+    let address = config
+        .address
+        .clone()
+        .or_else(|| std::env::var("VAULT_ADDR").ok())
+        .ok_or_else(|| {
+            JawsError::config(format!(
+                "Vault provider '{}' requires an 'address' field or VAULT_ADDR environment variable",
+                config.id
+            ))
+        })?;
+
+    // Resolve the token
+    let token = std::env::var(token_env).map_err(|_| {
+        JawsError::config(format!(
+            "Vault provider '{}' requires {} to be set (or store credentials with 'jaws config provider add')",
+            config.id, token_env
+        ))
+    })?;
+
+    let mount = config.mount.clone();
+
+    VaultSecretManager::new(config.id.clone(), &address, &token, mount)
 }
 
 async fn init_gcp_provider(config: &ProviderConfig) -> Result<GcpSecretManager, JawsError> {

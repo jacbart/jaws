@@ -379,11 +379,11 @@ pub(super) async fn discover_and_add_gcp(
                     id_input
                 };
 
-                config.add_provider(ProviderConfig::new_gcp(
-                    provider_id,
-                    Some(project.clone()),
-                ));
-                println!("Added GCP Secret Manager provider for project '{}'", project);
+                config.add_provider(ProviderConfig::new_gcp(provider_id, Some(project.clone())));
+                println!(
+                    "Added GCP Secret Manager provider for project '{}'",
+                    project
+                );
 
                 // Check if user has additional projects to add
                 while confirm("Add another GCP project?") {
@@ -391,10 +391,7 @@ pub(super) async fn discover_and_add_gcp(
                     if extra_project.is_empty() {
                         break;
                     }
-                    let extra_id = prompt(
-                        "Provider ID",
-                        &format!("gcp-{}", extra_project),
-                    );
+                    let extra_id = prompt("Provider ID", &format!("gcp-{}", extra_project));
                     let provider_id = if extra_id.is_empty() {
                         format!("gcp-{}", extra_project)
                     } else {
@@ -412,16 +409,15 @@ pub(super) async fn discover_and_add_gcp(
         }
         None => {
             println!("No GCP project detected.");
-            println!("  Tip: Run 'gcloud auth application-default login' and 'gcloud config set project <PROJECT_ID>'");
+            println!(
+                "  Tip: Run 'gcloud auth application-default login' and 'gcloud config set project <PROJECT_ID>'"
+            );
             println!("  Or set the GOOGLE_CLOUD_PROJECT environment variable.");
 
             if confirm("Enter a GCP project ID manually?") {
                 let manual_project = prompt("GCP project ID", "");
                 if !manual_project.is_empty() {
-                    let id_input = prompt(
-                        "Provider ID",
-                        &format!("gcp-{}", manual_project),
-                    );
+                    let id_input = prompt("Provider ID", &format!("gcp-{}", manual_project));
                     let provider_id = if id_input.is_empty() {
                         format!("gcp-{}", manual_project)
                     } else {
@@ -432,6 +428,171 @@ pub(super) async fn discover_and_add_gcp(
                         Some(manual_project.clone()),
                     ));
                     println!("Added GCP provider for project '{}'", manual_project);
+                }
+            }
+        }
+    }
+
+    Ok(config.providers.len() - initial_count)
+}
+
+/// Discover HashiCorp Vault and interactively add a Vault provider.
+/// Returns the number of providers added.
+pub(super) async fn discover_and_add_vault(
+    config: &mut Config,
+    pending_credentials: &mut Vec<PendingCredential>,
+) -> Result<usize, Box<dyn std::error::Error>> {
+    let initial_count = config.providers.len();
+    let vault_token_env = "VAULT_TOKEN";
+
+    println!("Checking for HashiCorp Vault...");
+
+    let vault_addr = std::env::var("VAULT_ADDR").ok();
+    let vault_token = std::env::var(vault_token_env).ok();
+
+    match (&vault_addr, &vault_token) {
+        (Some(addr), Some(_token)) => {
+            println!("Found VAULT_ADDR={}", addr);
+            println!("Found {}", vault_token_env);
+
+            // Try to verify connectivity
+            match Command::new("vault")
+                .args(["status", "-format=json"])
+                .output()
+            {
+                Ok(output) if output.status.success() => {
+                    println!("Vault server is reachable and unsealed.");
+                }
+                Ok(_) => {
+                    println!(
+                        "  Note: 'vault status' returned non-zero (server may be sealed or unreachable)"
+                    );
+                    println!(
+                        "  The provider will still be added -- you can fix connectivity later."
+                    );
+                }
+                Err(_) => {
+                    println!("  Note: 'vault' CLI not found -- skipping connectivity check");
+                }
+            }
+
+            if confirm("Add HashiCorp Vault provider?") {
+                let mount_input = prompt("KV v2 mount path", "secret");
+                let mount = if mount_input.is_empty() {
+                    None
+                } else if mount_input == "secret" {
+                    None // default, no need to store explicitly
+                } else {
+                    Some(mount_input)
+                };
+
+                let id_input = prompt("Provider ID", "vault");
+                let provider_id = if id_input.is_empty() {
+                    "vault".to_string()
+                } else {
+                    id_input
+                };
+
+                config.add_provider(ProviderConfig::new_vault(
+                    provider_id.clone(),
+                    Some(addr.clone()),
+                    mount,
+                    None, // default token_env is VAULT_TOKEN
+                ));
+                println!("Added HashiCorp Vault provider");
+
+                // Offer to store the token
+                if let Some(token) = &vault_token {
+                    if confirm("Store encrypted copy of Vault token?") {
+                        pending_credentials.push(PendingCredential {
+                            provider_id,
+                            credential_key: "token".to_string(),
+                            plaintext_value: token.clone(),
+                        });
+                    }
+                }
+            } else {
+                println!("Skipping HashiCorp Vault");
+            }
+        }
+        (Some(addr), None) => {
+            println!(
+                "Found VAULT_ADDR={} but {} is not set",
+                addr, vault_token_env
+            );
+            if confirm("Enter Vault token manually?") {
+                let token = prompt("Vault token", "");
+                if !token.is_empty() {
+                    let mount_input = prompt("KV v2 mount path", "secret");
+                    let mount = if mount_input.is_empty() || mount_input == "secret" {
+                        None
+                    } else {
+                        Some(mount_input)
+                    };
+
+                    let id_input = prompt("Provider ID", "vault");
+                    let provider_id = if id_input.is_empty() {
+                        "vault".to_string()
+                    } else {
+                        id_input
+                    };
+
+                    config.add_provider(ProviderConfig::new_vault(
+                        provider_id.clone(),
+                        Some(addr.clone()),
+                        mount,
+                        None,
+                    ));
+                    println!("Added HashiCorp Vault provider");
+
+                    if confirm("Store encrypted copy of Vault token?") {
+                        pending_credentials.push(PendingCredential {
+                            provider_id,
+                            credential_key: "token".to_string(),
+                            plaintext_value: token,
+                        });
+                    }
+                }
+            }
+        }
+        _ => {
+            println!("VAULT_ADDR not set, skipping HashiCorp Vault setup");
+            println!(
+                "  Tip: Set VAULT_ADDR and VAULT_TOKEN environment variables and re-run to add a Vault provider"
+            );
+
+            if confirm("Enter Vault details manually?") {
+                let addr = prompt("Vault address (e.g. https://vault.example.com:8200)", "");
+                if !addr.is_empty() {
+                    let mount_input = prompt("KV v2 mount path", "secret");
+                    let mount = if mount_input.is_empty() || mount_input == "secret" {
+                        None
+                    } else {
+                        Some(mount_input)
+                    };
+
+                    let token_env_input = prompt("Token env var name", vault_token_env);
+                    let token_env =
+                        if token_env_input.is_empty() || token_env_input == vault_token_env {
+                            None
+                        } else {
+                            Some(token_env_input)
+                        };
+
+                    let id_input = prompt("Provider ID", "vault");
+                    let provider_id = if id_input.is_empty() {
+                        "vault".to_string()
+                    } else {
+                        id_input
+                    };
+
+                    config.add_provider(ProviderConfig::new_vault(
+                        provider_id,
+                        Some(addr),
+                        mount,
+                        token_env,
+                    ));
+                    println!("Added HashiCorp Vault provider");
                 }
             }
         }

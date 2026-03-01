@@ -42,6 +42,7 @@ google-cloud-gax = "1.6"
 bytes = "1"
 rustls = { version = "0.23", features = ["ring"] }
 keyring = { version = "3", features = ["apple-native", "linux-native"] }
+vaultrs = "0.7.4"
 
 # Optional vendored OpenSSL for cross-compilation
 openssl = { version = "0.10", features = ["vendored"], optional = true }

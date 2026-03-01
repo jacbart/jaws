@@ -25,7 +25,7 @@ pub enum JawsError {
     Config(String),
 
     // ── Provider-specific ──────────────────────────────────────────────
-    /// An error originating from a secrets provider (AWS, 1Password, Bitwarden, etc.).
+    /// An error originating from a secrets provider (AWS, 1Password, Bitwarden, Vault, etc.).
     Provider { provider: String, message: String },
 
     // ── Encryption / credentials ───────────────────────────────────────
@@ -202,6 +202,33 @@ impl JawsError {
 
         JawsError::Provider {
             provider: "aws".to_string(),
+            message: friendly,
+        }
+    }
+
+    /// Create a provider error for HashiCorp Vault, translating common
+    /// errors into user-friendly messages.
+    pub fn vault(e: impl std::fmt::Display) -> Self {
+        let msg = e.to_string();
+
+        let friendly = if msg.contains("404") || msg.contains("Not Found") {
+            "Secret not found".to_string()
+        } else if msg.contains("403") || msg.contains("permission denied") {
+            "Permission denied (check Vault token and policy)".to_string()
+        } else if msg.contains("503") || msg.contains("sealed") {
+            "Vault is sealed (run 'vault operator unseal')".to_string()
+        } else if msg.contains("connection refused") || msg.contains("Connection refused") {
+            "Cannot connect to Vault server (check VAULT_ADDR)".to_string()
+        } else if msg.contains("invalid token") || msg.contains("missing client token") {
+            "Invalid or missing Vault token (check VAULT_TOKEN)".to_string()
+        } else if msg.contains("tls") || msg.contains("certificate") {
+            "TLS/certificate error connecting to Vault".to_string()
+        } else {
+            msg
+        };
+
+        JawsError::Provider {
+            provider: "vault".to_string(),
             message: friendly,
         }
     }
