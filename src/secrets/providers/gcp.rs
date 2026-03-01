@@ -90,11 +90,7 @@ impl SecretManager for GcpSecretManager {
 
     async fn list_all(&self) -> Result<Vec<String>, JawsError> {
         let parent = self.parent();
-        let mut items = self
-            .client
-            .list_secrets()
-            .set_parent(&parent)
-            .by_item();
+        let mut items = self.client.list_secrets().set_parent(&parent).by_item();
 
         let mut secrets = Vec::new();
         while let Some(item) = items.next().await {
@@ -131,10 +127,7 @@ impl SecretManager for GcpSecretManager {
                 // If we already fetched everything, we're done
                 let (client, parent) = state?;
 
-                let mut items = client
-                    .list_secrets()
-                    .set_parent(&parent)
-                    .by_item();
+                let mut items = client.list_secrets().set_parent(&parent).by_item();
 
                 let mut names = Vec::new();
                 while let Some(item) = items.next().await {
@@ -142,9 +135,7 @@ impl SecretManager for GcpSecretManager {
                         Ok(secret) => {
                             let name = &secret.name;
                             if !name.is_empty() {
-                                names.push(
-                                    Self::extract_short_name(name).to_string(),
-                                );
+                                names.push(Self::extract_short_name(name).to_string());
                             }
                         }
                         Err(e) => {
@@ -179,9 +170,7 @@ impl SecretManager for GcpSecretManager {
         // Step 1: Create the secret (metadata only, no payload yet)
         // GCP requires a replication policy to be specified
         let replication = Replication::default()
-            .set_automatic(
-                google_cloud_secretmanager_v1::model::replication::Automatic::default(),
-            );
+            .set_automatic(google_cloud_secretmanager_v1::model::replication::Automatic::default());
 
         let secret = Secret::default().set_replication(replication);
 
@@ -196,8 +185,7 @@ impl SecretManager for GcpSecretManager {
 
         // Step 2: Add the first secret version with the actual payload
         let secret_name = self.secret_name(name);
-        let payload = SecretPayload::default()
-            .set_data(bytes::Bytes::from(value.to_string()));
+        let payload = SecretPayload::default().set_data(bytes::Bytes::from(value.to_string()));
 
         let version_resp = self
             .client
@@ -218,8 +206,7 @@ impl SecretManager for GcpSecretManager {
 
     async fn update(&self, name: &str, value: &str) -> Result<String, JawsError> {
         let secret_name = self.secret_name(name);
-        let payload = SecretPayload::default()
-            .set_data(bytes::Bytes::from(value.to_string()));
+        let payload = SecretPayload::default().set_data(bytes::Bytes::from(value.to_string()));
 
         let version_resp = self
             .client

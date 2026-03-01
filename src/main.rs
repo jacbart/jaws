@@ -7,10 +7,10 @@ use clap::Parser;
 use jaws::DbProvider;
 use jaws::cli::{Cli, Commands, ConfigCommands, ProviderCommands};
 use jaws::commands::{
-    handle_add_provider, handle_clean, handle_clear_cache, handle_create, handle_default_command,
-    handle_delete, handle_export, handle_import, handle_interactive_generate, handle_list,
-    handle_log, handle_pull, handle_pull_inject, handle_push, handle_remove_provider,
-    handle_rollback, handle_sync,
+    handle_add_provider, handle_clean, handle_clear_cache, handle_connect, handle_create,
+    handle_default_command, handle_delete, handle_disconnect, handle_export, handle_import,
+    handle_interactive_generate, handle_list, handle_log, handle_pull, handle_pull_inject,
+    handle_push, handle_remove_provider, handle_rollback, handle_serve, handle_sync,
 };
 use jaws::config::Config;
 use jaws::db::{SecretRepository, init_db};
@@ -170,6 +170,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
+    // Handle Connect command separately (doesn't require providers or database)
+    if let Some(Commands::Connect { url, token, name }) = &cli.command {
+        return handle_connect(&config, url, token, name.clone()).await;
+    }
+
     // Handle Export command separately (doesn't require providers)
     if let Some(Commands::Export {
         ssh_key,
@@ -190,6 +195,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         return handle_import(&config, archive, ssh_key.clone(), *delete);
     }
 
+    // Handle Disconnect command (doesn't require providers or database)
+    if let Some(Commands::Disconnect { name }) = &cli.command {
+        return handle_disconnect(&config, name).await;
+    }
+
     // Ensure secrets directory exists
     fs::create_dir_all(config.secrets_path())?;
 
@@ -200,6 +210,38 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Handle no command - default behavior (edit downloaded secrets)
     if cli.command.is_none() {
         return handle_default_command(&config, &repo).await;
+    }
+
+    // Handle Serve command separately — it manages provider detection internally
+    // so that sub-modes (--generate-token, --list-clients, --revoke) don't need
+    // to wait for provider initialization, and the full server start can control
+    // when providers are loaded.
+    if let Some(Commands::Serve {
+        bind,
+        name,
+        generate_token,
+        ca_cert,
+        ca_key,
+        server_cert,
+        server_key,
+        revoke,
+        list_clients,
+    }) = cli.command
+    {
+        return handle_serve(
+            &config,
+            &repo,
+            &bind,
+            name,
+            generate_token,
+            ca_cert,
+            ca_key,
+            server_cert,
+            server_key,
+            revoke,
+            list_clients,
+        )
+        .await;
     }
 
     // Detect and initialize all available providers (jaws is always available)
@@ -272,8 +314,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             handle_sync(&config, &repo, &providers).await?;
         }
 
-
-
         Commands::Rollback {
             secret_name,
             version,
@@ -294,6 +334,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .await?;
         }
 
+        Commands::Serve { .. } => unreachable!(),
+        Commands::Connect { .. } => unreachable!(),
+        Commands::Disconnect { .. } => unreachable!(),
         Commands::Export { .. } => unreachable!(),
         Commands::Import { .. } => unreachable!(),
         Commands::Version => unreachable!(),

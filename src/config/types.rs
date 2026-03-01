@@ -26,6 +26,34 @@ pub struct Config {
 
     #[knuffel(children(name = "provider"))]
     pub providers: Vec<ProviderConfig>,
+
+    /// Remote server connections (for `jaws connect`).
+    #[knuffel(children(name = "server"))]
+    pub servers: Vec<ServerConnection>,
+}
+
+/// A configured connection to a remote jaws server.
+#[derive(Debug, Decode, Clone)]
+pub struct ServerConnection {
+    /// Server name (used as provider prefix, e.g., "myserver").
+    #[knuffel(argument)]
+    pub name: String,
+
+    /// Server URL (e.g., "https://10.0.0.5:9643").
+    #[knuffel(property)]
+    pub url: String,
+
+    /// Path to the CA certificate for this server.
+    #[knuffel(child, unwrap(argument))]
+    pub ca_cert: Option<String>,
+
+    /// Path to the client certificate for this server.
+    #[knuffel(child, unwrap(argument))]
+    pub client_cert: Option<String>,
+
+    /// Path to the client private key for this server.
+    #[knuffel(child, unwrap(argument))]
+    pub client_key: Option<String>,
 }
 
 /// Default settings for jaws.
@@ -283,5 +311,18 @@ impl Config {
         let len_before = self.providers.len();
         self.providers.retain(|p| p.id != id);
         self.providers.len() < len_before
+    }
+
+    /// Add a remote server connection.
+    pub fn add_server(&mut self, server: ServerConnection) {
+        self.servers.retain(|s| s.name != server.name);
+        self.servers.push(server);
+    }
+
+    /// Remove a remote server connection by name. Returns true if found.
+    pub fn remove_server(&mut self, name: &str) -> bool {
+        let len_before = self.servers.len();
+        self.servers.retain(|s| s.name != name);
+        self.servers.len() < len_before
     }
 }

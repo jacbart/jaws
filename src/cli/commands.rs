@@ -174,6 +174,62 @@ pub enum Commands {
         #[arg(long)]
         keep_local: bool,
     },
+    /// Start the jaws secret sharing server (gRPC + mTLS)
+    Serve {
+        /// Address to bind to (e.g., "0.0.0.0:9643")
+        #[arg(short, long, default_value = "0.0.0.0:9643")]
+        bind: String,
+
+        /// Server name (used as provider prefix on clients, e.g., "myserver")
+        #[arg(short = 'n', long)]
+        name: Option<String>,
+
+        /// Generate a new enrollment token and exit (requires prior 'jaws serve' run)
+        #[arg(long)]
+        generate_token: bool,
+
+        /// Path to custom CA certificate (PEM). Uses built-in CA by default.
+        #[arg(long, value_name = "PATH")]
+        ca_cert: Option<PathBuf>,
+
+        /// Path to custom CA private key (PEM)
+        #[arg(long, value_name = "PATH")]
+        ca_key: Option<PathBuf>,
+
+        /// Path to custom server certificate (PEM)
+        #[arg(long, value_name = "PATH")]
+        server_cert: Option<PathBuf>,
+
+        /// Path to custom server private key (PEM)
+        #[arg(long, value_name = "PATH")]
+        server_key: Option<PathBuf>,
+
+        /// Revoke a client's access by name
+        #[arg(long, value_name = "CLIENT_NAME")]
+        revoke: Option<String>,
+
+        /// List enrolled clients
+        #[arg(long)]
+        list_clients: bool,
+    },
+    /// Connect to a remote jaws server
+    Connect {
+        /// Server URL (e.g., "https://10.0.0.5:9643")
+        url: String,
+
+        /// Enrollment token from the server operator
+        #[arg(short, long)]
+        token: String,
+
+        /// Name for this server connection (defaults to server-provided name)
+        #[arg(short, long)]
+        name: Option<String>,
+    },
+    /// Disconnect from a remote jaws server
+    Disconnect {
+        /// Server name to disconnect from
+        name: String,
+    },
     /// Print version information
     Version,
 }

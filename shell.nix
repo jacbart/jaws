@@ -20,7 +20,7 @@ pkgs.mkShell {
     pkg-config
     git-cliff
     cargo-zigbuild
-    # zig
+    protobuf
     # Demo GIF recording
     vhs
     ttyd

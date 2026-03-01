@@ -89,6 +89,7 @@ pub async fn handle_interactive_generate(
             keychain_cache: None,
         }),
         providers: Vec::new(),
+        servers: Vec::new(),
     };
 
     let mut pending_credentials: Vec<PendingCredential> = Vec::new();

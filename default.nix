@@ -29,6 +29,7 @@ rustPlatform.buildRustPackage {
   nativeBuildInputs = with pkgs; [
     pkg-config
     makeWrapper
+    protobuf
   ];
   buildInputs = with pkgs; [
     openssl

@@ -20,6 +20,7 @@ async fn test_handle_pull_inject_or_logic() {
             ..Default::default()
         }),
         providers: vec![],
+        servers: vec![],
     };
 
     // 3. Setup Repository (Real DB file)

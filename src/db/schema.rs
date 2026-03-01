@@ -5,7 +5,7 @@ use std::path::Path;
 
 use crate::error::JawsError;
 
-const SCHEMA_VERSION: i32 = 3;
+const SCHEMA_VERSION: i32 = 4;
 
 /// Initialize the database at the given path, creating tables if needed.
 pub fn init_db(path: &Path) -> Result<Connection, JawsError> {
@@ -128,6 +128,28 @@ fn create_tables(conn: &Connection) -> rusqlite::Result<()> {
         );
 
         CREATE INDEX idx_credentials_provider ON credentials(provider_id);
+
+        -- Enrolled clients (server mode)
+        CREATE TABLE clients (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            cert_fingerprint TEXT NOT NULL UNIQUE,
+            cert_pem TEXT NOT NULL,
+            issued_at TEXT NOT NULL DEFAULT (datetime('now')),
+            revoked INTEGER NOT NULL DEFAULT 0
+        );
+
+        CREATE INDEX idx_clients_name ON clients(name);
+        CREATE INDEX idx_clients_fingerprint ON clients(cert_fingerprint);
+
+        -- Enrollment tokens (server mode)
+        CREATE TABLE enrollment_tokens (
+            token TEXT PRIMARY KEY,
+            created_at TEXT NOT NULL,
+            expires_at TEXT NOT NULL,
+            used INTEGER NOT NULL DEFAULT 0,
+            used_by_client_id TEXT
+        );
         "#,
     )?;
     Ok(())
@@ -179,6 +201,34 @@ fn migrate(conn: &Connection, from_version: i32, to_version: i32) -> rusqlite::R
                     );
 
                     CREATE INDEX IF NOT EXISTS idx_credentials_provider ON credentials(provider_id);
+                    "#,
+                )?;
+            }
+            3 => {
+                // Migration from v3 to v4:
+                // - Add clients table for enrolled remote clients (server mode)
+                // - Add enrollment_tokens table for one-time enrollment tokens
+                conn.execute_batch(
+                    r#"
+                    CREATE TABLE IF NOT EXISTS clients (
+                        id TEXT PRIMARY KEY,
+                        name TEXT NOT NULL,
+                        cert_fingerprint TEXT NOT NULL UNIQUE,
+                        cert_pem TEXT NOT NULL,
+                        issued_at TEXT NOT NULL DEFAULT (datetime('now')),
+                        revoked INTEGER NOT NULL DEFAULT 0
+                    );
+
+                    CREATE INDEX IF NOT EXISTS idx_clients_name ON clients(name);
+                    CREATE INDEX IF NOT EXISTS idx_clients_fingerprint ON clients(cert_fingerprint);
+
+                    CREATE TABLE IF NOT EXISTS enrollment_tokens (
+                        token TEXT PRIMARY KEY,
+                        created_at TEXT NOT NULL,
+                        expires_at TEXT NOT NULL,
+                        used INTEGER NOT NULL DEFAULT 0,
+                        used_by_client_id TEXT
+                    );
                     "#,
                 )?;
             }

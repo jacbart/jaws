@@ -42,9 +42,26 @@ google-cloud-gax = "1.6"
 bytes = "1"
 rustls = { version = "0.23", features = ["ring"] }
 keyring = { version = "3", features = ["apple-native", "linux-native"] }
+tonic = { version = "0.12", features = ["tls"] }
+prost = "0.13"
+prost-types = "0.13"
+rcgen = { version = "0.13", features = ["pem", "crypto", "x509-parser"] }
+x509-parser = "0.16"
+base64 = "0.22"
+rand = "0.8"
+tokio-stream = "0.1"
+tokio-rustls = "0.26"
+hyper-util = "0.1"
+tower = { version = "0.5", features = ["util"] }
+http = "1"
+time = "0.3"
+hostname = "0.4"
 
 # Optional vendored OpenSSL for cross-compilation
 openssl = { version = "0.10", features = ["vendored"], optional = true }
+
+[build-dependencies]
+tonic-build = "0.12"
 
 [features]
 default = []

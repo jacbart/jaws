@@ -229,12 +229,10 @@ pub async fn handle_pull(
                                         eprintln!("Warning: Failed to record download: {}", e);
                                     }
                                     success_count.fetch_add(1, Ordering::Relaxed);
-                                    let file_path = get_secret_path(
-                                        &config.secrets_path(),
-                                        &filename,
-                                    )
-                                    .to_string_lossy()
-                                    .to_string();
+                                    let file_path =
+                                        get_secret_path(&config.secrets_path(), &filename)
+                                            .to_string_lossy()
+                                            .to_string();
                                     return Some((file_path, secret_id));
                                 }
                                 Err(e) => {
@@ -259,10 +257,8 @@ pub async fn handle_pull(
         .collect()
         .await;
 
-    let (downloaded_files, downloaded_secret_ids): (Vec<String>, Vec<i64>) = results
-        .into_iter()
-        .flatten()
-        .unzip();
+    let (downloaded_files, downloaded_secret_ids): (Vec<String>, Vec<i64>) =
+        results.into_iter().flatten().unzip();
 
     // Print summary
     let succeeded = success_count.load(Ordering::Relaxed);
@@ -291,7 +287,7 @@ pub async fn handle_pull(
         // Snapshot any changes made in the editor, creating new versions
         // for modified files. This mirrors the behavior of the default
         // command (bare `jaws`) which also snapshots after editing.
-        use super::snapshot::{snapshot_secrets, print_snapshot_summary};
+        use super::snapshot::{print_snapshot_summary, snapshot_secrets};
         let results = snapshot_secrets(config, repo, &downloaded_secret_ids)?;
         print_snapshot_summary(&results);
     }
@@ -484,7 +480,7 @@ async fn handle_pull_by_name(
             })?;
 
         // Snapshot any changes made in the editor
-        use super::snapshot::{snapshot_secrets, print_snapshot_summary};
+        use super::snapshot::{print_snapshot_summary, snapshot_secrets};
         let results = snapshot_secrets(config, repo, &[secret.id])?;
         print_snapshot_summary(&results);
     }

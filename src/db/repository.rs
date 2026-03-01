@@ -681,6 +681,141 @@ impl SecretRepository {
                 .unwrap_or_else(Utc::now),
         })
     }
+
+    // ========================================================================
+    // Server-mode operations (clients & enrollment tokens)
+    // ========================================================================
+
+    /// Store a newly enrolled client.
+    pub fn store_client(
+        &self,
+        client_id: &str,
+        name: &str,
+        cert_fingerprint: &str,
+        cert_pem: &str,
+    ) -> Result<(), JawsError> {
+        let conn = self.conn.lock().map_err(lock_err)?;
+        let now = Utc::now().to_rfc3339();
+        conn.execute(
+            r#"
+            INSERT INTO clients (id, name, cert_fingerprint, cert_pem, issued_at, revoked)
+            VALUES (?1, ?2, ?3, ?4, ?5, 0)
+            ON CONFLICT(id) DO UPDATE SET
+                name = excluded.name,
+                cert_fingerprint = excluded.cert_fingerprint,
+                cert_pem = excluded.cert_pem
+            "#,
+            params![client_id, name, cert_fingerprint, cert_pem, now],
+        )?;
+        Ok(())
+    }
+
+    /// List all enrolled clients. Returns (name, fingerprint_prefix, revoked).
+    pub fn list_clients(&self) -> Result<Vec<(String, String, bool)>, JawsError> {
+        let conn = self.conn.lock().map_err(lock_err)?;
+        let mut stmt =
+            conn.prepare("SELECT name, cert_fingerprint, revoked FROM clients ORDER BY name")?;
+        let clients = stmt
+            .query_map([], |row| {
+                let name: String = row.get(0)?;
+                let fingerprint: String = row.get(1)?;
+                let revoked: bool = row.get(2)?;
+                Ok((name, fingerprint, revoked))
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(clients)
+    }
+
+    /// Revoke a client by name. Returns true if found.
+    pub fn revoke_client(&self, name: &str) -> Result<bool, JawsError> {
+        let conn = self.conn.lock().map_err(lock_err)?;
+        let rows = conn.execute("UPDATE clients SET revoked = 1 WHERE name = ?", [name])?;
+        Ok(rows > 0)
+    }
+
+    /// Check if a client certificate fingerprint is valid (enrolled and not revoked).
+    pub fn is_client_valid(&self, cert_fingerprint: &str) -> Result<bool, JawsError> {
+        let conn = self.conn.lock().map_err(lock_err)?;
+        let result: Option<bool> = conn
+            .query_row(
+                "SELECT revoked FROM clients WHERE cert_fingerprint = ?",
+                [cert_fingerprint],
+                |row| row.get(0),
+            )
+            .optional()?;
+        Ok(matches!(result, Some(false)))
+    }
+
+    /// Store an enrollment token.
+    pub fn store_enrollment_token(
+        &self,
+        token: &str,
+        created_at: &str,
+        expires_at: &str,
+    ) -> Result<(), JawsError> {
+        let conn = self.conn.lock().map_err(lock_err)?;
+        conn.execute(
+            r#"
+            INSERT OR REPLACE INTO enrollment_tokens (token, created_at, expires_at, used, used_by_client_id)
+            VALUES (?1, ?2, ?3, 0, NULL)
+            "#,
+            params![token, created_at, expires_at],
+        )?;
+        Ok(())
+    }
+
+    /// Mark an enrollment token as used.
+    pub fn mark_enrollment_token_used(
+        &self,
+        token: &str,
+        client_id: &str,
+    ) -> Result<(), JawsError> {
+        let conn = self.conn.lock().map_err(lock_err)?;
+        conn.execute(
+            "UPDATE enrollment_tokens SET used = 1, used_by_client_id = ? WHERE token = ?",
+            params![client_id, token],
+        )?;
+        Ok(())
+    }
+
+    /// Validate an enrollment token from the database.
+    /// Returns Ok(true) if the token exists, is unused, and has not expired.
+    pub fn validate_enrollment_token(&self, token: &str) -> Result<bool, JawsError> {
+        let conn = self.conn.lock().map_err(lock_err)?;
+        let result: Option<(bool, String)> = conn
+            .query_row(
+                "SELECT used, expires_at FROM enrollment_tokens WHERE token = ?",
+                [token],
+                |row| {
+                    let used: bool = row.get(0)?;
+                    let expires_at: String = row.get(1)?;
+                    Ok((used, expires_at))
+                },
+            )
+            .optional()?;
+
+        match result {
+            None => Ok(false),
+            Some((true, _)) => Ok(false), // already used
+            Some((false, expires_at)) => {
+                // Check expiry
+                if let Ok(exp) = DateTime::parse_from_rfc3339(&expires_at) {
+                    Ok(Utc::now() < exp)
+                } else {
+                    // Can't parse expiry — reject
+                    Ok(false)
+                }
+            }
+        }
+    }
+
+    /// Delete a client by name. Used to clear revoked clients before re-enrollment.
+    /// Returns the number of rows deleted.
+    pub fn delete_client_by_name(&self, name: &str) -> Result<usize, JawsError> {
+        let conn = self.conn.lock().map_err(lock_err)?;
+        let rows = conn.execute("DELETE FROM clients WHERE name = ?", [name])?;
+        Ok(rows)
+    }
 }
 
 impl Clone for SecretRepository {

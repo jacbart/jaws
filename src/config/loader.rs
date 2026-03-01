@@ -114,6 +114,7 @@ impl Config {
         Ok(Config {
             defaults: None,
             providers: Vec::new(),
+            servers: Vec::new(),
         })
     }
 
@@ -247,6 +248,26 @@ defaults editor="vim" secrets_path="./.secrets" cache_ttl=900
             }
             if let Some(project) = &provider.project {
                 output.push_str(&format!("    project \"{}\"\n", project));
+            }
+
+            output.push_str("}\n");
+        }
+
+        // Write server connections
+        for server in &self.servers {
+            output.push_str(&format!(
+                "\nserver \"{}\" url=\"{}\" {{\n",
+                server.name, server.url
+            ));
+
+            if let Some(ca_cert) = &server.ca_cert {
+                output.push_str(&format!("    ca-cert \"{}\"\n", ca_cert));
+            }
+            if let Some(client_cert) = &server.client_cert {
+                output.push_str(&format!("    client-cert \"{}\"\n", client_cert));
+            }
+            if let Some(client_key) = &server.client_key {
+                output.push_str(&format!("    client-key \"{}\"\n", client_key));
             }
 
             output.push_str("}\n");

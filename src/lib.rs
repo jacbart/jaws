@@ -33,6 +33,7 @@
 
 pub mod archive;
 pub mod cli;
+pub mod client;
 pub mod commands;
 pub mod config;
 pub mod credentials;
@@ -40,6 +41,7 @@ pub mod db;
 pub mod error;
 pub mod keychain;
 pub mod secrets;
+pub mod server;
 pub mod utils;
 
 // Re-export commonly used types at the crate root

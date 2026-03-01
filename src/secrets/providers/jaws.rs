@@ -77,8 +77,12 @@ impl SecretManager for JawsSecretManager {
 
     async fn get_secret(&self, api_ref: &str) -> Result<String, JawsError> {
         let repo = self.get_repo()?;
+        // Look up by api_ref first, then fall back to display_name.
+        // This is needed because list_all() returns display names, so remote
+        // clients (via gRPC) will send display names to get_secret().
         let secret = repo
             .get_secret_by_api_ref("jaws", api_ref)?
+            .or(repo.find_secret_by_provider_and_name("jaws", api_ref)?)
             .ok_or_else(|| JawsError::not_found(format!("Secret not found: {}", api_ref)))?;
         let download = repo
             .get_latest_download(secret.id)?

@@ -4,6 +4,7 @@
 
 mod clean;
 mod config_cmd;
+mod connect;
 mod create;
 mod default;
 mod delete;
@@ -13,6 +14,7 @@ mod log;
 mod pull;
 mod push;
 mod rollback;
+mod serve;
 pub mod snapshot;
 mod sync;
 
@@ -20,6 +22,7 @@ pub use clean::handle_clean;
 pub use config_cmd::{
     handle_add_provider, handle_clear_cache, handle_interactive_generate, handle_remove_provider,
 };
+pub use connect::{handle_connect, handle_disconnect};
 pub use create::handle_create;
 pub use default::handle_default_command;
 pub use delete::handle_delete;
@@ -29,6 +32,7 @@ pub use log::handle_log;
 pub use pull::{handle_pull, handle_pull_inject};
 pub use push::handle_push;
 pub use rollback::handle_rollback;
+pub use serve::handle_serve;
 pub use snapshot::{
     check_and_snapshot, is_dirty, print_snapshot_summary, snapshot_all_modified, snapshot_secrets,
 };

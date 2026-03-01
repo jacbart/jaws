@@ -379,11 +379,11 @@ pub(super) async fn discover_and_add_gcp(
                     id_input
                 };
 
-                config.add_provider(ProviderConfig::new_gcp(
-                    provider_id,
-                    Some(project.clone()),
-                ));
-                println!("Added GCP Secret Manager provider for project '{}'", project);
+                config.add_provider(ProviderConfig::new_gcp(provider_id, Some(project.clone())));
+                println!(
+                    "Added GCP Secret Manager provider for project '{}'",
+                    project
+                );
 
                 // Check if user has additional projects to add
                 while confirm("Add another GCP project?") {
@@ -391,10 +391,7 @@ pub(super) async fn discover_and_add_gcp(
                     if extra_project.is_empty() {
                         break;
                     }
-                    let extra_id = prompt(
-                        "Provider ID",
-                        &format!("gcp-{}", extra_project),
-                    );
+                    let extra_id = prompt("Provider ID", &format!("gcp-{}", extra_project));
                     let provider_id = if extra_id.is_empty() {
                         format!("gcp-{}", extra_project)
                     } else {
@@ -412,16 +409,15 @@ pub(super) async fn discover_and_add_gcp(
         }
         None => {
             println!("No GCP project detected.");
-            println!("  Tip: Run 'gcloud auth application-default login' and 'gcloud config set project <PROJECT_ID>'");
+            println!(
+                "  Tip: Run 'gcloud auth application-default login' and 'gcloud config set project <PROJECT_ID>'"
+            );
             println!("  Or set the GOOGLE_CLOUD_PROJECT environment variable.");
 
             if confirm("Enter a GCP project ID manually?") {
                 let manual_project = prompt("GCP project ID", "");
                 if !manual_project.is_empty() {
-                    let id_input = prompt(
-                        "Provider ID",
-                        &format!("gcp-{}", manual_project),
-                    );
+                    let id_input = prompt("Provider ID", &format!("gcp-{}", manual_project));
                     let provider_id = if id_input.is_empty() {
                         format!("gcp-{}", manual_project)
                     } else {

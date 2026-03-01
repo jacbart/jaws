@@ -158,23 +158,15 @@ pub async fn detect_providers(
                     ),
                 }
             }
-            "gcp" | "gcloud" | "google" => {
-                match init_gcp_provider(provider_config).await {
-                    Ok(gcp_provider) => {
-                        providers.push(Box::new(gcp_provider));
-                    }
-                    Err(e) => eprintln!(
-                        "Failed to init GCP provider '{}': {}",
-                        provider_config.id, e
-                    ),
+            "gcp" | "gcloud" | "google" => match init_gcp_provider(provider_config).await {
+                Ok(gcp_provider) => {
+                    providers.push(Box::new(gcp_provider));
                 }
-            }
-            "jaws" => {
-                eprintln!(
-                    "Remote jaws providers not yet implemented. \
-                     Future: Configure 'url' to connect to jaws serve."
-                );
-            }
+                Err(e) => eprintln!(
+                    "Failed to init GCP provider '{}': {}",
+                    provider_config.id, e
+                ),
+            },
             _ => eprintln!(
                 "Unknown provider kind: '{}'. Valid kinds: aws, onepassword, bitwarden, gcp",
                 provider_config.kind
@@ -182,7 +174,49 @@ pub async fn detect_providers(
         }
     }
 
+    // Discover remote providers from configured server connections
+    for server_conn in &config.servers {
+        match init_remote_providers(server_conn).await {
+            Ok(remote_providers) => {
+                for rp in remote_providers {
+                    providers.push(Box::new(rp));
+                }
+            }
+            Err(e) => eprintln!(
+                "Failed to connect to remote server '{}': {}",
+                server_conn.name, e
+            ),
+        }
+    }
+
     Ok(providers)
+}
+
+/// Initialize remote providers from a server connection.
+async fn init_remote_providers(
+    server_conn: &crate::config::ServerConnection,
+) -> Result<Vec<crate::client::RemoteProvider>, JawsError> {
+    use crate::client;
+    use crate::config::expand_tilde;
+
+    let ca_cert_path = server_conn.ca_cert.as_deref().ok_or_else(|| {
+        JawsError::config(format!("Server '{}' missing ca-cert", server_conn.name))
+    })?;
+    let client_cert_path = server_conn.client_cert.as_deref().ok_or_else(|| {
+        JawsError::config(format!("Server '{}' missing client-cert", server_conn.name))
+    })?;
+    let client_key_path = server_conn.client_key.as_deref().ok_or_else(|| {
+        JawsError::config(format!("Server '{}' missing client-key", server_conn.name))
+    })?;
+
+    let ca_path: std::path::PathBuf = expand_tilde(ca_cert_path).into();
+    let cert_path: std::path::PathBuf = expand_tilde(client_cert_path).into();
+    let key_path: std::path::PathBuf = expand_tilde(client_key_path).into();
+
+    let channel =
+        client::connection::connect(&server_conn.url, &ca_path, &cert_path, &key_path).await?;
+
+    client::discover_remote_providers(&server_conn.name, channel).await
 }
 
 /// Try to restore a credential from the database into an environment variable.
