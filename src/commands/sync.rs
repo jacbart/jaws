@@ -17,6 +17,22 @@ pub async fn handle_sync(
     println!("Syncing remote secret listings...");
 
     for provider in providers {
+        // Skip the local jaws provider — its secrets are already managed
+        // directly in the database and don't need remote discovery.
+        if provider.kind() == "jaws" {
+            let count = repo
+                .list_secrets_by_provider(provider.id())
+                .map(|s| s.len())
+                .unwrap_or(0);
+            println!(
+                "  {} [{}]: {} secrets (local)",
+                provider.id(),
+                provider.kind(),
+                count
+            );
+            continue;
+        }
+
         match sync_provider(repo, provider).await {
             Ok(count) => {
                 println!(

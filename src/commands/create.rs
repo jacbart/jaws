@@ -77,11 +77,14 @@ pub async fn handle_create(
 
     // Register the secret in the local database so subsequent commands
     // (pull, push, etc.) can find it without requiring a sync first.
+    // Use the api_ref returned by the provider's create() method (e.g. "jaws://<uuid>"
+    // for local secrets, an ARN for AWS, etc.) so we don't create a duplicate row
+    // when the provider already inserted one with a different api_ref.
     let input = SecretInput {
         provider_id: provider_id.clone(),
-        api_ref: final_name.clone(),
+        api_ref: result.clone(),
         display_name: final_name.clone(),
-        hash: hash_api_ref(&final_name),
+        hash: hash_api_ref(&result),
         description: description.clone(),
         remote_updated_at: None,
     };

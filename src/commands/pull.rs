@@ -94,9 +94,13 @@ pub async fn handle_pull(
                 }
             }
 
-            // 2. Check if refresh needed
-            let should_refresh =
-                super::sync::should_refresh_cache(&repo, &provider_id, cache_ttl).unwrap_or(true);
+            // 2. Check if refresh needed (skip for jaws — local secrets are
+            //    already in the DB and streaming would produce wrong api_ref values)
+            let should_refresh = if provider_kind == "jaws" {
+                false
+            } else {
+                super::sync::should_refresh_cache(&repo, &provider_id, cache_ttl).unwrap_or(true)
+            };
 
             if should_refresh {
                 // Stream from remote and update DB
