@@ -68,7 +68,7 @@ pub struct ProviderConfig {
     pub id: String,
 
     #[knuffel(property)]
-    pub kind: String, // "aws" or "onepassword"
+    pub kind: String, // "aws", "onepassword", "bw", or "gcp"
 
     #[knuffel(child, unwrap(argument))]
     pub profile: Option<String>,
@@ -86,6 +86,10 @@ pub struct ProviderConfig {
 
     #[knuffel(child, unwrap(argument))]
     pub token_env: Option<String>,
+
+    /// GCP project ID for Google Cloud Secret Manager
+    #[knuffel(child, unwrap(argument))]
+    pub project: Option<String>,
 }
 
 impl ProviderConfig {
@@ -99,6 +103,7 @@ impl ProviderConfig {
             vault: None,
             organization: None,
             token_env: None,
+            project: None,
         }
     }
 
@@ -112,6 +117,7 @@ impl ProviderConfig {
             vault,
             organization: None,
             token_env,
+            project: None,
         }
     }
 
@@ -130,6 +136,21 @@ impl ProviderConfig {
             vault: project_id, // We map project_id to the 'vault' field
             organization: organization_id,
             token_env,
+            project: None,
+        }
+    }
+
+    /// Create a new GCP Secret Manager provider config
+    pub fn new_gcp(id: String, project_id: Option<String>) -> Self {
+        Self {
+            id,
+            kind: "gcp".to_string(),
+            profile: None,
+            region: None,
+            vault: None,
+            organization: None,
+            token_env: None,
+            project: project_id,
         }
     }
 }

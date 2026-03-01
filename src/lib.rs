@@ -1,7 +1,7 @@
 //! jaws - A CLI tool and library for managing secrets from multiple providers.
 //!
 //! This crate provides functionality to:
-//! - Pull secrets from AWS Secrets Manager, 1Password, Bitwarden, and local storage
+//! - Pull secrets from AWS Secrets Manager, GCP Secret Manager, 1Password, Bitwarden, and local storage
 //! - Push secrets back to providers
 //! - Track version history of downloaded secrets
 //! - Export/import secrets as encrypted archives

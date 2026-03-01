@@ -76,6 +76,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         if let Some(token_env) = &p.token_env {
                             println!("    token_env: {}", token_env);
                         }
+                        if let Some(project) = &p.project {
+                            println!("    project: {}", project);
+                        }
                     }
                 }
                 return Ok(());
@@ -148,6 +151,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 }
                                 if let Some(token_env) = &p.token_env {
                                     println!("    token_env: {}", token_env);
+                                }
+                                if let Some(project) = &p.project {
+                                    println!("    project: {}", project);
                                 }
                             }
                         }

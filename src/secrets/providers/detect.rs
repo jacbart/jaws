@@ -11,8 +11,11 @@ use crate::credentials::retrieve_credential;
 use crate::db::SecretRepository;
 use crate::error::JawsError;
 
+use google_cloud_secretmanager_v1::client::SecretManagerService;
+
 use super::{
-    AwsSecretManager, BitwardenSecretManager, JawsSecretManager, OnePasswordSecretManager, Provider,
+    AwsSecretManager, BitwardenSecretManager, GcpSecretManager, JawsSecretManager,
+    OnePasswordSecretManager, Provider,
 };
 
 /// Detect and initialize all available providers.
@@ -54,6 +57,7 @@ pub async fn detect_providers(
                                     vault: None,
                                     organization: None,
                                     token_env: None,
+                                    project: None,
                                 };
 
                                 match init_aws_provider(
@@ -154,6 +158,17 @@ pub async fn detect_providers(
                     ),
                 }
             }
+            "gcp" | "gcloud" | "google" => {
+                match init_gcp_provider(provider_config).await {
+                    Ok(gcp_provider) => {
+                        providers.push(Box::new(gcp_provider));
+                    }
+                    Err(e) => eprintln!(
+                        "Failed to init GCP provider '{}': {}",
+                        provider_config.id, e
+                    ),
+                }
+            }
             "jaws" => {
                 eprintln!(
                     "Remote jaws providers not yet implemented. \
@@ -161,7 +176,7 @@ pub async fn detect_providers(
                 );
             }
             _ => eprintln!(
-                "Unknown provider kind: '{}'. Valid kinds: aws, onepassword, bitwarden",
+                "Unknown provider kind: '{}'. Valid kinds: aws, onepassword, bitwarden, gcp",
                 provider_config.kind
             ),
         }
@@ -367,4 +382,56 @@ async fn init_bitwarden_provider(
     );
 
     BitwardenSecretManager::new(config.id.clone(), project_id, token_env, organization_id).await
+}
+
+async fn init_gcp_provider(config: &ProviderConfig) -> Result<GcpSecretManager, JawsError> {
+    let project_id = config.project.clone().ok_or_else(|| {
+        JawsError::config(format!(
+            "GCP provider '{}' requires a 'project' field with the GCP project ID",
+            config.id
+        ))
+    })?;
+
+    // Expand ~ in GOOGLE_APPLICATION_CREDENTIALS if present.
+    // The GCP SDK does not handle tilde expansion, so users who set
+    // GOOGLE_APPLICATION_CREDENTIALS="~/path/to/key.json" (with quotes
+    // preventing shell expansion) would get a confusing "could not create
+    // default credentials" error.
+    if let Ok(creds_path) = std::env::var("GOOGLE_APPLICATION_CREDENTIALS") {
+        if creds_path.starts_with("~/") || creds_path == "~" {
+            let expanded = crate::config::expand_tilde(&creds_path);
+            unsafe {
+                std::env::set_var("GOOGLE_APPLICATION_CREDENTIALS", &expanded);
+            }
+        }
+    }
+
+    // Build the GCP Secret Manager client using Application Default Credentials.
+    // This automatically picks up:
+    // - GOOGLE_APPLICATION_CREDENTIALS env var (service account key JSON)
+    // - gcloud CLI credentials (gcloud auth application-default login)
+    // - GCE/GKE metadata server (when running on GCP)
+    let client = SecretManagerService::builder()
+        .build()
+        .await
+        .map_err(|e| {
+            let mut msg = format!("Failed to initialize GCP client: {}", e);
+            if std::env::var("GOOGLE_APPLICATION_CREDENTIALS").is_err() {
+                msg.push_str(
+                    "\n  Hint: Set GOOGLE_APPLICATION_CREDENTIALS to a service account key JSON file,\n  \
+                     or run 'gcloud auth application-default login'",
+                );
+            } else {
+                let path = std::env::var("GOOGLE_APPLICATION_CREDENTIALS").unwrap_or_default();
+                if !std::path::Path::new(&path).exists() {
+                    msg.push_str(&format!(
+                        "\n  Hint: GOOGLE_APPLICATION_CREDENTIALS is set to '{}' but the file does not exist",
+                        path
+                    ));
+                }
+            }
+            JawsError::provider("gcp", msg)
+        })?;
+
+    Ok(GcpSecretManager::new(client, project_id, config.id.clone()))
 }

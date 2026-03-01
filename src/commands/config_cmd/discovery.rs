@@ -2,6 +2,8 @@
 //!
 //! These are reusable by both `jaws config init` and `jaws config provider add`.
 
+use std::process::Command;
+
 use ff::{FuzzyFinderSession, TuiConfig};
 
 use crate::config::{Config, ProviderConfig};
@@ -346,4 +348,126 @@ pub(super) async fn discover_and_add_bitwarden(
     }
 
     Ok(config.providers.len() - initial_count)
+}
+
+/// Discover GCP project and interactively add a GCP Secret Manager provider.
+/// Returns the number of providers added.
+///
+/// Discovery attempts:
+/// 1. Check GOOGLE_CLOUD_PROJECT / GCLOUD_PROJECT / CLOUDSDK_CORE_PROJECT env vars
+/// 2. Run `gcloud config get-value project` to detect the active project
+/// 3. Fall back to manual entry
+pub(super) async fn discover_and_add_gcp(
+    config: &mut Config,
+    _pending_credentials: &mut Vec<PendingCredential>,
+) -> Result<usize, Box<dyn std::error::Error>> {
+    let initial_count = config.providers.len();
+
+    println!("Checking for GCP...");
+
+    // Try to discover the default project from env vars or gcloud CLI
+    let project_id = discover_gcp_project();
+
+    match project_id {
+        Some(project) => {
+            println!("Found GCP project: {}", project);
+            if confirm("Add GCP Secret Manager provider?") {
+                let id_input = prompt("Provider ID", &format!("gcp-{}", project));
+                let provider_id = if id_input.is_empty() {
+                    format!("gcp-{}", project)
+                } else {
+                    id_input
+                };
+
+                config.add_provider(ProviderConfig::new_gcp(
+                    provider_id,
+                    Some(project.clone()),
+                ));
+                println!("Added GCP Secret Manager provider for project '{}'", project);
+
+                // Check if user has additional projects to add
+                while confirm("Add another GCP project?") {
+                    let extra_project = prompt("GCP project ID", "");
+                    if extra_project.is_empty() {
+                        break;
+                    }
+                    let extra_id = prompt(
+                        "Provider ID",
+                        &format!("gcp-{}", extra_project),
+                    );
+                    let provider_id = if extra_id.is_empty() {
+                        format!("gcp-{}", extra_project)
+                    } else {
+                        extra_id
+                    };
+                    config.add_provider(ProviderConfig::new_gcp(
+                        provider_id,
+                        Some(extra_project.clone()),
+                    ));
+                    println!("Added GCP provider for project '{}'", extra_project);
+                }
+            } else {
+                println!("Skipping GCP");
+            }
+        }
+        None => {
+            println!("No GCP project detected.");
+            println!("  Tip: Run 'gcloud auth application-default login' and 'gcloud config set project <PROJECT_ID>'");
+            println!("  Or set the GOOGLE_CLOUD_PROJECT environment variable.");
+
+            if confirm("Enter a GCP project ID manually?") {
+                let manual_project = prompt("GCP project ID", "");
+                if !manual_project.is_empty() {
+                    let id_input = prompt(
+                        "Provider ID",
+                        &format!("gcp-{}", manual_project),
+                    );
+                    let provider_id = if id_input.is_empty() {
+                        format!("gcp-{}", manual_project)
+                    } else {
+                        id_input
+                    };
+                    config.add_provider(ProviderConfig::new_gcp(
+                        provider_id,
+                        Some(manual_project.clone()),
+                    ));
+                    println!("Added GCP provider for project '{}'", manual_project);
+                }
+            }
+        }
+    }
+
+    Ok(config.providers.len() - initial_count)
+}
+
+/// Try to discover the GCP project ID from environment variables or gcloud CLI.
+fn discover_gcp_project() -> Option<String> {
+    // 1. Check common environment variables
+    for env_var in &[
+        "GOOGLE_CLOUD_PROJECT",
+        "GCLOUD_PROJECT",
+        "CLOUDSDK_CORE_PROJECT",
+    ] {
+        if let Ok(project) = std::env::var(env_var) {
+            if !project.is_empty() {
+                return Some(project);
+            }
+        }
+    }
+
+    // 2. Try gcloud CLI
+    match Command::new("gcloud")
+        .args(["config", "get-value", "project"])
+        .output()
+    {
+        Ok(output) if output.status.success() => {
+            let project = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            if !project.is_empty() && project != "(unset)" {
+                return Some(project);
+            }
+        }
+        _ => {}
+    }
+
+    None
 }

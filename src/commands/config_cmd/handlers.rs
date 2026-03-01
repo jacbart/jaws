@@ -9,7 +9,8 @@ use crate::db::{SecretRepository, init_db};
 use crate::keychain;
 
 use super::discovery::{
-    discover_and_add_aws, discover_and_add_bitwarden, discover_and_add_onepassword,
+    discover_and_add_aws, discover_and_add_bitwarden, discover_and_add_gcp,
+    discover_and_add_onepassword,
 };
 use super::helpers::{PendingCredential, store_pending_credentials};
 
@@ -101,6 +102,8 @@ pub async fn handle_interactive_generate(
     println!();
     discover_and_add_bitwarden(&mut config, &mut pending_credentials).await?;
     println!();
+    discover_and_add_gcp(&mut config, &mut pending_credentials).await?;
+    println!();
 
     // Create parent directories if they don't exist
     if let Some(parent) = config_path.parent()
@@ -146,6 +149,7 @@ pub async fn handle_add_provider(kind: Option<String>) -> Result<(), Box<dyn std
             "aws - Amazon Web Services Secrets Manager".to_string(),
             "onepassword - 1Password".to_string(),
             "bitwarden - Bitwarden Secrets Manager".to_string(),
+            "gcp - Google Cloud Secret Manager".to_string(),
         ];
 
         let mut tui_config = TuiConfig::with_height(6);
@@ -184,9 +188,12 @@ pub async fn handle_add_provider(kind: Option<String>) -> Result<(), Box<dyn std
         "bitwarden" | "bw" | "bws" => {
             discover_and_add_bitwarden(&mut config, &mut pending_credentials).await?
         }
+        "gcp" | "gcloud" | "google" => {
+            discover_and_add_gcp(&mut config, &mut pending_credentials).await?
+        }
         other => {
             return Err(format!(
-                "Unknown provider kind: '{}'. Valid kinds: aws, onepassword, bitwarden",
+                "Unknown provider kind: '{}'. Valid kinds: aws, onepassword, bitwarden, gcp",
                 other
             )
             .into());

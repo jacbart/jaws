@@ -37,6 +37,9 @@ chrono-humanize = "0.2.3"
 uuid = { version = "1", features = ["v4"] }
 regex = "1"
 bitwarden = { version = "2.0.0", features = ["secrets"] }
+google-cloud-secretmanager-v1 = "1.5.0"
+google-cloud-gax = "1.6"
+bytes = "1"
 rustls = { version = "0.23", features = ["ring"] }
 keyring = { version = "3", features = ["apple-native", "linux-native"] }
 

@@ -1,13 +1,14 @@
 //! Provider implementations and detection.
 //!
 //! Organized into:
-//! - Provider implementations: `aws`, `bitwarden`, `jaws`, `onepassword`
+//! - Provider implementations: `aws`, `bitwarden`, `gcp`, `jaws`, `onepassword`
 //! - `detect`: Provider detection and initialization from config
 //! - `select`: TUI-based secret selection across providers
 
 mod aws;
 mod bitwarden;
 mod detect;
+mod gcp;
 mod jaws;
 pub mod onepassword;
 mod select;
@@ -15,6 +16,7 @@ mod select;
 pub use aws::AwsSecretManager;
 pub use bitwarden::BitwardenSecretManager;
 pub use detect::detect_providers;
+pub use gcp::GcpSecretManager;
 pub use jaws::JawsSecretManager;
 pub use onepassword::{OnePasswordSecretManager, SecretRef};
 pub use select::select_from_all_providers;

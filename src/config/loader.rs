@@ -180,6 +180,12 @@ defaults editor="vim" secrets_path="./.secrets" cache_ttl=900
 // provider "op" kind="onepassword" {
 //     vault "all"
 // }
+
+// Example GCP Secret Manager Provider
+// Uses Application Default Credentials (gcloud auth application-default login)
+// provider "gcp-prod" kind="gcp" {
+//     project "my-gcp-project-id"
+// }
 "#;
 
         std::fs::write(&config_path, kdl_content)?;
@@ -238,6 +244,9 @@ defaults editor="vim" secrets_path="./.secrets" cache_ttl=900
             }
             if let Some(token_env) = &provider.token_env {
                 output.push_str(&format!("    token-env \"{}\"\n", token_env));
+            }
+            if let Some(project) = &provider.project {
+                output.push_str(&format!("    project \"{}\"\n", project));
             }
 
             output.push_str("}\n");

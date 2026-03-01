@@ -107,7 +107,7 @@ pub async fn handle_delete(
     let delete_scope = if let Some(s) = scope {
         s
     } else {
-        prompt_delete_scope(&provider_id, &secret_display_name, db_secret.is_some())?
+        prompt_delete_scope(&provider_id, &secret_display_name, db_secret.is_some()).await?
     };
 
     // Execute deletion based on scope
@@ -145,7 +145,7 @@ pub async fn handle_delete(
 }
 
 /// Prompt user to select delete scope
-fn prompt_delete_scope(
+async fn prompt_delete_scope(
     provider_id: &str,
     secret_name: &str,
     has_local: bool,
@@ -191,24 +191,21 @@ fn prompt_delete_scope(
     }
 
     // Use TUI for selection
-    let rt = tokio::runtime::Handle::current();
-    let result = rt
-        .block_on(async {
-            let (tx, rx) = create_items_channel();
+    let (tx, rx) = create_items_channel();
 
-            for (key, desc) in &options {
-                let display = format!("{} - {}", key, desc);
-                if tx.send(display).await.is_err() {
-                    break;
-                }
-            }
-            drop(tx);
+    for (key, desc) in &options {
+        let display = format!("{} - {}", key, desc);
+        if tx.send(display).await.is_err() {
+            break;
+        }
+    }
+    drop(tx);
 
-            let mut tui_config = TuiConfig::with_height((options.len() as u16 + 2).min(10));
-            tui_config.show_help_text = false;
+    let mut tui_config = TuiConfig::with_height((options.len() as u16 + 2).min(10));
+    tui_config.show_help_text = false;
 
-            run_tui_with_config(rx, false, tui_config).await
-        })
+    let result = run_tui_with_config(rx, false, tui_config)
+        .await
         .map_err(|e| e as Box<dyn std::error::Error>)?;
 
     if result.is_empty() {

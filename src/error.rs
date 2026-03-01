@@ -205,6 +205,37 @@ impl JawsError {
             message: friendly,
         }
     }
+
+    /// Create a provider error for GCP, translating common Secret Manager
+    /// errors into user-friendly messages.
+    pub fn gcp(e: impl std::fmt::Display) -> Self {
+        let msg = e.to_string();
+
+        let friendly = if msg.contains("NOT_FOUND") || msg.contains("notFound") {
+            "Secret not found".to_string()
+        } else if msg.contains("PERMISSION_DENIED") || msg.contains("permissionDenied") {
+            "Permission denied (check IAM roles for Secret Manager)".to_string()
+        } else if msg.contains("ALREADY_EXISTS") || msg.contains("alreadyExists") {
+            "Secret already exists".to_string()
+        } else if msg.contains("UNAUTHENTICATED") || msg.contains("unauthenticated") {
+            "Not authenticated (run 'gcloud auth application-default login')".to_string()
+        } else if msg.contains("INVALID_ARGUMENT") || msg.contains("invalidArgument") {
+            "Invalid argument".to_string()
+        } else if msg.contains("RESOURCE_EXHAUSTED") || msg.contains("resourceExhausted") {
+            "Resource exhausted (quota limit reached)".to_string()
+        } else if msg.contains("FAILED_PRECONDITION") || msg.contains("failedPrecondition") {
+            "Failed precondition (secret may be in an invalid state)".to_string()
+        } else if msg.contains("UNAVAILABLE") {
+            "GCP service unavailable (try again later)".to_string()
+        } else {
+            msg
+        };
+
+        JawsError::Provider {
+            provider: "gcp".to_string(),
+            message: friendly,
+        }
+    }
 }
 
 /// Convenience type alias for Results using JawsError.
