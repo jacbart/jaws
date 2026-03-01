@@ -2,11 +2,11 @@
 
 Just A Working Secretsmanager
 
-A CLI tool and library for managing secrets from multiple providers (AWS Secrets Manager, 1Password, Bitwarden, and local storage) with local version tracking.
+A CLI tool and library for managing secrets from multiple providers (AWS Secrets Manager, GCP Secret Manager, 1Password, Bitwarden, and local storage) with local version tracking.
 
 ## Features
 
-- **Multi-provider support** - AWS Secrets Manager, 1Password, Bitwarden, and local "jaws" secrets
+- **Multi-provider support** - AWS Secrets Manager, GCP Secret Manager, 1Password, Bitwarden, and local "jaws" secrets
 - **Git-like workflow** - `jaws pull`, `jaws push`, familiar commands
 - **Local version tracking** - Full history of downloaded secrets with rollback support
 - **Template injection** - Inject secrets into config files with `--inject`
@@ -68,6 +68,7 @@ jaws pull
 
 # Pull a specific secret
 jaws pull aws://my-secret
+jaws pull gcp://my-secret
 
 # Edit and push changes back
 jaws push
@@ -131,7 +132,7 @@ jaws rollback
 | `jaws config set <key> <value>`   | Set a config value                                |
 | `jaws config provider`            | List configured providers                         |
 | `jaws config provider add`        | Add a provider (interactive discovery)            |
-| `jaws config provider add -k aws` | Add a specific provider type                      |
+| `jaws config provider add -k TYPE`| Add a specific provider type (aws, gcp, onepassword, bitwarden) |
 | `jaws config provider remove`     | Remove a provider (interactive picker)            |
 | `jaws config provider remove <id>`| Remove a provider by ID                           |
 | `jaws config clear-cache`         | Clear cached credentials from the OS keychain     |
@@ -173,6 +174,11 @@ provider "bw-myproject" kind="bw" {
     organization "org-uuid-here"
     token-env "BWS_ACCESS_TOKEN"
 }
+
+// GCP Secret Manager
+provider "gcp-prod" kind="gcp" {
+    project "my-gcp-project-id"
+}
 ```
 
 ### AWS Setup
@@ -186,6 +192,20 @@ Set the `OP_SERVICE_ACCOUNT_TOKEN` environment variable with your 1Password serv
 ### Bitwarden Setup
 
 Set the `BWS_ACCESS_TOKEN` environment variable with your Bitwarden Secrets Manager access token.
+
+### GCP Setup
+
+Authenticate using [Application Default Credentials](https://cloud.google.com/docs/authentication/application-default-credentials):
+
+```bash
+# For local development
+gcloud auth application-default login
+
+# Or use a service account key
+export GOOGLE_APPLICATION_CREDENTIALS="/path/to/service-account-key.json"
+```
+
+The `project` field in the provider config specifies which GCP project to use. The project ID can also be auto-discovered during `jaws config init` from the `GOOGLE_CLOUD_PROJECT` environment variable or the active `gcloud` configuration.
 
 ## Usage Examples
 
@@ -205,7 +225,8 @@ Create a template file (e.g., `.env.tpl`):
 
 ```
 DATABASE_URL=postgres://user:{{aws://db-password}}@localhost/mydb
-API_KEY={{jaws://api-key || 'default_value' }}
+API_KEY={{gcp://api-key}}
+FALLBACK_KEY={{jaws://api-key || 'default_value' }}
 ```
 
 Inject secrets:
@@ -226,8 +247,9 @@ You can create secrets locally or directly in a remote provider:
 # Create a local secret (default provider)
 jaws create my-local-secret
 
-# Create a secret in AWS
+# Create a secret in AWS or GCP
 jaws create aws://my-new-secret
+jaws create gcp://my-new-secret
 
 # Create from a file
 jaws create my-cert -f ./certificate.pem
@@ -286,7 +308,7 @@ use jaws::{Config, detect_providers};
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let config = Config::load()?;
-    let providers = detect_providers(&config).await?;
+    let providers = detect_providers(&config, None).await?;
 
     for provider in &providers {
         println!("Provider: {} ({})", provider.id(), provider.kind());
@@ -310,7 +332,7 @@ src/
 ├── config/          # Configuration loading, types, and provider discovery
 ├── db/              # SQLite database (schema, models, repository)
 ├── secrets/         # Secret providers
-│   └── providers/   # AWS, 1Password, Bitwarden, local
+│   └── providers/   # AWS, GCP, 1Password, Bitwarden, local
 └── utils/           # Utilities
 ```
 

@@ -1,3 +1,18 @@
+## [1.4.0] - 2026-03-01
+
+### 🚀 Features
+
+- Better provider handling
+- Improved error messages, reduce deps, add file permissions checks
+- *(google)* Add initial gcp secrets provider
+
+### 🐛 Bug Fixes
+
+- Rollback handling, delete and create
+
+### 🚜 Refactor
+
+- Use traits for provider, error type unification, cargo fmt, and general re-org
 ## [1.3.1] - 2026-02-25
 
 ### 🚀 Features
