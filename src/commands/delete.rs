@@ -122,22 +122,9 @@ pub async fn handle_delete(
             )
             .await?;
         }
-        DeleteScope::Remote => {
-            delete_remote(providers, &provider_id, &secret_display_name, force).await?;
-        }
-        DeleteScope::Both => {
-            // Delete remote first, then local
-            delete_remote(providers, &provider_id, &secret_display_name, force).await?;
-            if db_secret.is_some() {
-                delete_local(
-                    config,
-                    repo,
-                    &provider_id,
-                    &secret_display_name,
-                    db_secret.as_ref(),
-                )
+        DeleteScope::Remote | DeleteScope::Both => {
+            delete_remote(config, repo, providers, &provider_id, &secret_display_name, force)
                 .await?;
-            }
         }
     }
 
@@ -287,8 +274,10 @@ async fn delete_local(
     Ok(())
 }
 
-/// Delete secret from remote provider
+/// Delete secret from remote provider and clean up the local DB record.
 async fn delete_remote(
+    config: &Config,
+    repo: &SecretRepository,
     providers: &[Provider],
     provider_id: &str,
     secret_name: &str,
@@ -327,6 +316,29 @@ async fn delete_remote(
             )
             .into());
         }
+    }
+
+    // Clean up the local DB record and any cached files so `list` no
+    // longer shows the deleted secret.
+    if let Ok(Some(secret)) = repo.find_secret_by_provider_and_name(provider_id, secret_name) {
+        let downloads = repo.list_downloads(secret.id).unwrap_or_default();
+        let mut deleted_files = 0;
+        for download in &downloads {
+            let file_path = get_secret_path(&config.secrets_path(), &download.filename);
+            if file_path.exists() {
+                let _ = fs::remove_file(&file_path);
+                deleted_files += 1;
+            }
+        }
+        let _ = repo.delete_secret(secret.id);
+        if deleted_files > 0 || !downloads.is_empty() {
+            println!(
+                "Cleaned up local data ({} file(s), {} version record(s))",
+                deleted_files,
+                downloads.len()
+            );
+        }
+        repo.log_operation("delete_remote", provider_id, secret_name, None)?;
     }
 
     Ok(())

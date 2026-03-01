@@ -191,7 +191,7 @@ pub async fn handle_pull(
 
     let stream = futures::stream::iter(selected_secrets);
 
-    let results: Vec<Option<String>> = stream
+    let results: Vec<Option<(String, i64)>> = stream
         .map(|(provider_id, secret_id, api_ref, display_name, hash)| {
             let repo = repo.clone();
             let success_count = &success_count;
@@ -225,11 +225,13 @@ pub async fn handle_pull(
                                         eprintln!("Warning: Failed to record download: {}", e);
                                     }
                                     success_count.fetch_add(1, Ordering::Relaxed);
-                                    return Some(
-                                        get_secret_path(&config.secrets_path(), &filename)
-                                            .to_string_lossy()
-                                            .to_string(),
-                                    );
+                                    let file_path = get_secret_path(
+                                        &config.secrets_path(),
+                                        &filename,
+                                    )
+                                    .to_string_lossy()
+                                    .to_string();
+                                    return Some((file_path, secret_id));
                                 }
                                 Err(e) => {
                                     eprintln!(
@@ -253,7 +255,10 @@ pub async fn handle_pull(
         .collect()
         .await;
 
-    let downloaded_files: Vec<String> = results.into_iter().flatten().collect();
+    let (downloaded_files, downloaded_secret_ids): (Vec<String>, Vec<i64>) = results
+        .into_iter()
+        .flatten()
+        .unzip();
 
     // Print summary
     let succeeded = success_count.load(Ordering::Relaxed);
@@ -278,6 +283,13 @@ pub async fn handle_pull(
                     config.editor(), e
                 )
             })?;
+
+        // Snapshot any changes made in the editor, creating new versions
+        // for modified files. This mirrors the behavior of the default
+        // command (bare `jaws`) which also snapshots after editing.
+        use super::snapshot::{snapshot_secrets, print_snapshot_summary};
+        let results = snapshot_secrets(config, repo, &downloaded_secret_ids)?;
+        print_snapshot_summary(&results);
     }
 
     Ok(())
@@ -466,6 +478,11 @@ async fn handle_pull_by_name(
                     config.editor(), e
                 )
             })?;
+
+        // Snapshot any changes made in the editor
+        use super::snapshot::{snapshot_secrets, print_snapshot_summary};
+        let results = snapshot_secrets(config, repo, &[secret.id])?;
+        print_snapshot_summary(&results);
     }
 
     Ok(())

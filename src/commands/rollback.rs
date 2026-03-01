@@ -5,7 +5,7 @@ use std::process::Command;
 
 use crate::config::Config;
 use crate::db::SecretRepository;
-use crate::secrets::{Provider, get_secret_path, save_secret_file, storage::compute_content_hash};
+use crate::secrets::{Provider, get_secret_path, save_secret_file};
 use crate::utils::parse_secret_ref;
 
 use super::snapshot::{check_and_snapshot, is_dirty};
@@ -207,11 +207,15 @@ async fn handle_local_rollback(
     }
 
     let content = fs::read_to_string(&old_file_path)?;
-    let target_content_hash = compute_content_hash(&content);
 
-    // Compare with current version's hash - skip if identical
-    if let Some(current_hash) = &latest_download.file_hash {
-        if current_hash == &target_content_hash {
+    // Compare using DB-stored hashes rather than re-hashing the file from
+    // disk. The file on disk may have been modified in-place by an editor
+    // (e.g., via `pull -e`) before a snapshot was created, leaving stale
+    // content that doesn't match the version it was originally saved as.
+    if let (Some(current_hash), Some(target_hash)) =
+        (&latest_download.file_hash, &target_download.file_hash)
+    {
+        if current_hash == target_hash {
             println!(
                 "No changes - content identical to v{}.",
                 target_download.version

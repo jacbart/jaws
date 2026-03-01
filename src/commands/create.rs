@@ -4,7 +4,9 @@ use std::fs;
 use std::io::{self, Write};
 
 use crate::config::Config;
+use crate::db::{SecretInput, SecretRepository};
 use crate::secrets::Provider;
+use crate::secrets::storage::hash_api_ref;
 use crate::utils::edit_secret_value;
 
 use crate::utils::parse_secret_ref;
@@ -12,6 +14,7 @@ use crate::utils::parse_secret_ref;
 /// Handle the create command - create a new secret
 pub async fn handle_create(
     config: &Config,
+    repo: &SecretRepository,
     providers: &[Provider],
     name_arg: Option<String>,
     description: Option<String>,
@@ -71,6 +74,19 @@ pub async fn handle_create(
     let result = provider
         .create(&final_name, &value, description.as_deref())
         .await?;
+
+    // Register the secret in the local database so subsequent commands
+    // (pull, push, etc.) can find it without requiring a sync first.
+    let input = SecretInput {
+        provider_id: provider_id.clone(),
+        api_ref: final_name.clone(),
+        display_name: final_name.clone(),
+        hash: hash_api_ref(&final_name),
+        description: description.clone(),
+        remote_updated_at: None,
+    };
+    repo.upsert_secret(&input)?;
+    repo.log_operation("create", &provider_id, &final_name, None)?;
 
     println!("Created {}://{} ({})", provider_id, final_name, result);
 

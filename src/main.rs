@@ -319,7 +319,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             description,
             file,
         } => {
-            handle_create(&config, &providers, name, description, file).await?;
+            handle_create(&config, &repo, &providers, name, description, file).await?;
         }
 
         Commands::Log { limit, provider } => {
