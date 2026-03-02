@@ -2,13 +2,14 @@
 
 Just A Working Secretsmanager
 
-A CLI tool and library for managing secrets from multiple providers (AWS Secrets Manager, GCP Secret Manager, 1Password, Bitwarden, and local storage) with local version tracking.
+A CLI tool and library for managing secrets from multiple providers (AWS Secrets Manager, GCP Secret Manager, 1Password, Bitwarden, and local storage) with local version tracking and secure remote secret sharing.
 
 ![jaws demo](assets/demo.gif)
 
 ## Features
 
 - **Multi-provider support** - AWS Secrets Manager, GCP Secret Manager, 1Password, Bitwarden, and local "jaws" secrets
+- **Remote secret sharing** - Share secrets across machines with `jaws serve` and `jaws connect` (gRPC + mTLS)
 - **Git-like workflow** - `jaws pull`, `jaws push`, familiar commands
 - **Local version tracking** - Full history of downloaded secrets with rollback support
 - **Template injection** - Inject secrets into config files with `--inject`
@@ -102,6 +103,20 @@ jaws rollback
 | `jaws list`               | List all known secrets (one per line)          |
 | `jaws sync`               | Refresh local cache of remote secrets          |
 
+### Remote Secret Sharing
+
+| Command                              | Description                                              |
+| ------------------------------------ | -------------------------------------------------------- |
+| `jaws serve`                         | Start the gRPC secret sharing server (mTLS)              |
+| `jaws serve -n NAME`                 | Start server with a custom name                          |
+| `jaws serve -b ADDR`                 | Bind to a specific address (default: `0.0.0.0:9643`)    |
+| `jaws serve --generate-token`        | Generate a new enrollment token (no server restart)      |
+| `jaws serve --list-clients`          | List enrolled clients and their status                   |
+| `jaws serve --revoke CLIENT`         | Revoke a client's access                                 |
+| `jaws connect URL --token TOKEN`     | Enroll with a remote jaws server                         |
+| `jaws connect URL -n NAME`           | Connect with a custom server name                        |
+| `jaws disconnect NAME`               | Remove a server connection and delete client certificates|
+
 ### Log & Rollback
 
 | Command                  | Description                                    |
@@ -185,6 +200,13 @@ provider "bw-myproject" kind="bw" {
 provider "gcp-prod" kind="gcp" {
     project "my-gcp-project-id"
 }
+
+// Remote server connections (added by `jaws connect`)
+server "myserver" url="https://10.0.0.5:9643" {
+    ca-cert "~/.config/jaws/clients/myserver/ca.pem"
+    client-cert "~/.config/jaws/clients/myserver/client.pem"
+    client-key "~/.config/jaws/clients/myserver/client-key.pem"
+}
 ```
 
 ### AWS Setup
@@ -213,6 +235,88 @@ export GOOGLE_APPLICATION_CREDENTIALS="/path/to/service-account-key.json"
 
 The `project` field in the provider config specifies which GCP project to use. The project ID can also be auto-discovered during `jaws config init` from the `GOOGLE_CLOUD_PROJECT` environment variable or the active `gcloud` configuration.
 
+## Remote Secret Sharing
+
+JAWS includes a built-in gRPC server with mTLS (mutual TLS) authentication for securely sharing secrets across machines. The server exposes all configured providers to enrolled clients.
+
+### How It Works
+
+```
+┌──────────────────┐        mTLS (gRPC/HTTP2)        ┌──────────────────┐
+│   jaws client    │ ◄──────────────────────────────► │   jaws serve     │
+│                  │                                   │                  │
+│ RemoteProvider   │  ── pull/push/list/create/del ─► │ SecretManager    │
+│ (per server      │                                   │ providers[]      │
+│  provider)       │                                   │ (aws, gcp, op…)  │
+└──────────────────┘                                   └──────────────────┘
+```
+
+- The **server** runs `jaws serve` and exposes its configured providers over gRPC
+- **Clients** enroll via `jaws connect` using a one-time enrollment token
+- After enrollment, remote providers appear transparently as `servername/provider` (e.g., `myserver/aws-prod`)
+- All operations (pull, push, create, delete, rollback) work through remote providers using the same syntax
+
+### Security
+
+- **mTLS authentication** - Both server and client present certificates signed by the server's CA
+- **Built-in PKI** - Certificate Authority generated automatically on first `jaws serve` run (no external PKI required)
+- **One-time enrollment tokens** - UUID tokens expire in 15 minutes, single-use
+- **Certificate pinning** - Clients trust only the specific server CA
+- **Client revocation** - `jaws serve --revoke <name>` immediately blocks a client
+- **Audit logging** - All remote operations logged with client identity
+- **No secret caching** - Secrets are fetched from providers on-demand per request
+
+### Server Setup
+
+```bash
+# Start the server (generates CA and certs on first run)
+jaws serve -n myserver
+
+# The server prints an enrollment token:
+#   === Enrollment Token ===
+#     a1b2c3d4-e5f6-7890-abcd-ef1234567890
+#   ========================
+
+# Generate additional tokens without restarting
+jaws serve --generate-token
+
+# Manage enrolled clients
+jaws serve --list-clients
+jaws serve --revoke badclient
+```
+
+### Client Setup
+
+```bash
+# Enroll with the server (saves certs + updates config automatically)
+jaws connect https://10.0.0.5:9643 --token a1b2c3d4-e5f6-7890-abcd-ef1234567890
+
+# Discover remote secrets
+jaws sync
+
+# Pull a secret through the server
+jaws pull myserver/aws-prod://db-password -p
+
+# Use in templates
+jaws pull -i .env.tpl -o .env
+# where .env.tpl contains: DB_PASS={{myserver/aws-prod://db-password}}
+
+# Disconnect when done
+jaws disconnect myserver
+```
+
+### Custom Certificates
+
+By default, `jaws serve` generates its own CA and certificates. You can also provide your own:
+
+```bash
+jaws serve \
+  --ca-cert /path/to/ca.pem \
+  --ca-key /path/to/ca-key.pem \
+  --server-cert /path/to/server.pem \
+  --server-key /path/to/server-key.pem
+```
+
 ## Usage Examples
 
 ### Scripting with `--print`
@@ -223,6 +327,9 @@ export DB_PASSWORD=$(jaws pull aws://prod/db-password -p)
 
 # Use in a command
 mysql -u admin -p$(jaws pull aws://mysql-pass -p) mydb
+
+# Pull from a remote server
+export API_KEY=$(jaws pull myserver/aws-prod://api-key -p)
 ```
 
 ### Template Injection with `--inject`
@@ -233,6 +340,7 @@ Create a template file (e.g., `.env.tpl`):
 DATABASE_URL=postgres://user:{{aws://db-password}}@localhost/mydb
 API_KEY={{gcp://api-key}}
 FALLBACK_KEY={{jaws://api-key || 'default_value' }}
+REMOTE_SECRET={{myserver/op-team://shared-token}}
 ```
 
 Inject secrets:
@@ -268,6 +376,9 @@ List and manage secrets:
 ```bash
 # List all secrets including local ones
 jaws list --provider jaws
+
+# List secrets from a remote server's provider
+jaws list --provider myserver/aws-prod
 ```
 
 ### Clean Up
@@ -334,12 +445,16 @@ src/
 ├── credentials.rs   # Credential encryption, decryption, and session caching
 ├── keychain.rs      # OS keychain integration (TTL-based cache)
 ├── cli/             # CLI argument and command definitions
+├── client/          # Remote client (RemoteProvider, mTLS connection, enrollment)
 ├── commands/        # Command handlers
 ├── config/          # Configuration loading, types, and provider discovery
 ├── db/              # SQLite database (schema, models, repository)
 ├── secrets/         # Secret providers
 │   └── providers/   # AWS, GCP, 1Password, Bitwarden, local
+├── server/          # gRPC server (mTLS, PKI, enrollment, service)
 └── utils/           # Utilities
+proto/
+└── jaws.proto       # gRPC service definition
 ```
 
 ## Development
