@@ -1,7 +1,7 @@
 //! Repository for database CRUD operations.
 
 use super::models::{DbDownload, DbOperation, DbProvider, DbSecret, SecretInput, StoredCredential};
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, NaiveDateTime, Utc};
 use rusqlite::{Connection, OptionalExtension, params};
 use std::sync::{Arc, Mutex};
 
@@ -10,6 +10,21 @@ use crate::error::JawsError;
 /// Repository for managing secrets in the database.
 pub struct SecretRepository {
     conn: Arc<Mutex<Connection>>,
+}
+
+/// Parse a timestamp string that may be either RFC 3339 (from Rust) or
+/// SQLite's `datetime('now')` format (`YYYY-MM-DD HH:MM:SS`).
+/// Returns `None` if neither format matches.
+fn parse_datetime(s: &str) -> Option<DateTime<Utc>> {
+    // Try RFC 3339 first (e.g. "2026-03-01T12:34:56+00:00")
+    if let Ok(dt) = DateTime::parse_from_rfc3339(s) {
+        return Some(dt.with_timezone(&Utc));
+    }
+    // Fallback: SQLite datetime('now') format (e.g. "2026-03-01 12:34:56")
+    if let Ok(naive) = NaiveDateTime::parse_from_str(s, "%Y-%m-%d %H:%M:%S") {
+        return Some(naive.and_utc());
+    }
+    None
 }
 
 /// Helper to convert PoisonError from Mutex::lock() into JawsError.
@@ -470,12 +485,13 @@ impl SecretRepository {
         details: Option<&str>,
     ) -> Result<(), JawsError> {
         let conn = self.conn.lock().map_err(lock_err)?;
+        let now = Utc::now().to_rfc3339();
         conn.execute(
             r#"
-            INSERT INTO operations (operation_type, provider_id, secret_name, details)
-            VALUES (?1, ?2, ?3, ?4)
+            INSERT INTO operations (operation_type, provider_id, secret_name, details, created_at)
+            VALUES (?1, ?2, ?3, ?4, ?5)
             "#,
-            params![operation_type, provider_id, secret_name, details],
+            params![operation_type, provider_id, secret_name, details, now],
         )?;
         Ok(())
     }
@@ -639,13 +655,11 @@ impl SecretRepository {
             description: row.get(5)?,
             remote_updated_at: row
                 .get::<_, Option<String>>(6)?
-                .and_then(|s| DateTime::parse_from_rfc3339(&s).ok())
-                .map(|dt| dt.with_timezone(&Utc)),
+                .and_then(|s| parse_datetime(&s)),
             created_at: row
                 .get::<_, String>(7)
                 .ok()
-                .and_then(|s| DateTime::parse_from_rfc3339(&s).ok())
-                .map(|dt| dt.with_timezone(&Utc))
+                .and_then(|s| parse_datetime(&s))
                 .unwrap_or_else(Utc::now),
         })
     }
@@ -659,8 +673,7 @@ impl SecretRepository {
             downloaded_at: row
                 .get::<_, String>(4)
                 .ok()
-                .and_then(|s| DateTime::parse_from_rfc3339(&s).ok())
-                .map(|dt| dt.with_timezone(&Utc))
+                .and_then(|s| parse_datetime(&s))
                 .unwrap_or_else(Utc::now),
             file_hash: row.get(5)?,
         })
@@ -676,8 +689,7 @@ impl SecretRepository {
             created_at: row
                 .get::<_, String>(5)
                 .ok()
-                .and_then(|s| DateTime::parse_from_rfc3339(&s).ok())
-                .map(|dt| dt.with_timezone(&Utc))
+                .and_then(|s| parse_datetime(&s))
                 .unwrap_or_else(Utc::now),
         })
     }
