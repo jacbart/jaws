@@ -242,6 +242,9 @@ async fn select_dirty_secrets(
 
     let mut tui_config = TuiConfig::fullscreen();
     tui_config.show_help_text = false;
+    tui_config
+        .preview_rules
+        .push(super::preview::preview_rule());
 
     // Enable multi-select for batch push
     let selected = run_tui_with_config(rx, true, tui_config)

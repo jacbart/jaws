@@ -41,6 +41,9 @@ pub async fn handle_default_command(
 
     let mut tui_config = TuiConfig::fullscreen();
     tui_config.show_help_text = false;
+    tui_config
+        .preview_rules
+        .push(super::preview::preview_rule());
 
     let selected = run_tui_with_config(rx, true, tui_config)
         .await

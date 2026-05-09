@@ -12,12 +12,16 @@ in
 pkgs.mkShell {
   name = "${pname}-${version}";
   buildInputs = with pkgs; [
-    (rustVersion.override { extensions = [ "rust-src" ]; })
+    (rustVersion.override {
+      extensions = [
+        "rust-src"
+        "rust-analyzer"
+      ];
+    })
     bacon
-    rust-analyzer
     lldb
-    openssl
     pkg-config
+    openssl
     git-cliff
     cargo-zigbuild
     protobuf

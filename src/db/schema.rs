@@ -5,7 +5,7 @@ use std::path::Path;
 
 use crate::error::JawsError;
 
-const SCHEMA_VERSION: i32 = 4;
+const SCHEMA_VERSION: i32 = 5;
 
 /// Initialize the database at the given path, creating tables if needed.
 pub fn init_db(path: &Path) -> Result<Connection, JawsError> {
@@ -230,6 +230,14 @@ fn migrate(conn: &Connection, from_version: i32, to_version: i32) -> rusqlite::R
                         used_by_client_id TEXT
                     );
                     "#,
+                )?;
+            }
+            4 => {
+                // Migration from v4 to v5:
+                // - Add filename column to downloads (was missing in early schemas)
+                conn.execute(
+                    "ALTER TABLE downloads ADD COLUMN filename TEXT NOT NULL DEFAULT ''",
+                    [],
                 )?;
             }
             _ => {

@@ -57,6 +57,9 @@ pub async fn select_from_all_providers(
 
     let mut tui_config = TuiConfig::fullscreen();
     tui_config.show_help_text = false;
+    tui_config
+        .preview_rules
+        .push(crate::commands::preview::preview_rule());
 
     let selected_items = run_tui_with_config(rx, true, tui_config)
         .await

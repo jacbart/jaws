@@ -9,8 +9,9 @@ use jaws::cli::{Cli, Commands, ConfigCommands, ProviderCommands};
 use jaws::commands::{
     handle_add_provider, handle_clean, handle_clear_cache, handle_connect, handle_create,
     handle_default_command, handle_delete, handle_disconnect, handle_export, handle_import,
-    handle_interactive_generate, handle_list, handle_log, handle_pull, handle_pull_inject,
-    handle_push, handle_remove_provider, handle_rollback, handle_serve, handle_sync,
+    handle_interactive_generate, handle_list, handle_log, handle_preview, handle_pull,
+    handle_pull_inject, handle_push, handle_remove_provider, handle_rollback, handle_serve,
+    handle_sync,
 };
 use jaws::config::Config;
 use jaws::db::{SecretRepository, init_db};
@@ -25,6 +26,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Load config from file (use CLI-specified path if provided)
     let config = Config::load_from(cli.config.config_path.as_deref())?;
+
+    // Propagate custom config path to child processes (e.g., ff preview)
+    if let Some(ref config_path) = cli.config.config_path {
+        unsafe {
+            std::env::set_var("JAWS_CONFIG_PATH", config_path);
+        }
+    }
 
     // Handle Version command separately as it doesn't require providers or database
     if let Some(Commands::Version) = &cli.command {
@@ -364,6 +372,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             keep_local,
         } => {
             handle_clean(&config, &repo, force, dry_run, keep_local)?;
+        }
+
+        Commands::Preview { secret_name } => {
+            handle_preview(&config, &repo, &providers, &secret_name).await?;
         }
     }
 

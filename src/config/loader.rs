@@ -127,6 +127,12 @@ impl Config {
             }
             return Self::load_from_path(p);
         }
+        if let Ok(env_path) = std::env::var("JAWS_CONFIG_PATH") {
+            let p = std::path::PathBuf::from(env_path);
+            if p.exists() {
+                return Self::load_from_path(&p);
+            }
+        }
         Self::load()
     }
 

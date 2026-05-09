@@ -230,6 +230,12 @@ pub enum Commands {
         /// Server name to disconnect from
         name: String,
     },
+    /// Preview a secret value (internal use by TUI)
+    #[command(name = "__preview", hide = true)]
+    Preview {
+        /// Secret reference: PROVIDER://SECRET_NAME or "provider | name"
+        secret_name: String,
+    },
     /// Print version information
     Version,
 }

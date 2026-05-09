@@ -16,7 +16,7 @@
     let
       pname = "jaws";
       version = (builtins.fromTOML (builtins.readFile ./Cargo.toml)).package.version;
-      projectRustVersion = "1.92.0";
+      projectRustVersion = "1.94.1";
       inherit (nixpkgs) lib;
       allSystems = [
         "x86_64-linux"

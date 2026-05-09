@@ -44,6 +44,9 @@ pub async fn handle_pull(
     // Set up TUI config
     let mut tui_config = TuiConfig::fullscreen();
     tui_config.show_help_text = false;
+    tui_config
+        .preview_rules
+        .push(super::preview::preview_rule());
 
     // Create session with per-item indicator support
     let (session, tui_future) = FuzzyFinderWithIndicators::with_config(true, tui_config);

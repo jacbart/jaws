@@ -85,6 +85,9 @@ async fn handle_local_rollback(
 
         let mut tui_config = TuiConfig::fullscreen();
         tui_config.show_help_text = false;
+        tui_config
+            .preview_rules
+            .push(super::preview::preview_rule());
 
         let selected = run_tui_with_config(rx, false, tui_config)
             .await
