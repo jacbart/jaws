@@ -12,90 +12,94 @@ Set Width 1200
 Set Height 600
 Set Theme "Catppuccin Mocha"
 Set Padding 20
-Set TypingSpeed 40ms
-Set PlaybackSpeed 1.2
+Set TypingSpeed 25ms
+Set PlaybackSpeed 1.5
 
-# -- Setup: create a temp workspace so we don't pollute the repo --
+# -- Setup: temp workspace, disable keychain, prep secret files --
 Hide
 Type "cd $(mktemp -d) && export EDITOR=cat && export PS1='$ '"
 Enter
-Sleep 500ms
+Sleep 300ms
+Type "jaws config init --minimal --path ./jaws.kdl && jaws config set keychain_cache false"
+Enter
+Sleep 1500ms
+Type "echo 'super-secret-db-password-123' > /tmp/jaws-demo-secret.txt && echo 'sk-abc123-staging-api-key' > /tmp/jaws-demo-api.txt"
+Enter
+Sleep 200ms
 Show
+
+# -- Clear the screen so setup output is gone --
+Type "clear"
+Sleep 100ms
+Enter
+Sleep 300ms
 
 # -- Title --
 Type "# JAWS - Just A Working Secretsmanager"
-Sleep 1s
-Enter
 Sleep 500ms
-
-# -- Initialize a minimal config --
-Type "jaws config init --minimal --path ./jaws.kdl"
-Sleep 300ms
 Enter
-Sleep 2s
-
-Type "jaws config set keychain_cache false"
 Sleep 300ms
-Enter
-Sleep 1s
 
-# -- Create a secret from a value --
-Type "echo 'super-secret-db-password-123' > /tmp/jaws-demo-secret.txt"
+# -- Create two secrets --
+Type "jaws create prod/db-password -d 'Production DB password' -f /tmp/jaws-demo-secret.txt"
 Sleep 200ms
 Enter
-Sleep 500ms
-
-Type "jaws create prod/db-password -d 'Production database password' -f /tmp/jaws-demo-secret.txt"
-Sleep 300ms
-Enter
-Sleep 3s
-
-# -- Create a second secret --
-Type "echo 'sk-abc123-staging-api-key' > /tmp/jaws-demo-api.txt"
-Sleep 200ms
-Enter
-Sleep 500ms
+Sleep 1500ms
 
 Type "jaws create staging/api-key -d 'Staging API key' -f /tmp/jaws-demo-api.txt"
-Sleep 300ms
+Sleep 200ms
 Enter
-Sleep 3s
+Sleep 1500ms
 
 # -- List secrets --
 Type "jaws list"
-Sleep 300ms
+Sleep 200ms
 Enter
-Sleep 2s
+Sleep 1000ms
 
-# -- Pull and print a secret to stdout --
+# -- Pull and print a secret --
 Type "jaws pull jaws://prod/db-password -p"
-Sleep 300ms
+Sleep 200ms
 Enter
-Sleep 2s
+Sleep 1000ms
 
-# -- Show operation log --
+# -- Template injection (create template then inject) --
+Type "cat > .env.tpl <<'EOF'"
+Enter
+Type "DB_PASS={{jaws://prod/db-password}}"
+Enter
+Type "API_KEY={{jaws://staging/api-key}}"
+Enter
+Type "EOF"
+Sleep 200ms
+Enter
+Sleep 500ms
+
+Type "jaws pull -i .env.tpl"
+Sleep 200ms
+Enter
+Sleep 1500ms
+
+# -- Operation log --
 Type "jaws log"
-Sleep 300ms
+Sleep 200ms
 Enter
-Sleep 3s
+Sleep 1000ms
 
-# -- View version history for a specific secret --
+# -- Version history --
 Type "jaws log jaws://prod/db-password"
-Sleep 300ms
+Sleep 200ms
 Enter
-Sleep 2s
-
-# -- Show the config --
-Type "jaws config"
-Sleep 300ms
-Enter
-Sleep 2s
+Sleep 1000ms
 
 # -- Cleanup --
 Type "jaws clean --force"
-Sleep 300ms
+Sleep 200ms
 Enter
-Sleep 2s
+Sleep 1500ms
 
-# -- Final pause before loop --
-Sleep 2s
+# -- Version sign-off --
+Type "jaws version"
+Sleep 200ms
+Enter
+Sleep 800ms

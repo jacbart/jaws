@@ -7,7 +7,19 @@ A CLI tool and library for managing secrets from multiple providers (AWS Secrets
 ![Version](https://img.shields.io/badge/version-1.5.1-blue)
 ![License](https://img.shields.io/badge/license-MPL--2.0-blue)
 
-![jaws demo](assets/demo.gif)
+## Demo
+
+### Creating Secrets
+
+![jaws create demo](assets/demo-create.gif)
+
+### Pulling & Template Injection
+
+![jaws pull demo](assets/demo-pull.gif)
+
+### Operation Log & Version History
+
+![jaws log demo](assets/demo-log.gif)
 
 ## Features
 
