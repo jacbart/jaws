@@ -45,8 +45,8 @@ pub async fn handle_push(
     };
 
     if secrets_to_push.is_empty() {
-        if secret_name.is_some() {
-            return Err(format!("No matching secrets found for '{}'", secret_name.unwrap()).into());
+        if let Some(ref name) = secret_name {
+            return Err(format!("No matching secrets found for '{}'", name).into());
         } else {
             println!("No modified secrets to push.");
             return Ok(());

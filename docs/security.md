@@ -8,6 +8,7 @@
 - [Enrollment Security](#enrollment-security)
 - [Client Revocation](#client-revocation)
 - [Secret Handling](#secret-handling)
+- [Dependency Security](#dependency-security)
 - [Best Practices](#best-practices)
 
 ---
@@ -132,6 +133,34 @@ Revocation is immediate — no CRL distribution delay, no OCSP round-trips.
 - Remote sharing uses gRPC over TLS 1.3 with mutual authentication
 - Secret values are never logged
 - No caching on the server — secrets are fetched from providers on every request
+
+---
+
+## Dependency Security
+
+JAWS uses `cargo audit` and `cargo deny` to monitor dependency vulnerabilities and license compliance.
+
+### Auditing
+
+```bash
+# Check for known vulnerabilities
+cargo audit
+
+# Full policy check (advisories, licenses, bans, sources)
+cargo deny check
+```
+
+Configuration lives in `deny.toml` at the project root. Unfixable upstream advisories are documented with ignore entries:
+
+| Advisory | Crate | Status |
+|----------|-------|--------|
+| RUSTSEC-2023-0071 (rsa Marvin Attack) | `age`, `bitwarden-crypto` | No upstream fix available |
+| RUSTSEC-2024-0370 (proc-macro-error) | `knuffel` | Unmaintained, no alternative |
+| RUSTSEC-2026-0173 (proc-macro-error2) | `bitwarden`, `age` | Upstream dependency |
+
+### TLS Stack
+
+The gRPC transport uses `rustls 0.23` with `aws-lc-rs` as the cryptographic backend. AWS SDK crates are configured with `default-features = false` to avoid pulling in the legacy `rustls 0.21` stack.
 
 ---
 

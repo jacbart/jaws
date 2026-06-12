@@ -188,6 +188,18 @@ impl JawsError {
             "Secret not found (may have been deleted)".to_string()
         } else if msg.contains("AccessDeniedException") {
             "Access denied (check IAM permissions)".to_string()
+        } else if msg.contains("UnrecognizedClientException")
+            || msg.contains("InvalidSignatureException")
+            || msg.contains("InvalidClientTokenId")
+        {
+            "Invalid credentials (check access key and secret key)".to_string()
+        } else if msg.contains("ExpiredTokenException") || msg.contains("ExpiredToken") {
+            "Credentials expired (refresh SSO session or rotate keys)".to_string()
+        } else if msg.contains("CredentialsProviderError")
+            || msg.contains("could not find credentials")
+            || msg.contains("No credentials were supplied")
+        {
+            "No credentials found for profile (check ~/.aws/credentials)".to_string()
         } else if msg.contains("InvalidParameterException") {
             "Invalid parameter".to_string()
         } else if msg.contains("InvalidRequestException") {
@@ -196,6 +208,8 @@ impl JawsError {
             "Decryption failed (KMS key issue)".to_string()
         } else if msg.contains("InternalServiceError") {
             "AWS internal error (try again later)".to_string()
+        } else if msg.contains("ThrottlingException") || msg.contains("TooManyRequestsException") {
+            "Rate limited by AWS (try again later)".to_string()
         } else {
             msg
         };
@@ -204,6 +218,23 @@ impl JawsError {
             provider: "aws".to_string(),
             message: friendly,
         }
+    }
+
+    /// Check if an error message indicates an authentication or credential failure.
+    /// Used by sync to break early when a provider's credentials are invalid,
+    /// since all subsequent API calls will also fail.
+    pub fn is_auth_error(msg: &str) -> bool {
+        msg.contains("Access denied")
+            || msg.contains("Invalid credentials")
+            || msg.contains("Credentials expired")
+            || msg.contains("No credentials found")
+            || msg.contains("AccessDeniedException")
+            || msg.contains("UnrecognizedClientException")
+            || msg.contains("InvalidSignatureException")
+            || msg.contains("ExpiredTokenException")
+            || msg.contains("CredentialsProviderError")
+            || msg.contains("Not authenticated")
+            || msg.contains("Permission denied")
     }
 
     /// Create a provider error for GCP, translating common Secret Manager

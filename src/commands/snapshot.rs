@@ -139,12 +139,12 @@ pub fn snapshot_secrets(
     let mut results = Vec::new();
 
     for &secret_id in secret_ids {
-        if let Some(secret) = repo.get_secret_by_id(secret_id)? {
-            if let Some(download) = repo.get_latest_download(secret_id)? {
-                let result = check_and_snapshot(config, repo, &secret, &download)?;
-                if result.new_version.is_some() {
-                    results.push(result);
-                }
+        if let Some(secret) = repo.get_secret_by_id(secret_id)?
+            && let Some(download) = repo.get_latest_download(secret_id)?
+        {
+            let result = check_and_snapshot(config, repo, &secret, &download)?;
+            if result.new_version.is_some() {
+                results.push(result);
             }
         }
     }

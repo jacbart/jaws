@@ -223,6 +223,14 @@ nix build .#jaws-aarch64-linux
 
 Manual cross-compilation requires `cargo-zigbuild` and target-specific linkers.
 
+### `conflicting implementations of trait From` (aws-smithy-types)
+
+A known incompatibility between `time >= 0.3.48` and `aws-smithy-types` causes a build failure. JAWS pins `time = "=0.3.47"` in `Cargo.toml` to avoid this. If you see this error after updating dependencies, run:
+
+```bash
+cargo update -p time --precise 0.3.47
+```
+
 ---
 
 See also:

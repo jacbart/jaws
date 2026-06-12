@@ -5,6 +5,7 @@
 - [Dev Shell](#dev-shell)
 - [Building from Source](#building-from-source)
 - [Running Tests](#running-tests)
+- [Dependency Auditing](#dependency-auditing)
 - [Demo GIF Generation](#demo-gif-generation)
 - [Cross-Compilation](#cross-compilation)
 - [Release Process](#release-process)
@@ -25,6 +26,7 @@ This provides:
 - `bacon` (auto-rebuild on save)
 - `lldb` (debugger)
 - `cargo-zigbuild` (cross-compilation)
+- `cargo-deny` (dependency license and advisory checks)
 - `protobuf` (gRPC code generation)
 - `vhs`, `ttyd`, `ffmpeg` (demo recording)
 
@@ -66,6 +68,24 @@ The test suite covers:
 - Configuration parsing (KDL)
 - Archive encryption/decryption
 - PKI certificate generation
+
+---
+
+## Dependency Auditing
+
+Check for known vulnerabilities in dependencies:
+
+```bash
+cargo audit
+```
+
+Run comprehensive dependency policy checks (licenses, advisories, bans):
+
+```bash
+cargo deny check
+```
+
+The `deny.toml` configuration allows approved licenses and documents unfixable upstream advisories (e.g., the `rsa` Marvin Attack advisory affecting `age` and `bitwarden-crypto`). Run both commands before releases.
 
 ---
 

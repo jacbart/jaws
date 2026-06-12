@@ -422,37 +422,34 @@ async fn list_items_for_stream(
     let mut secret_refs = Vec::new();
 
     for item in items {
-        match sdk_client.get_item(&vault_id, &item.id).await {
-            Ok(full_item) => {
-                for field in &full_item.fields {
-                    if !field.value.is_empty() && !field.title.is_empty() {
-                        let secret_ref = SecretRef::new(
-                            format!("{}/{}/{}", vault_name, full_item.title, field.title),
-                            format!("op://{}/{}/{}", vault_id, full_item.id, field.id),
-                        );
-                        secret_refs.push(secret_ref.to_combined());
-                    }
-                }
-
-                if !full_item.notes.is_empty() {
+        if let Ok(full_item) = sdk_client.get_item(&vault_id, &item.id).await {
+            for field in &full_item.fields {
+                if !field.value.is_empty() && !field.title.is_empty() {
                     let secret_ref = SecretRef::new(
-                        format!("{}/{}/notesPlain", vault_name, full_item.title),
-                        format!("op://{}/{}/notesPlain", vault_id, full_item.id),
-                    );
-                    secret_refs.push(secret_ref.to_combined());
-                }
-
-                if full_item.category == ItemCategory::Document
-                    && let Some(doc) = &full_item.document
-                {
-                    let secret_ref = SecretRef::new(
-                        format!("{}/{}/{}", vault_name, full_item.title, doc.name),
-                        format!("op://{}/{}/{}", vault_id, full_item.id, doc.id),
+                        format!("{}/{}/{}", vault_name, full_item.title, field.title),
+                        format!("op://{}/{}/{}", vault_id, full_item.id, field.id),
                     );
                     secret_refs.push(secret_ref.to_combined());
                 }
             }
-            Err(_) => {}
+
+            if !full_item.notes.is_empty() {
+                let secret_ref = SecretRef::new(
+                    format!("{}/{}/notesPlain", vault_name, full_item.title),
+                    format!("op://{}/{}/notesPlain", vault_id, full_item.id),
+                );
+                secret_refs.push(secret_ref.to_combined());
+            }
+
+            if full_item.category == ItemCategory::Document
+                && let Some(doc) = &full_item.document
+            {
+                let secret_ref = SecretRef::new(
+                    format!("{}/{}/{}", vault_name, full_item.title, doc.name),
+                    format!("op://{}/{}/{}", vault_id, full_item.id, doc.id),
+                );
+                secret_refs.push(secret_ref.to_combined());
+            }
         }
     }
 

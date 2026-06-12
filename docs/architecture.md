@@ -53,7 +53,7 @@ The `RemoteProvider` (`src/client/`) implements `SecretManager` by proxying all 
 
 ## gRPC Service
 
-The gRPC service is defined in `proto/jaws.proto` and generated with `tonic-build` at compile time.
+The gRPC service is defined in `proto/jaws.proto` and generated with `tonic-prost-build` at compile time.
 
 **RPCs:**
 

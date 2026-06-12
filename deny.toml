@@ -1,0 +1,170 @@
+[advisories]
+ignore = [
+  { id = "RUSTSEC-2023-0071", reason = "rsa Marvin Attack: no fix available in age or bitwarden-crypto upstream" },
+  { id = "RUSTSEC-2024-0370", reason = "proc-macro-error unmaintained: no alternative in knuffel upstream" },
+  { id = "RUSTSEC-2026-0173", reason = "proc-macro-error2 unmaintained: upstream in bitwarden and age" },
+]
+
+[licenses]
+allow = [
+  "MIT",
+  "Apache-2.0",
+  "BSD-2-Clause",
+  "BSD-3-Clause",
+  "ISC",
+  "Zlib",
+  "MPL-2.0",
+  "Unicode-3.0",
+  "CDLA-Permissive-2.0",
+  "GPL-3.0",
+  "GPL-3.0-only",
+  "LicenseRef-Bitwarden-SDK",
+]
+unused-allowed-license = "allow"
+
+[[licenses.clarify]]
+crate = "bitwarden"
+expression = "GPL-3.0-only"
+license-files = [
+  { path = "LICENSE", hash = 0xde4da07d },
+]
+
+[[licenses.clarify]]
+crate = "bitwarden-api-api"
+expression = "GPL-3.0-only"
+license-files = [
+  { path = "LICENSE", hash = 0xa11c5ebb },
+]
+
+[[licenses.clarify]]
+crate = "bitwarden-api-base"
+expression = "GPL-3.0-only"
+license-files = [
+  { path = "LICENSE", hash = 0xa11c5ebb },
+]
+
+[[licenses.clarify]]
+crate = "bitwarden-api-identity"
+expression = "GPL-3.0-only"
+license-files = [
+  { path = "LICENSE", hash = 0xa11c5ebb },
+]
+
+[[licenses.clarify]]
+crate = "bitwarden-api-key-connector"
+expression = "GPL-3.0-only"
+license-files = [
+  { path = "LICENSE", hash = 0xa11c5ebb },
+]
+
+[[licenses.clarify]]
+crate = "bitwarden-auth"
+expression = "GPL-3.0-only"
+license-files = [
+  { path = "LICENSE", hash = 0xa11c5ebb },
+]
+
+[[licenses.clarify]]
+crate = "bitwarden-core"
+expression = "GPL-3.0-only"
+license-files = [
+  { path = "LICENSE", hash = 0xa11c5ebb },
+]
+
+[[licenses.clarify]]
+crate = "bitwarden-core-macro"
+expression = "GPL-3.0-only"
+license-files = [
+  { path = "LICENSE", hash = 0xa11c5ebb },
+]
+
+[[licenses.clarify]]
+crate = "bitwarden-crypto"
+expression = "GPL-3.0-only"
+license-files = [
+  { path = "LICENSE", hash = 0xa11c5ebb },
+]
+
+[[licenses.clarify]]
+crate = "bitwarden-encoding"
+expression = "GPL-3.0-only"
+license-files = [
+  { path = "LICENSE", hash = 0xa11c5ebb },
+]
+
+[[licenses.clarify]]
+crate = "bitwarden-error"
+expression = "GPL-3.0-only"
+license-files = [
+  { path = "LICENSE", hash = 0xa11c5ebb },
+]
+
+[[licenses.clarify]]
+crate = "bitwarden-error-macro"
+expression = "GPL-3.0-only"
+license-files = [
+  { path = "LICENSE", hash = 0xa11c5ebb },
+]
+
+[[licenses.clarify]]
+crate = "bitwarden-generators"
+expression = "GPL-3.0-only"
+license-files = [
+  { path = "LICENSE", hash = 0xa11c5ebb },
+]
+
+[[licenses.clarify]]
+crate = "bitwarden-organizations"
+expression = "GPL-3.0-only"
+license-files = [
+  { path = "LICENSE", hash = 0xa11c5ebb },
+]
+
+[[licenses.clarify]]
+crate = "bitwarden-policies"
+expression = "GPL-3.0-only"
+license-files = [
+  { path = "LICENSE", hash = 0xa11c5ebb },
+]
+
+[[licenses.clarify]]
+crate = "bitwarden-sm"
+expression = "LicenseRef-Bitwarden-SDK"
+license-files = [
+  { path = "LICENSE_SDK.txt", hash = 0xdb29a88f },
+]
+
+[[licenses.clarify]]
+crate = "bitwarden-state"
+expression = "GPL-3.0-only"
+license-files = [
+  { path = "LICENSE", hash = 0xa11c5ebb },
+]
+
+[[licenses.clarify]]
+crate = "bitwarden-state-bridge-macro"
+expression = "GPL-3.0-only"
+license-files = [
+  { path = "LICENSE", hash = 0xa11c5ebb },
+]
+
+[[licenses.clarify]]
+crate = "bitwarden-threading"
+expression = "GPL-3.0-only"
+license-files = [
+  { path = "LICENSE", hash = 0xa11c5ebb },
+]
+
+[[licenses.clarify]]
+crate = "bitwarden-uuid"
+expression = "GPL-3.0-only"
+license-files = [
+  { path = "LICENSE", hash = 0xa11c5ebb },
+]
+
+[[licenses.clarify]]
+crate = "bitwarden-uuid-macro"
+expression = "GPL-3.0-only"
+license-files = [
+  { path = "LICENSE", hash = 0xa11c5ebb },
+]

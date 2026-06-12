@@ -232,13 +232,13 @@ impl SecretManager for JawsSecretManager {
         let target_content_hash = compute_content_hash(&content);
 
         let current = &downloads[0];
-        if let Some(current_hash) = &current.file_hash {
-            if current_hash == &target_content_hash {
-                return Ok(format!(
-                    "No changes - content identical to v{}.",
-                    target.version
-                ));
-            }
+        if let Some(current_hash) = &current.file_hash
+            && current_hash == &target_content_hash
+        {
+            return Ok(format!(
+                "No changes - content identical to v{}.",
+                target.version
+            ));
         }
 
         let new_version = current.version + 1;

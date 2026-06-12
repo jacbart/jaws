@@ -209,9 +209,9 @@ async fn init_remote_providers(
         JawsError::config(format!("Server '{}' missing client-key", server_conn.name))
     })?;
 
-    let ca_path: std::path::PathBuf = expand_tilde(ca_cert_path).into();
-    let cert_path: std::path::PathBuf = expand_tilde(client_cert_path).into();
-    let key_path: std::path::PathBuf = expand_tilde(client_key_path).into();
+    let ca_path: std::path::PathBuf = expand_tilde(ca_cert_path);
+    let cert_path: std::path::PathBuf = expand_tilde(client_cert_path);
+    let key_path: std::path::PathBuf = expand_tilde(client_key_path);
 
     let channel =
         client::connection::connect(&server_conn.url, &ca_path, &cert_path, &key_path).await?;
@@ -348,7 +348,7 @@ async fn init_aws_provider(
         .clone()
         .map(Region::new)
         .map(RegionProviderChain::first_try)
-        .unwrap_or_else(|| RegionProviderChain::default_provider())
+        .unwrap_or_else(RegionProviderChain::default_provider)
         .or_else(Region::new("us-west-2"));
 
     let mut config_loader = aws_config::from_env().region(region_provider);
@@ -431,12 +431,12 @@ async fn init_gcp_provider(config: &ProviderConfig) -> Result<GcpSecretManager, 
     // GOOGLE_APPLICATION_CREDENTIALS="~/path/to/key.json" (with quotes
     // preventing shell expansion) would get a confusing "could not create
     // default credentials" error.
-    if let Ok(creds_path) = std::env::var("GOOGLE_APPLICATION_CREDENTIALS") {
-        if creds_path.starts_with("~/") || creds_path == "~" {
-            let expanded = crate::config::expand_tilde(&creds_path);
-            unsafe {
-                std::env::set_var("GOOGLE_APPLICATION_CREDENTIALS", &expanded);
-            }
+    if let Ok(creds_path) = std::env::var("GOOGLE_APPLICATION_CREDENTIALS")
+        && (creds_path.starts_with("~/") || creds_path == "~")
+    {
+        let expanded = crate::config::expand_tilde(&creds_path);
+        unsafe {
+            std::env::set_var("GOOGLE_APPLICATION_CREDENTIALS", &expanded);
         }
     }
 

@@ -217,14 +217,13 @@ async fn handle_local_rollback(
     // content that doesn't match the version it was originally saved as.
     if let (Some(current_hash), Some(target_hash)) =
         (&latest_download.file_hash, &target_download.file_hash)
+        && current_hash == target_hash
     {
-        if current_hash == target_hash {
-            println!(
-                "No changes - content identical to v{}.",
-                target_download.version
-            );
-            return Ok(());
-        }
+        println!(
+            "No changes - content identical to v{}.",
+            target_download.version
+        );
+        return Ok(());
     }
 
     // Content differs - create a new version with this content

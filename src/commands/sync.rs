@@ -6,6 +6,7 @@ use futures::StreamExt;
 
 use crate::config::Config;
 use crate::db::{SecretInput, SecretRepository};
+use crate::error::JawsError;
 use crate::secrets::{Provider, SecretRef, hash_api_ref};
 
 /// Handle the sync command
@@ -105,7 +106,11 @@ pub async fn sync_provider(
                 count += 1;
             }
             Err(e) => {
-                eprintln!("Warning: Error fetching secret: {}", e);
+                let msg = e.to_string();
+                eprintln!("  {} [{}]: Warning - {}", provider.id(), provider.kind(), msg);
+                if JawsError::is_auth_error(&msg) {
+                    break;
+                }
             }
         }
     }

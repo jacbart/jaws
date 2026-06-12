@@ -12,11 +12,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fail-closed on database errors during client certificate validation
 - Server certificate fingerprint verification during enrollment
 - Enrollment tokens written to restricted file instead of logs
+- Fixed `rustls-webpki` vulnerabilities (RUSTSEC-2026-0098, RUSTSEC-2026-0099, RUSTSEC-2026-0104) by disabling legacy TLS in AWS SDK crates
+- Added `cargo-deny` for dependency license and advisory enforcement
+- Added `deny.toml` with documented advisory ignores for unfixable upstream issues
 
 ### Changed
 
 - Restructured documentation into focused guides under `docs/`
 - Auto-generated command reference from `--help` output
+- Upgraded `tonic` 0.12 → 0.14, `prost` 0.13 → 0.14, `tonic-build` → `tonic-prost-build`
+- Pinned `time` crate to 0.3.47 to resolve `aws-smithy-types` build conflict
+- Removed deprecated `ClientProjectsExt` and `ClientSecretsExt` imports from Bitwarden provider
 
 ## [1.4.0] - 2026-03-01
 

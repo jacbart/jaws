@@ -19,6 +19,7 @@ pkgs.mkShell {
       ];
     })
     bacon
+    cargo-deny
     lldb
     pkg-config
     openssl

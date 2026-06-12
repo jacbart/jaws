@@ -332,10 +332,10 @@ impl age::Callbacks for SshKeyCallbacks {
     fn request_passphrase(&self, description: &str) -> Option<SecretString> {
         // Return the cached passphrase if available (avoids re-prompting
         // when multiple credentials are encrypted to the same SSH key).
-        if let Ok(cache) = SSH_KEY_PASSPHRASE_CACHE.lock() {
-            if let Some(cached) = cache.as_ref() {
-                return Some(cached.clone());
-            }
+        if let Ok(cache) = SSH_KEY_PASSPHRASE_CACHE.lock()
+            && let Some(cached) = cache.as_ref()
+        {
+            return Some(cached.clone());
         }
 
         let prompt = if description.is_empty() {

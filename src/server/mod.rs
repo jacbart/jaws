@@ -141,10 +141,10 @@ fn load_or_generate_pki(
         &server_config.server_cert_path,
         &server_config.server_key_path,
     ) {
-        let ca_cert = fs::read_to_string(ca_cert_path).map_err(|e| JawsError::Io(e))?;
-        let ca_key = fs::read_to_string(ca_key_path).map_err(|e| JawsError::Io(e))?;
-        let server_cert = fs::read_to_string(server_cert_path).map_err(|e| JawsError::Io(e))?;
-        let server_key = fs::read_to_string(server_key_path).map_err(|e| JawsError::Io(e))?;
+        let ca_cert = fs::read_to_string(ca_cert_path).map_err(JawsError::Io)?;
+        let ca_key = fs::read_to_string(ca_key_path).map_err(JawsError::Io)?;
+        let server_cert = fs::read_to_string(server_cert_path).map_err(JawsError::Io)?;
+        let server_key = fs::read_to_string(server_key_path).map_err(JawsError::Io)?;
         return Ok((ca_cert, ca_key, server_cert, server_key));
     }
 
@@ -168,12 +168,11 @@ fn compute_san_entries(bind_addr: &SocketAddr) -> Vec<String> {
         // 0.0.0.0 — add common local IPs
         sans.push("127.0.0.1".to_string());
         // Try to get the hostname
-        if let Ok(hostname) = hostname::get() {
-            if let Some(h) = hostname.to_str() {
-                if !sans.contains(&h.to_string()) {
-                    sans.push(h.to_string());
-                }
-            }
+        if let Ok(hostname) = hostname::get()
+            && let Some(h) = hostname.to_str()
+            && !sans.contains(&h.to_string())
+        {
+            sans.push(h.to_string());
         }
     } else {
         sans.push(ip.to_string());

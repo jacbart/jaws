@@ -92,7 +92,7 @@ impl SecretManager for AwsSecretManager {
                         }
                     }
                     Some(Err(e)) => Some((
-                        Err(Box::new(e) as Box<dyn std::error::Error + Send>),
+                        Err(Box::new(JawsError::aws(e)) as Box<dyn std::error::Error + Send>),
                         (paginator, current_items),
                     )),
                     None => None,

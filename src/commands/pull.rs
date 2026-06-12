@@ -18,6 +18,8 @@ use crate::utils::parse_secret_ref;
 
 use super::snapshot::{check_and_snapshot, is_dirty};
 
+type SecretEntry = (String, i64, String, String, String);
+
 /// Handle the pull command
 pub async fn handle_pull(
     config: &Config,
@@ -53,7 +55,7 @@ pub async fn handle_pull(
     let session = Arc::new(session);
 
     // Map from display string to secret info (provider_id, secret_id, api_ref, display_name, hash)
-    let secret_map: Arc<Mutex<HashMap<String, (String, i64, String, String, String)>>> =
+    let secret_map: Arc<Mutex<HashMap<String, SecretEntry>>> =
         Arc::new(Mutex::new(HashMap::new()));
 
     // Spawn tasks for each provider to stream secrets to TUI
@@ -367,24 +369,24 @@ pub async fn fetch_and_save_secret(
     secret: &DbSecret,
 ) -> Result<String, Box<dyn std::error::Error>> {
     // Check if local file has uncommitted changes - snapshot them first
-    if let Some(download) = repo.get_latest_download(secret.id)? {
-        if is_dirty(config, &download) {
-            // Auto-snapshot local changes before overwriting with pull
-            match check_and_snapshot(config, repo, secret, &download) {
-                Ok(result) => {
-                    if let Some(v) = result.new_version {
-                        eprintln!(
-                            "Saved local changes: {}://{} (v{})",
-                            secret.provider_id, secret.display_name, v
-                        );
-                    }
-                }
-                Err(e) => {
+    if let Some(download) = repo.get_latest_download(secret.id)?
+        && is_dirty(config, &download)
+    {
+        // Auto-snapshot local changes before overwriting with pull
+        match check_and_snapshot(config, repo, secret, &download) {
+            Ok(result) => {
+                if let Some(v) = result.new_version {
                     eprintln!(
-                        "Warning: Could not save local changes for {}: {}",
-                        secret.display_name, e
+                        "Saved local changes: {}://{} (v{})",
+                        secret.provider_id, secret.display_name, v
                     );
                 }
+            }
+            Err(e) => {
+                eprintln!(
+                    "Warning: Could not save local changes for {}: {}",
+                    secret.display_name, e
+                );
             }
         }
     }
