@@ -224,6 +224,12 @@ pub enum Commands {
         /// Name for this server connection (defaults to server-provided name)
         #[arg(short, long)]
         name: Option<String>,
+
+        /// Expected SHA-256 fingerprint of the server's certificate.
+        /// When provided, enrollment is aborted if the fingerprint does not match.
+        /// When omitted, the fingerprint is displayed and you must confirm interactively.
+        #[arg(long, value_name = "SHA256")]
+        fingerprint: Option<String>,
     },
     /// Disconnect from a remote jaws server
     Disconnect {

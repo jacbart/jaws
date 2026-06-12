@@ -1,231 +1,216 @@
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+### Security
+
+- Fail-closed on database errors during client certificate validation
+- Server certificate fingerprint verification during enrollment
+- Enrollment tokens written to restricted file instead of logs
+
+### Changed
+
+- Restructured documentation into focused guides under `docs/`
+- Auto-generated command reference from `--help` output
+
 ## [1.4.0] - 2026-03-01
 
-### 🚀 Features
+### Added
 
-- Better provider handling
-- Improved error messages, reduce deps, add file permissions checks
-- *(google)* Add initial gcp secrets provider
+- Initial GCP Secret Manager provider
+- File permission checks for sensitive PKI material
 
-### 🐛 Bug Fixes
+### Changed
 
-- Rollback handling, delete and create
+- Improved error messages throughout the CLI
+- Reduced dependency footprint
 
-### 🚜 Refactor
+### Fixed
 
-- Use traits for provider, error type unification, cargo fmt, and general re-org
+- Rollback handling for edge cases
+- Delete and create command consistency
+
 ## [1.3.1] - 2026-02-25
 
-### 🚀 Features
+### Changed
 
-- Update bitwarden sdk to v2
+- Updated Bitwarden SDK to v2
+
 ## [1.3.0] - 2026-02-24
 
-### 🚀 Features
+### Added
 
-- Handle config generation and encryption methods
-- Authentication saving and session caching, also ran cargo fmt
+- Interactive config generation with provider discovery
+- Credential encryption with passphrase or SSH key
+- Session caching with OS keychain integration
+
 ## [1.2.7] - 2026-02-22
 
-### 🚀 Features
+### Changed
 
-- Update Cargo.lock dependencies to reflect updated versions
-- Update project configuration and README
-- Updating home-manager module
+- Updated dependencies and Cargo.lock
+- Improved Home Manager module
 
-### ⚙️ Miscellaneous Tasks
-
-- Release 1.2.7
 ## [1.2.6] - 2026-02-08
 
-### 🚀 Features
+### Added
 
-- Add version command
+- `jaws version` command
 
-### 💼 Other
+### Changed
 
-- Updates to build system to allow easy cross platform builds
+- Unified secret command operations with TUI integration
+- Simplified config command layout
+- Improved version control display
 
-### 🚜 Refactor
-
-- Secret commands are more unified in how they operate and tui is used in default commands to clarify and unknown provider info
-- Simpler config command layout and interaction
-- Better version control
 ## [1.2.5] - 2026-02-07
 
-### 💼 Other
+### Changed
 
-- Update ff package to 1.0.10
+- Updated `ff` dependency to 1.0.10
+
 ## [1.2.4] - 2026-02-07
 
-### 🐛 Bug Fixes
+### Fixed
 
-- Tui flickering, env and profile will not just use profile for aws
+- TUI flickering during rapid updates
+- AWS provider now correctly uses profile from config
+
 ## [1.2.3] - 2026-02-06
 
-### 🐛 Bug Fixes
+### Fixed
 
-- *(onepass)* Push command was not working right for 1pass
+- 1Password push command handling
+
 ## [1.2.2] - 2026-02-04
 
-### 🚀 Features
+### Added
 
-- *(inject)* Added or statements to injection templating
+- `||` operator and default values for template injection
 
-### 📚 Documentation
+### Changed
 
-- *(inject)* Add an or statment and default value to an example in the README
+- Updated README with injection examples
+
 ## [1.2.1] - 2026-02-02
 
-### 🚀 Features
+### Added
 
-- Bitwarden sdk added, some polish with the rest, and rand cargo fmt. updated some of the readme
-- Release script and hm module
+- Bitwarden Secrets Manager support
+- Release automation script
+- Home Manager Nix module
 
-### 🐛 Bug Fixes
+### Fixed
 
-- Config gen tool
+- Config generation tool edge cases
+
 ## [1.2.0] - 2026-02-01
 
-### 🚀 Features
+### Added
 
-- Initial work for bitwarden support
-- *(env)* Add dot env added to envrc file, updates to gitignore to handle new file
-- *(bws)* Add ord id to config, small updates to comments
-- *(aws)* Inital setup for pulling a list and downloading the selected secrets
-- Too many things to say, config local history caching and updates from ff lib. plus export and import options
-- Add more config locations
-- Rework the file org, moviing local actions to a jawsSecretsManager to allow future self-hosting opertunities. other stuff
-- Removed editor and secrets-path flags in favor of a config flag
+- Bitwarden provider (initial support)
+- Local secret history and caching
+- Export and import with age encryption
+- Additional config file locations
+- `jaws` local provider for self-hosted secrets
 
-### 🐛 Bug Fixes
+### Changed
 
-- *(nix)* Formatting the correct date, lock update
-- *(dep)* Update golang dot org x net to version 0.23.0
+- Reworked file organization (local actions to `JawsSecretsManager`)
+- Removed `--editor` and `--secrets-path` CLI flags in favor of config file
+- Simplified config command structure
+
+### Fixed
+
+- Nix build date formatting
+- Security dependency update (golang.org/x/net)
 - Config location detection
-- *(tilde)* Expand tilde to place secrets in correct spot
+- Tilde expansion in secrets path
 
-### 💼 Other
-
-- *(docker)* Nix docker image build added as a option
-- *(nix)* Add bws to nix develop
-- *(nix)* Initial try at making a home-manager module, go deps update, flake lock update
-- *(nix)* Update vendorHash
-
-### 🚜 Refactor
-
-- Flake var name changes and other small things
-- *(secretsmanager)* Moved each platform into separate folders for easier navigation
-- *(config)* Moved config tmpl and funcs to cmd/jaws folder, load client refactor for all platforms
-
-### 📚 Documentation
-
-- Nix profile install howto
-- Small formatting changes and link to anchor for a section ref
-- *(install)* Added brew tap and nix install instructions
-- Fixed language to reflect jaws commands
-- Remove todo's
 ## [1.0.8] - 2024-03-26
 
-### 🚀 Features
+### Fixed
 
-- *(1.0.9)* Fix build errors
+- Build errors in release mode
+
 ## [1.0.7] - 2024-03-26
 
-### 🚀 Features
+### Changed
 
-- *(1.0.7)* Mod updates
+- Dependency updates
+
 ## [1.0.6] - 2024-03-26
 
-### ⚙️ Miscellaneous Tasks
+### Changed
 
-- *(justfile)* Changed bw secret
+- Internal build script updates
+
 ## [1.0.5] - 2024-03-26
 
-### 🚀 Features
+### Changed
 
-- *(1.0.5)* Migrated from private project
+- Migrated from private project to public repository
 
-### 📚 Documentation
-
-- *(readme)* Remove digital ocean from goals, added build from source
 ## [0.1.3] - 2022-07-16
 
-### 🐛 Bug Fixes
+### Fixed
 
-- *(config)* Handle config create when a config is broke, change config name
+- Config creation when existing config is broken
 
-### 🚜 Refactor
+### Changed
 
-- *(cmd)* New aliases for subcommands, raw version flag
-- *(updates)* Thirdparty libraries updates, fuzzyfinder hotreloadlock
+- New subcommand aliases
+- Raw version flag support
+- Third-party library updates
 
-### 📚 Documentation
-
-- *(readme)* Create config docs
-
-### ⚙️ Miscellaneous Tasks
-
-- *(token)* Using bitwarden to pull github token
 ## [0.1.2] - 2022-07-16
 
-### 🚀 Features
+### Added
 
-- *(install)* Curlable install script
+- Curlable install script
 
-### 📚 Documentation
-
-- *(readme)* Instructions for installing from install.sh
-
-### ⚙️ Miscellaneous Tasks
-
-- *(automation)* Figuring out version incr
-- *(automation)* Using mainly goreleaser for local dev, fixed ldflags
 ## [0.1.1] - 2022-07-16
 
-### 🚀 Features
+### Added
 
-- *(version)* Version command
+- `version` command
 
-### 🐛 Bug Fixes
+### Fixed
 
-- *(get)* Editior flag now opens files
+- Editor flag now opens files correctly
 
-### 📚 Documentation
-
-- *(readme)* Setting git as optional dependency
-
-### ⚙️ Miscellaneous Tasks
-
-- *(just)* Justfile script
-- *(automation)* Small changes to goreleaser and justfile
 ## [0.1.0] - 2022-07-16
 
-### 🚀 Features
+### Added
 
-- *(noconfig)* Handle no config, updated readme docs
-- *(config)* Inital create config command
+- Initial project setup
+- Config create command
+- AWS Secrets Manager provider
+- Secret download and print
+- Nested folder organization
 
-### 🐛 Bug Fixes
-
-- *(download)* Broke get command working now
-- *(print)* Removed the secret id from the normal print
-
-### 🚜 Refactor
-
-- *(folders)* Moved to a more nested folder option
-- *(aws)* Load client from internal aws package
-- *(funcs)* Remade most functions to make more sense, no long need fzf installed
-- *(rename)* Renaming project to jaws
-- *(config)* Separate config command for show and create
-
-### 📚 Documentation
-
-- *(readme)* Formatting the title differently
-- *(format)* Firm name origin
-
-### ⚙️ Miscellaneous Tasks
-
-- *(name)* Changing the command to firm over fc, fc is a builtin function
-- *(rename)* Adding a few missed renames
-- *(rename)* Updated gitignore to handle the rename
-- *(rename)* More renaming, readme updates
+[Unreleased]: https://github.com/jacbart/jaws/compare/v1.4.0...HEAD
+[1.4.0]: https://github.com/jacbart/jaws/compare/v1.3.1...v1.4.0
+[1.3.1]: https://github.com/jacbart/jaws/compare/v1.3.0...v1.3.1
+[1.3.0]: https://github.com/jacbart/jaws/compare/v1.2.7...v1.3.0
+[1.2.7]: https://github.com/jacbart/jaws/compare/v1.2.6...v1.2.7
+[1.2.6]: https://github.com/jacbart/jaws/compare/v1.2.5...v1.2.6
+[1.2.5]: https://github.com/jacbart/jaws/compare/v1.2.4...v1.2.5
+[1.2.4]: https://github.com/jacbart/jaws/compare/v1.2.3...v1.2.4
+[1.2.3]: https://github.com/jacbart/jaws/compare/v1.2.2...v1.2.3
+[1.2.2]: https://github.com/jacbart/jaws/compare/v1.2.1...v1.2.2
+[1.2.1]: https://github.com/jacbart/jaws/compare/v1.2.0...v1.2.1
+[1.2.0]: https://github.com/jacbart/jaws/compare/v1.0.8...v1.2.0
+[1.0.8]: https://github.com/jacbart/jaws/compare/v1.0.7...v1.0.8
+[1.0.7]: https://github.com/jacbart/jaws/compare/v1.0.6...v1.0.7
+[1.0.6]: https://github.com/jacbart/jaws/compare/v1.0.5...v1.0.6
+[1.0.5]: https://github.com/jacbart/jaws/compare/v0.1.3...v1.0.5
+[0.1.3]: https://github.com/jacbart/jaws/compare/v0.1.2...v0.1.3
+[0.1.2]: https://github.com/jacbart/jaws/compare/v0.1.1...v0.1.2
+[0.1.1]: https://github.com/jacbart/jaws/compare/v0.1.0...v0.1.1
+[0.1.0]: https://github.com/jacbart/jaws/releases/tag/v0.1.0

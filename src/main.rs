@@ -179,8 +179,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // Handle Connect command separately (doesn't require providers or database)
-    if let Some(Commands::Connect { url, token, name }) = &cli.command {
-        return handle_connect(&config, url, token, name.clone()).await;
+    if let Some(Commands::Connect {
+        url,
+        token,
+        name,
+        fingerprint,
+    }) = &cli.command
+    {
+        return handle_connect(&config, url, token, name.clone(), fingerprint.clone()).await;
     }
 
     // Handle Export command separately (doesn't require providers)
