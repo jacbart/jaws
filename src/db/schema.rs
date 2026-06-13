@@ -5,7 +5,7 @@ use std::path::Path;
 
 use crate::error::JawsError;
 
-const SCHEMA_VERSION: i32 = 5;
+const SCHEMA_VERSION: i32 = 6;
 
 /// Initialize the database at the given path, creating tables if needed.
 pub fn init_db(path: &Path) -> Result<Connection, JawsError> {
@@ -85,7 +85,12 @@ fn create_tables(conn: &Connection) -> rusqlite::Result<()> {
             UNIQUE(provider_id, api_ref)
         );
 
-        -- Downloaded versions (history)
+        -- Downloaded versions (history). `filename` is the relative path under
+        -- secrets_path for this version's immutable archive
+        -- (e.g. ".versions/aws-prod/db-password/v3"). `pushed_at` is non-NULL once
+        -- the row's content has been synced to the remote provider; NULL means
+        -- the local edit is still pending push. For the local "jaws" provider,
+        -- `pushed_at` is stamped equal to `downloaded_at` (no remote exists).
         CREATE TABLE downloads (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             secret_id INTEGER NOT NULL REFERENCES secrets(id) ON DELETE CASCADE,
@@ -93,13 +98,16 @@ fn create_tables(conn: &Connection) -> rusqlite::Result<()> {
             filename TEXT NOT NULL,
             downloaded_at TEXT NOT NULL DEFAULT (datetime('now')),
             file_hash TEXT,
+            pushed_at TEXT,
             UNIQUE(secret_id, version)
         );
 
         -- Indexes for fast lookups
         CREATE INDEX idx_secrets_hash ON secrets(hash);
         CREATE INDEX idx_secrets_provider ON secrets(provider_id);
+        CREATE INDEX idx_secrets_provider_name ON secrets(provider_id, display_name);
         CREATE INDEX idx_downloads_secret ON downloads(secret_id);
+        CREATE INDEX idx_downloads_unpushed ON downloads(pushed_at) WHERE pushed_at IS NULL;
 
         -- Operation log for tracking all secret operations
         CREATE TABLE operations (
@@ -240,11 +248,72 @@ fn migrate(conn: &Connection, from_version: i32, to_version: i32) -> rusqlite::R
                     [],
                 )?;
             }
+            5 => {
+                // Migration from v5 to v6:
+                // - Add downloads.pushed_at: distinguishes "saved locally" from
+                //   "uploaded to remote".  For migration, treat every existing
+                //   row as already pushed (it was uploaded under the old model
+                //   that never had a split between save and push).
+                // - Add idx_secrets_provider_name and idx_downloads_unpushed.
+                // - Rewrite downloads.filename from the legacy
+                //   `{name}_{hash}_{version}` form to the new relative-archive
+                //   path `.versions/{provider}/{name}/v{N}`. The actual file
+                //   moves on disk are handled by `secrets::migration` after
+                //   `init_db` returns.
+                conn.execute("ALTER TABLE downloads ADD COLUMN pushed_at TEXT", [])?;
+                conn.execute(
+                    "UPDATE downloads SET pushed_at = downloaded_at WHERE pushed_at IS NULL",
+                    [],
+                )?;
+                conn.execute_batch(
+                    r#"
+                    CREATE INDEX IF NOT EXISTS idx_secrets_provider_name
+                        ON secrets(provider_id, display_name);
+                    CREATE INDEX IF NOT EXISTS idx_downloads_unpushed
+                        ON downloads(pushed_at) WHERE pushed_at IS NULL;
+                    "#,
+                )?;
+                rewrite_filenames_to_v6(conn)?;
+            }
             _ => {
                 // Unknown version, skip
             }
         }
     }
     set_schema_version(conn, to_version)?;
+    Ok(())
+}
+
+/// Rewrite every `downloads.filename` from the legacy `{name}_{hash}_{version}`
+/// form (a bare filename) to the new `.versions/{provider}/{name}/v{N}` relative
+/// archive path. Used by the v5→v6 migration. Idempotent.
+fn rewrite_filenames_to_v6(conn: &Connection) -> rusqlite::Result<()> {
+    let mut stmt = conn.prepare(
+        r#"
+        SELECT d.id, d.version, s.provider_id, s.display_name
+        FROM downloads d
+        JOIN secrets s ON s.id = d.secret_id
+        "#,
+    )?;
+    let rows: Vec<(i64, i32, String, String)> = stmt
+        .query_map([], |row| {
+            Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    drop(stmt);
+
+    for (id, version, provider_id, display_name) in rows {
+        let relpath = format!(
+            "{}/{}/{}/v{}",
+            crate::secrets::storage::VERSIONS_DIR,
+            crate::secrets::storage::sanitize_filename(&provider_id),
+            crate::secrets::storage::sanitize_filename(&display_name),
+            version
+        );
+        conn.execute(
+            "UPDATE downloads SET filename = ?1 WHERE id = ?2",
+            rusqlite::params![relpath, id],
+        )?;
+    }
     Ok(())
 }

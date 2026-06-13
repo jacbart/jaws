@@ -1,11 +1,13 @@
 //! Rollback command handlers - restoring secrets to previous versions (local or remote).
 
-use std::fs;
 use std::process::Command;
+
+use chrono::Utc;
 
 use crate::config::Config;
 use crate::db::SecretRepository;
-use crate::secrets::{Provider, get_secret_path, save_secret_file};
+use crate::secrets::storage::{load_secret_file, working_file_path, write_secret_version};
+use crate::secrets::Provider;
 use crate::utils::parse_secret_ref;
 
 use super::snapshot::{check_and_snapshot, is_dirty};
@@ -109,7 +111,7 @@ async fn handle_local_rollback(
     let (secret, latest_download) = selected_secret;
 
     // Check for uncommitted changes and auto-snapshot before rollback
-    if is_dirty(config, &latest_download) {
+    if is_dirty(config, &secret, &latest_download) {
         match check_and_snapshot(config, repo, &secret, &latest_download) {
             Ok(result) => {
                 if let Some(v) = result.new_version {
@@ -198,18 +200,16 @@ async fn handle_local_rollback(
             .ok_or("Selected version not found")?
     };
 
-    // Read the old version's content
-    let old_file_path = get_secret_path(&config.secrets_path(), &target_download.filename);
-    if !old_file_path.exists() {
-        return Err(format!(
-            "Version {} file not found at: {}\nThe file may have been deleted.",
-            target_download.version,
-            old_file_path.display()
-        )
-        .into());
-    }
-
-    let content = fs::read_to_string(&old_file_path)?;
+    // Read the old version's archive
+    let content = load_secret_file(&config.secrets_path(), &target_download.filename).map_err(
+        |_| {
+            format!(
+                "Version {} archive not found at: {}\nThe file may have been deleted.",
+                target_download.version,
+                config.secrets_path().join(&target_download.filename).display()
+            )
+        },
+    )?;
 
     // Compare using DB-stored hashes rather than re-hashing the file from
     // disk. The file on disk may have been modified in-place by an editor
@@ -228,16 +228,22 @@ async fn handle_local_rollback(
 
     // Content differs - create a new version with this content
     let new_version = latest_download.version + 1;
-    let (new_filename, content_hash) = save_secret_file(
+    let (new_relpath, content_hash) = write_secret_version(
         &config.secrets_path(),
+        &secret.provider_id,
         &secret.display_name,
-        &secret.hash,
         new_version,
         &content,
     )?;
 
-    // Record the new download
-    repo.create_download(secret.id, &new_filename, &content_hash)?;
+    // Local jaws has no remote; remote providers leave pushed_at=NULL so push
+    // picks them up.
+    let pushed_at = if secret.provider_id == "jaws" {
+        Some(Utc::now())
+    } else {
+        None
+    };
+    repo.create_download(secret.id, &new_relpath, &content_hash, pushed_at)?;
 
     println!(
         "Rolled back '{}' from v{} -> v{} (new current)",
@@ -257,7 +263,11 @@ async fn handle_local_rollback(
 
     // Open in editor if requested
     if edit {
-        let file_path = get_secret_path(&config.secrets_path(), &new_filename);
+        let file_path = working_file_path(
+            &config.secrets_path(),
+            &secret.provider_id,
+            &secret.display_name,
+        );
         Command::new(config.editor())
             .arg(file_path.to_string_lossy().to_string())
             .status()

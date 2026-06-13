@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Folder-first workflow.** Open `secrets_path/secrets/{provider_id}/{name}` in any text editor to read or edit a secret, or drop a new file there to create one. `jaws save` reconciles the working dir with the local SQLite DB, hashing each file and archiving prior contents under `.versions/{provider_id}/{name}/v{N}`. Every provider (jaws, aws, gcp, onepassword, bitwarden) uses the same edit surface.
+- `jaws save [name]` — local-only reconciliation. Scans the working dir (or a single secret), creates new download rows for new/changed files, leaves remote providers' rows as `pushed_at = NULL` for later upload.
+- `jaws status` — git-like view of working dir vs DB: new / modified / unpushed / orphan.
+
+### Changed
+
+- **On-disk layout.** Secrets are no longer stored as flat `{name}_{hash}_{version}` files at the root of `secrets_path`. New layout:
+  - `secrets/{provider_id}/{name}` — user-editable working copy (current value)
+  - `.versions/{provider_id}/{name}/v{N}` — per-version archive
+- `jaws push` now runs `save` first, then uploads every download row with `pushed_at IS NULL` to its remote provider. Conflict detection: if the remote drifted since the last successful push, push aborts with a clear remediation hint.
+- Database schema migrated to v6: `downloads.pushed_at TIMESTAMP NULL` distinguishes "saved locally" from "uploaded to remote"; new indexes on `(provider_id, display_name)` and partial `pushed_at IS NULL`.
+- One-shot auto-migration on first run relocates legacy `{name}_{hash}_{version}` files into the new layout — idempotent.
+- Restructured documentation into focused guides under `docs/`
+- Auto-generated command reference from `--help` output
+- Upgraded `tonic` 0.12 → 0.14, `prost` 0.13 → 0.14, `tonic-build` → `tonic-prost-build`
+- Pinned `time` crate to 0.3.47 to resolve `aws-smithy-types` build conflict
+- Removed deprecated `ClientProjectsExt` and `ClientSecretsExt` imports from Bitwarden provider
+
 ### Security
 
 - Fail-closed on database errors during client certificate validation
@@ -15,14 +35,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed `rustls-webpki` vulnerabilities (RUSTSEC-2026-0098, RUSTSEC-2026-0099, RUSTSEC-2026-0104) by disabling legacy TLS in AWS SDK crates
 - Added `cargo-deny` for dependency license and advisory enforcement
 - Added `deny.toml` with documented advisory ignores for unfixable upstream issues
-
-### Changed
-
-- Restructured documentation into focused guides under `docs/`
-- Auto-generated command reference from `--help` output
-- Upgraded `tonic` 0.12 → 0.14, `prost` 0.13 → 0.14, `tonic-build` → `tonic-prost-build`
-- Pinned `time` crate to 0.3.47 to resolve `aws-smithy-types` build conflict
-- Removed deprecated `ClientProjectsExt` and `ClientSecretsExt` imports from Bitwarden provider
 
 ## [1.4.0] - 2026-03-01
 

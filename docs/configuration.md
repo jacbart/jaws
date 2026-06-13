@@ -145,7 +145,32 @@ provider "bw-myproject" kind="bw" {
 
 ### Local (jaws)
 
-The `jaws` provider is always available — no configuration needed. Secrets are stored as files in `secrets_path`.
+The `jaws` provider is always available — no configuration needed.
+
+#### Layout
+
+Under `secrets_path`:
+
+```
+{secrets_path}/
+├── jaws.db                           # SQLite metadata
+├── secrets/                          # user-editable working copies
+│   └── {provider_id}/{name}
+└── .versions/                        # immutable per-version archive
+    └── {provider_id}/{name}/v{N}
+```
+
+- `secrets/{provider_id}/{name}` — open in any text editor; this file is the source of truth for the current value.
+- `.versions/{provider_id}/{name}/v{N}` — every prior version, preserved verbatim. Used by `jaws rollback` and `jaws log`.
+
+The same layout is used for **every** provider — the working file is the editing surface for AWS, GCP, 1Password and Bitwarden secrets too. `jaws pull` materializes the remote value to the working file; `jaws save` records local edits in the DB without uploading; `jaws push` uploads any unsynced edits.
+
+#### Creating a secret by dropping a file
+
+```sh
+echo "my-value" > .secrets/secrets/jaws/my-new-secret
+jaws save                  # registers it
+```
 
 ---
 

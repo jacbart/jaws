@@ -1,17 +1,20 @@
-//! Push command handlers - uploading secrets to providers.
+//! Push command handler — runs `save_all` then uploads every unpushed download
+//! row to its remote provider.
 
-use std::fs;
 use std::process::Command;
 
 use crate::config::Config;
-use crate::db::{DbDownload, DbSecret, SecretRepository};
-use crate::secrets::{Provider, get_secret_path};
-
+use crate::db::SecretRepository;
+use crate::secrets::storage::working_file_path;
+use crate::secrets::sync::{push_all, save_all, PushOutcome, SaveOutcome};
+use crate::secrets::Provider;
 use crate::utils::parse_secret_ref;
 
-use super::snapshot::{check_and_snapshot, is_dirty, print_snapshot_summary};
-
-/// Handle the push command - push local secrets to providers
+/// Handle the push command.
+///
+/// `secret_name` may be a `provider://name` reference (filters to that secret)
+/// or a substring match against unpushed secrets. `edit` opens the user's
+/// editor against the matching working files first.
 pub async fn handle_push(
     config: &Config,
     repo: &SecretRepository,
@@ -19,250 +22,132 @@ pub async fn handle_push(
     secret_name: Option<String>,
     edit: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    // Get all downloaded secrets
-    let downloaded = repo.list_all_downloaded_secrets()?;
-
-    if downloaded.is_empty() {
-        return Err("No secrets downloaded. Use 'jaws pull' first.".into());
-    }
-
-    // Filter by name if provided, otherwise show TUI with modified secrets
-    let secrets_to_push: Vec<(DbSecret, DbDownload)> = if let Some(name) = &secret_name {
-        if let Ok((provider, specific_name)) = parse_secret_ref(name, None) {
-            downloaded
-                .into_iter()
-                .filter(|(s, _)| s.provider_id == provider && s.display_name == specific_name)
-                .collect()
+    // Step 1: optionally open editor on the matching working file(s) so the
+    // user can edit before save+push runs.
+    if edit {
+        let files = collect_editor_targets(config, repo, secret_name.as_deref())?;
+        if files.is_empty() {
+            eprintln!("Nothing to edit — no unpushed local secrets matched.");
         } else {
-            downloaded
-                .into_iter()
-                .filter(|(s, _)| s.display_name.contains(name) || s.hash.starts_with(name))
-                .collect()
-        }
-    } else {
-        // No secret specified - show TUI with modified (dirty) secrets
-        select_dirty_secrets(config, &downloaded).await?
-    };
-
-    if secrets_to_push.is_empty() {
-        if let Some(ref name) = secret_name {
-            return Err(format!("No matching secrets found for '{}'", name).into());
-        } else {
-            println!("No modified secrets to push.");
-            return Ok(());
+            Command::new(config.editor())
+                .args(&files)
+                .status()
+                .map_err(|e| {
+                    format!(
+                        "Failed to launch editor '{}': {}. Set a valid editor with 'jaws config set editor <path>'.",
+                        config.editor(), e
+                    )
+                })?;
         }
     }
 
-    // Collect file paths for editing
-    let files: Vec<String> = secrets_to_push
-        .iter()
-        .map(|(_, d)| {
-            get_secret_path(&config.secrets_path(), &d.filename)
-                .to_string_lossy()
-                .to_string()
-        })
-        .collect();
+    // Step 2: local save (records any edits in DB + .versions/).
+    let saves = save_all(repo, &config.secrets_path())?;
+    print_save_summary(&saves);
 
-    // Open in editor if requested
-    if edit && !files.is_empty() {
-        Command::new(config.editor())
-            .args(&files)
-            .status()
-            .map_err(|e| {
-                format!(
-                    "Failed to launch editor '{}': {}. Set a valid editor with 'jaws config set editor <path>'.",
-                    config.editor(), e
-                )
-            })?;
-    }
+    // Step 3: filter by name/provider if requested and push.
+    let (provider_filter, name_filter) = parse_filters(secret_name.as_deref(), config);
 
-    // Auto-snapshot any modified secrets before pushing
-    let mut snapshot_results = Vec::new();
-    for (secret, download) in &secrets_to_push {
-        let result = check_and_snapshot(config, repo, secret, download)?;
-        if result.new_version.is_some() {
-            snapshot_results.push(result);
-        }
-    }
+    let (_saves, pushes) = push_all(
+        providers,
+        repo,
+        &config.secrets_path(),
+        provider_filter.as_deref(),
+        name_filter.as_deref(),
+    )
+    .await?;
 
-    // Print snapshot summary if any were saved
-    if !snapshot_results.is_empty() {
-        print_snapshot_summary(&snapshot_results);
-        println!();
-    }
-
-    // Re-fetch the latest downloads after snapshotting
-    let secrets_to_push: Vec<(DbSecret, DbDownload)> = {
-        let mut result = Vec::new();
-        for (secret, _) in &secrets_to_push {
-            if let Some(download) = repo.get_latest_download(secret.id)? {
-                result.push((secret.clone(), download));
-            }
-        }
-        result
-    };
-
-    // Push each secret
-    let mut pushed_count = 0;
-    let mut error_count = 0;
-
-    for (secret, download) in secrets_to_push {
-        let file_path = get_secret_path(&config.secrets_path(), &download.filename);
-
-        if !file_path.exists() {
-            eprintln!("Error: File not found: {}", file_path.display());
-            error_count += 1;
-            continue;
-        }
-
-        let content = fs::read_to_string(&file_path)?;
-
-        // For jaws (local) secrets, show a message about future remote push capability
-        if secret.provider_id == "jaws" {
-            println!(
-                "{} [jaws] -> Updated locally (v{})",
-                secret.display_name, download.version
-            );
-            pushed_count += 1;
-            continue;
-        }
-
-        // Find the provider
-        let provider = providers
-            .iter()
-            .find(|p| p.id() == secret.provider_id)
-            .ok_or_else(|| format!("Provider {} not found", secret.provider_id))?;
-
-        match provider.update(&secret.api_ref, &content).await {
-            Ok(result) => {
-                println!(
-                    "{} [{}] -> {}",
-                    secret.display_name, secret.provider_id, result
-                );
-                pushed_count += 1;
-
-                // Log the operation
-                let _ = repo.log_operation("push", &secret.provider_id, &secret.display_name, None);
-            }
-            Err(e) => {
-                let error_msg = e.to_string();
-                if error_msg.contains("ResourceNotFoundException")
-                    || error_msg.contains("not found")
-                {
-                    match provider.create(&secret.display_name, &content, None).await {
-                        Ok(result) => {
-                            println!(
-                                "{} [{}] -> {} (created)",
-                                secret.display_name, secret.provider_id, result
-                            );
-                            pushed_count += 1;
-
-                            // Log the operation
-                            let _ = repo.log_operation(
-                                "push_create",
-                                &secret.provider_id,
-                                &secret.display_name,
-                                None,
-                            );
-                        }
-                        Err(create_err) => {
-                            eprintln!(
-                                "Error creating {} in {}: {}",
-                                secret.display_name, secret.provider_id, create_err
-                            );
-                            error_count += 1;
-                        }
-                    }
-                } else {
-                    eprintln!(
-                        "Error updating {} in {}: {}",
-                        secret.display_name, secret.provider_id, e
-                    );
-                    error_count += 1;
-                }
-            }
-        }
-    }
-
-    if pushed_count > 0 || error_count > 0 {
-        println!(
-            "\nPush complete: {} succeeded, {} failed",
-            pushed_count, error_count
-        );
-    }
-
+    print_push_summary(&pushes);
     Ok(())
 }
 
-/// Find secrets that have been modified locally (dirty)
-fn find_dirty_secrets(
-    config: &Config,
-    downloaded: &[(DbSecret, DbDownload)],
-) -> Vec<(DbSecret, DbDownload, bool)> {
-    let mut results = Vec::new();
-
-    for (secret, download) in downloaded {
-        let dirty = is_dirty(config, download);
-        results.push((secret.clone(), download.clone(), dirty));
+fn parse_filters(name: Option<&str>, config: &Config) -> (Option<String>, Option<String>) {
+    match name {
+        None => (None, None),
+        Some(s) => match parse_secret_ref(s, config.default_provider().as_deref()) {
+            Ok((p, n)) => (Some(p), Some(n)),
+            Err(_) => (None, Some(s.to_string())),
+        },
     }
-
-    results
 }
 
-/// Show TUI selector for dirty (modified) secrets
-async fn select_dirty_secrets(
+fn collect_editor_targets(
     config: &Config,
-    downloaded: &[(DbSecret, DbDownload)],
-) -> Result<Vec<(DbSecret, DbDownload)>, Box<dyn std::error::Error>> {
-    use ff::{TuiConfig, create_items_channel, run_tui_with_config};
-
-    // Find all dirty secrets
-    let dirty_secrets: Vec<_> = find_dirty_secrets(config, downloaded)
-        .into_iter()
-        .filter(|(_, _, is_dirty)| *is_dirty)
-        .map(|(s, d, _)| (s, d))
-        .collect();
-
-    if dirty_secrets.is_empty() {
-        return Ok(Vec::new());
+    repo: &SecretRepository,
+    name: Option<&str>,
+) -> Result<Vec<String>, Box<dyn std::error::Error>> {
+    let (pf, nf) = parse_filters(name, config);
+    let unpushed = repo.list_unpushed_downloads(pf.as_deref(), nf.as_deref())?;
+    let mut out = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    for (secret, _) in unpushed {
+        if !seen.insert(secret.id) {
+            continue;
+        }
+        let p = working_file_path(&config.secrets_path(), &secret.provider_id, &secret.display_name);
+        out.push(p.to_string_lossy().to_string());
     }
+    Ok(out)
+}
 
-    let (tx, rx) = create_items_channel();
-
-    for (secret, _download) in &dirty_secrets {
-        let display = format!(
-            "{} | {} (modified)",
-            secret.provider_id, secret.display_name
-        );
-        if tx.send(display).await.is_err() {
-            break;
+fn print_save_summary(saves: &[SaveOutcome]) {
+    let mut new_count = 0;
+    let mut upd_count = 0;
+    for s in saves {
+        match s {
+            SaveOutcome::Created { provider_id, name, version } => {
+                println!("  saved {}://{} v{} (new)", provider_id, name, version);
+                new_count += 1;
+            }
+            SaveOutcome::Updated {
+                provider_id,
+                name,
+                from_version,
+                to_version,
+            } => {
+                println!(
+                    "  saved {}://{} v{} → v{}",
+                    provider_id, name, from_version, to_version
+                );
+                upd_count += 1;
+            }
+            SaveOutcome::Unchanged { .. } => {}
         }
     }
-    drop(tx);
-
-    let mut tui_config = TuiConfig::fullscreen();
-    tui_config.show_help_text = false;
-    tui_config
-        .preview_rules
-        .push(super::preview::preview_rule());
-
-    // Enable multi-select for batch push
-    let selected = run_tui_with_config(rx, true, tui_config)
-        .await
-        .map_err(|e| e as Box<dyn std::error::Error>)?;
-
-    if selected.is_empty() {
-        return Ok(Vec::new());
+    if new_count == 0 && upd_count == 0 && !saves.is_empty() {
+        // All unchanged — quiet.
+    } else if new_count + upd_count > 0 {
+        println!();
     }
+}
 
-    // Filter dirty secrets to only those selected
-    let result = dirty_secrets
-        .into_iter()
-        .filter(|(s, _)| {
-            let display = format!("{} | {} (modified)", s.provider_id, s.display_name);
-            selected.iter().any(|(_, sel)| sel == &display)
-        })
-        .collect();
-
-    Ok(result)
+fn print_push_summary(pushes: &[PushOutcome]) {
+    if pushes.is_empty() {
+        println!("Nothing to push — all local edits already synced.");
+        return;
+    }
+    let mut pushed = 0;
+    let mut conflicts = 0;
+    let mut failed = 0;
+    for p in pushes {
+        match p {
+            PushOutcome::Pushed { provider_id, name, version, .. } => {
+                println!("  pushed {}://{} v{} -> remote", provider_id, name, version);
+                pushed += 1;
+            }
+            PushOutcome::UpToDate { .. } => {}
+            PushOutcome::Conflict { provider_id, name, reason } => {
+                eprintln!("  CONFLICT {}://{}: {}", provider_id, name, reason);
+                conflicts += 1;
+            }
+            PushOutcome::Failed { provider_id, name, error } => {
+                eprintln!("  FAILED {}://{}: {}", provider_id, name, error);
+                failed += 1;
+            }
+        }
+    }
+    println!(
+        "\nPush complete: {} pushed, {} conflicts, {} failed",
+        pushed, conflicts, failed
+    );
 }

@@ -31,7 +31,7 @@ pub fn handle_list(
         };
 
         for (secret, download) in filtered {
-            let modified = if is_dirty(config, &download) {
+            let modified = if is_dirty(config, &secret, &download) {
                 " (modified)"
             } else {
                 ""
@@ -60,8 +60,8 @@ pub fn handle_list(
             let modified = downloaded
                 .iter()
                 .find(|(s, _)| s.id == secret.id)
-                .map(|(_, d)| {
-                    if is_dirty(config, d) {
+                .map(|(s, d)| {
+                    if is_dirty(config, s, d) {
                         " (modified)"
                     } else {
                         ""

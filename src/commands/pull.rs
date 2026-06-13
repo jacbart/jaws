@@ -12,7 +12,7 @@ use tokio::sync::Mutex;
 use crate::config::Config;
 use crate::db::{DbSecret, SecretInput, SecretRepository};
 use crate::secrets::{
-    Provider, SecretRef, get_secret_path, hash_api_ref, load_secret_file, save_secret_file,
+    Provider, SecretRef, hash_api_ref, load_secret_file, working_file_path, write_secret_version,
 };
 use crate::utils::parse_secret_ref;
 
@@ -201,7 +201,7 @@ pub async fn handle_pull(
     let stream = futures::stream::iter(selected_secrets);
 
     let results: Vec<Option<(String, i64)>> = stream
-        .map(|(provider_id, secret_id, api_ref, display_name, hash)| {
+        .map(|(provider_id, secret_id, api_ref, display_name, _hash)| {
             let repo = repo.clone();
             let success_count = &success_count;
             let fail_count = &fail_count;
@@ -218,26 +218,32 @@ pub async fn handle_pull(
                                 .map(|d| d.version + 1)
                                 .unwrap_or(1);
 
-                            // Save to file
-                            match save_secret_file(
+                            // Save to file (working copy + archive)
+                            match write_secret_version(
                                 &config.secrets_path(),
+                                &provider_id,
                                 &display_name,
-                                &hash,
                                 version,
                                 &content,
                             ) {
-                                Ok((filename, content_hash)) => {
-                                    // Record download in database
-                                    if let Err(e) =
-                                        repo.create_download(secret_id, &filename, &content_hash)
-                                    {
+                                Ok((relpath, content_hash)) => {
+                                    // Record download; mark pushed (came FROM remote).
+                                    if let Err(e) = repo.create_download(
+                                        secret_id,
+                                        &relpath,
+                                        &content_hash,
+                                        Some(Utc::now()),
+                                    ) {
                                         eprintln!("Warning: Failed to record download: {}", e);
                                     }
                                     success_count.fetch_add(1, Ordering::Relaxed);
-                                    let file_path =
-                                        get_secret_path(&config.secrets_path(), &filename)
-                                            .to_string_lossy()
-                                            .to_string();
+                                    let file_path = working_file_path(
+                                        &config.secrets_path(),
+                                        &provider_id,
+                                        &display_name,
+                                    )
+                                    .to_string_lossy()
+                                    .to_string();
                                     return Some((file_path, secret_id));
                                 }
                                 Err(e) => {
@@ -334,7 +340,7 @@ async fn handle_pull_print(
         if let Some(download) = repo.get_latest_download(secret.id)? {
             let age = Utc::now() - download.downloaded_at;
             if age.num_seconds() < config.cache_ttl() as i64 {
-                // Use cached version - read from file
+                // Use cached version - read the version archive.
                 load_secret_file(&config.secrets_path(), &download.filename)?
             } else {
                 // Cache expired - fetch fresh and save
@@ -370,7 +376,7 @@ pub async fn fetch_and_save_secret(
 ) -> Result<String, Box<dyn std::error::Error>> {
     // Check if local file has uncommitted changes - snapshot them first
     if let Some(download) = repo.get_latest_download(secret.id)?
-        && is_dirty(config, &download)
+        && is_dirty(config, secret, &download)
     {
         // Auto-snapshot local changes before overwriting with pull
         match check_and_snapshot(config, repo, secret, &download) {
@@ -402,17 +408,17 @@ pub async fn fetch_and_save_secret(
         .map(|d| d.version + 1)
         .unwrap_or(1);
 
-    // Save to file
-    let (filename, content_hash) = save_secret_file(
+    // Save to file (working copy + archive)
+    let (relpath, content_hash) = write_secret_version(
         &config.secrets_path(),
+        &secret.provider_id,
         &secret.display_name,
-        &secret.hash,
         version,
         &content,
     )?;
 
-    // Record download in database
-    repo.create_download(secret.id, &filename, &content_hash)?;
+    // Record download — came FROM remote, so mark as pushed.
+    repo.create_download(secret.id, &relpath, &content_hash, Some(Utc::now()))?;
 
     // Prune old versions if max_versions is configured
     if let Some(max) = config.max_versions() {
@@ -462,11 +468,11 @@ async fn handle_pull_by_name(
     // Fetch and save
     let content = fetch_and_save_secret(config, repo, provider, &secret).await?;
 
-    // Get the file path for the downloaded secret
-    let download = repo
+    // Get the user-editable working file path.
+    let _download = repo
         .get_latest_download(secret.id)?
         .ok_or("Failed to get download record")?;
-    let file_path = get_secret_path(&config.secrets_path(), &download.filename);
+    let file_path = working_file_path(&config.secrets_path(), &secret.provider_id, &secret.display_name);
 
     println!("Downloaded: {}://{}", provider_id, secret_name);
 
@@ -602,7 +608,7 @@ pub async fn handle_pull_inject(
             let fetch_result = if let Ok(Some(download)) = repo.get_latest_download(secret.id) {
                 let age = Utc::now() - download.downloaded_at;
                 if age.num_seconds() < config.cache_ttl() as i64 {
-                    // Use cached version
+                    // Use cached version (latest archive file).
                     match load_secret_file(&config.secrets_path(), &download.filename) {
                         Ok(content) => Ok(content),
                         Err(e) => Err(format!("Failed to load cache: {}", e)),

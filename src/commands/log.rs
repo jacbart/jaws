@@ -110,7 +110,7 @@ fn show_secret_versions(
         );
 
         // Check for uncommitted changes
-        if is_dirty(config, &latest_download) {
+        if is_dirty(config, &secret, &latest_download) {
             println!("  (uncommitted changes)");
         }
 

@@ -15,8 +15,10 @@ pub mod preview;
 mod pull;
 mod push;
 mod rollback;
+mod save;
 mod serve;
 pub mod snapshot;
+mod status;
 mod sync;
 
 pub use clean::handle_clean;
@@ -34,8 +36,10 @@ pub use preview::handle_preview;
 pub use pull::{handle_pull, handle_pull_inject};
 pub use push::handle_push;
 pub use rollback::handle_rollback;
+pub use save::handle_save;
 pub use serve::handle_serve;
 pub use snapshot::{
     check_and_snapshot, is_dirty, print_snapshot_summary, snapshot_all_modified, snapshot_secrets,
 };
+pub use status::handle_status;
 pub use sync::handle_sync;

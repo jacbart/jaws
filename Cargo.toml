@@ -1,6 +1,6 @@
 [package]
 name = "jaws"
-version = "1.5.1"
+version = "1.5.2"
 edition = "2024"
 description = "A CLI tool and library for managing secrets from multiple providers"
 license = "MPL-2.0"
@@ -14,8 +14,17 @@ name = "jaws"
 path = "src/main.rs"
 
 [dependencies]
-aws-config = { version = "1.8.18", default-features = false, features = ["behavior-version-latest", "default-https-client", "rt-tokio", "credentials-process", "sso"] }
-aws-sdk-secretsmanager = { version = "1.107.0", default-features = false, features = ["default-https-client", "rt-tokio"] }
+aws-config = { version = "1.8.18", default-features = false, features = [
+  "behavior-version-latest",
+  "default-https-client",
+  "rt-tokio",
+  "credentials-process",
+  "sso",
+] }
+aws-sdk-secretsmanager = { version = "1.107.0", default-features = false, features = [
+  "default-https-client",
+  "rt-tokio",
+] }
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "sync"] }
 ff = { git = "https://github.com/jacbart/ff.git", branch = "main" }
 clap = { version = "4", features = ["derive"] }

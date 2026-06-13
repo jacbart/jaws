@@ -54,10 +54,23 @@ Cross-compiled binaries: see [Nix docs](docs/nix.md#cross-compiled-binaries).
 # Initialize configuration
 jaws config init
 
-# Pull secrets (interactive picker)
+# Pull secrets (interactive picker) — materializes them as plain files
+# under .secrets/secrets/{provider_id}/{name}
 jaws pull
 
-# Edit and push back
+# Edit any secret with your favourite editor — it's just a file.
+$EDITOR .secrets/secrets/jaws/my-secret
+
+# Create a new local secret by writing a file:
+echo "value" > .secrets/secrets/jaws/another-secret
+
+# Record local edits in the DB + .versions/ archive (no remote upload):
+jaws save
+
+# Inspect what's new / modified / unpushed:
+jaws status
+
+# Upload local edits to their remote providers:
 jaws push
 ```
 

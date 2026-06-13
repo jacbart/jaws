@@ -40,15 +40,29 @@ pub enum Commands {
         #[arg(short, long, value_name = "FILE")]
         output: Option<PathBuf>,
     },
-    /// Push secrets to your secrets manager
+    /// Push secrets to your secrets manager (runs `save` first, then uploads
+    /// every download row with `pushed_at IS NULL` to its remote provider).
     Push {
-        /// Name of the secret to push (optional - if not provided, shows TUI with modified secrets)
+        /// Name of the secret to push (optional - if omitted, pushes all
+        /// unpushed local edits across every provider).
         secret_name: Option<String>,
 
         /// Open secrets in editor before pushing
         #[arg(short, long)]
         edit: bool,
     },
+    /// Save local edits to the SQLite DB and `.versions/` archive.
+    ///
+    /// Scans `secrets_path/secrets/{provider_id}/{name}` working files,
+    /// hashes them, and inserts a new version row whenever the hash differs
+    /// from the latest one in the DB. NEVER touches a remote provider —
+    /// run `jaws push` afterwards to upload.
+    Save {
+        /// Specific secret to save (optional). Omit to scan everything.
+        secret_name: Option<String>,
+    },
+    /// Show working-dir-vs-DB status (new / modified / unpushed / orphan).
+    Status,
     /// Delete a secret (prompts for scope: local, remote, or both)
     Delete {
         /// Name of the secret to delete (optional - if not provided, opens TUI selector)

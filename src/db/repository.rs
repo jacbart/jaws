@@ -192,6 +192,14 @@ impl SecretRepository {
     }
 
     /// Find a secret by provider ID and display_name.
+    ///
+    /// Falls back to a sanitized-filename match: the user-facing working dir
+    /// lives at `secrets/{provider_id}/{sanitize_filename(display_name)}`, but
+    /// the DB row still stores the raw display_name (e.g. `vault/item/field`
+    /// for 1Password). When `display_name` looks like a sanitized FS segment
+    /// (no slashes, no characters that `sanitize_filename` would replace) and
+    /// no exact match is found, scan the provider's secrets and return any
+    /// whose sanitized form matches.
     pub fn find_secret_by_provider_and_name(
         &self,
         provider_id: &str,
@@ -208,7 +216,19 @@ impl SecretRepository {
                 Self::row_to_secret,
             )
             .optional()?;
-        Ok(result)
+        if let Some(s) = result {
+            return Ok(Some(s));
+        }
+        drop(conn);
+
+        // Fallback: sanitized-filename match for FS-derived names.
+        let sanitized = crate::secrets::storage::sanitize_filename(display_name);
+        for s in self.list_secrets_by_provider(provider_id)? {
+            if crate::secrets::storage::sanitize_filename(&s.display_name) == sanitized {
+                return Ok(Some(s));
+            }
+        }
+        Ok(None)
     }
 
     /// List all known secrets, optionally filtered by provider.
@@ -246,9 +266,9 @@ impl SecretRepository {
         let conn = self.conn.lock().map_err(lock_err)?;
         let mut stmt = conn.prepare(
             r#"
-            SELECT 
+            SELECT
                 s.id, s.provider_id, s.api_ref, s.display_name, s.hash, s.description, s.remote_updated_at, s.created_at,
-                d.id, d.secret_id, d.version, d.filename, d.downloaded_at, d.file_hash
+                d.id, d.secret_id, d.version, d.filename, d.downloaded_at, d.file_hash, d.pushed_at
             FROM secrets s
             INNER JOIN downloads d ON s.id = d.secret_id
             WHERE d.version = (SELECT MAX(version) FROM downloads WHERE secret_id = s.id)
@@ -267,13 +287,11 @@ impl SecretRepository {
                     description: row.get(5)?,
                     remote_updated_at: row
                         .get::<_, Option<String>>(6)?
-                        .and_then(|s| DateTime::parse_from_rfc3339(&s).ok())
-                        .map(|dt| dt.with_timezone(&Utc)),
+                        .and_then(|s| parse_datetime(&s)),
                     created_at: row
                         .get::<_, String>(7)
                         .ok()
-                        .and_then(|s| DateTime::parse_from_rfc3339(&s).ok())
-                        .map(|dt| dt.with_timezone(&Utc))
+                        .and_then(|s| parse_datetime(&s))
                         .unwrap_or_else(Utc::now),
                 };
                 let download = DbDownload {
@@ -284,10 +302,12 @@ impl SecretRepository {
                     downloaded_at: row
                         .get::<_, String>(12)
                         .ok()
-                        .and_then(|s| DateTime::parse_from_rfc3339(&s).ok())
-                        .map(|dt| dt.with_timezone(&Utc))
+                        .and_then(|s| parse_datetime(&s))
                         .unwrap_or_else(Utc::now),
                     file_hash: row.get(13)?,
+                    pushed_at: row
+                        .get::<_, Option<String>>(14)?
+                        .and_then(|s| parse_datetime(&s)),
                 };
                 Ok((secret, download))
             })?
@@ -339,11 +359,18 @@ impl SecretRepository {
     // ========================================================================
 
     /// Create a new download record. Returns the created download.
+    ///
+    /// `pushed_at` controls the new row's push state:
+    /// - `Some(_)` → the row is treated as already synced to the remote (used by
+    ///   `pull`, by the local `jaws` provider since it has no remote, and by
+    ///   `push` once the upload succeeds).
+    /// - `None`    → the row is a pending local edit waiting for `jaws push`.
     pub fn create_download(
         &self,
         secret_id: i64,
         filename: &str,
         file_hash: &str,
+        pushed_at: Option<DateTime<Utc>>,
     ) -> Result<DbDownload, JawsError> {
         let conn = self.conn.lock().map_err(lock_err)?;
 
@@ -359,8 +386,8 @@ impl SecretRepository {
         let now = Utc::now();
         conn.execute(
             r#"
-            INSERT INTO downloads (secret_id, version, filename, downloaded_at, file_hash)
-            VALUES (?1, ?2, ?3, ?4, ?5)
+            INSERT INTO downloads (secret_id, version, filename, downloaded_at, file_hash, pushed_at)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6)
             "#,
             params![
                 secret_id,
@@ -368,6 +395,7 @@ impl SecretRepository {
                 filename,
                 now.to_rfc3339(),
                 file_hash,
+                pushed_at.map(|dt| dt.to_rfc3339()),
             ],
         )?;
 
@@ -380,7 +408,162 @@ impl SecretRepository {
             filename: filename.to_string(),
             downloaded_at: now,
             file_hash: Some(file_hash.to_string()),
+            pushed_at,
         })
+    }
+
+    /// Get the latest hash recorded for a secret by `(provider_id, display_name)`.
+    pub fn get_latest_hash_by_provider_and_name(
+        &self,
+        provider_id: &str,
+        display_name: &str,
+    ) -> Result<Option<String>, JawsError> {
+        let conn = self.conn.lock().map_err(lock_err)?;
+        let result = conn
+            .query_row(
+                r#"
+                SELECT d.file_hash
+                FROM secrets s
+                JOIN downloads d ON d.secret_id = s.id
+                WHERE s.provider_id = ?1 AND s.display_name = ?2
+                ORDER BY d.version DESC
+                LIMIT 1
+                "#,
+                params![provider_id, display_name],
+                |row| row.get::<_, Option<String>>(0),
+            )
+            .optional()?;
+        Ok(result.flatten())
+    }
+
+    /// Get the latest pushed (`pushed_at IS NOT NULL`) download for a secret —
+    /// represents the last content known to be in sync with the remote provider.
+    pub fn get_last_pushed_download(
+        &self,
+        secret_id: i64,
+    ) -> Result<Option<DbDownload>, JawsError> {
+        let conn = self.conn.lock().map_err(lock_err)?;
+        let result = conn
+            .query_row(
+                r#"
+                SELECT id, secret_id, version, filename, downloaded_at, file_hash, pushed_at
+                FROM downloads
+                WHERE secret_id = ?1 AND pushed_at IS NOT NULL
+                ORDER BY version DESC
+                LIMIT 1
+                "#,
+                [secret_id],
+                Self::row_to_download,
+            )
+            .optional()?;
+        Ok(result)
+    }
+
+    /// List every unpushed download joined with its secret, optionally filtered.
+    pub fn list_unpushed_downloads(
+        &self,
+        provider_id: Option<&str>,
+        name: Option<&str>,
+    ) -> Result<Vec<(DbSecret, DbDownload)>, JawsError> {
+        let conn = self.conn.lock().map_err(lock_err)?;
+
+        let mut sql = String::from(
+            r#"
+            SELECT
+                s.id, s.provider_id, s.api_ref, s.display_name, s.hash, s.description, s.remote_updated_at, s.created_at,
+                d.id, d.secret_id, d.version, d.filename, d.downloaded_at, d.file_hash, d.pushed_at
+            FROM downloads d
+            JOIN secrets s ON s.id = d.secret_id
+            WHERE d.pushed_at IS NULL
+            "#,
+        );
+        let mut conditions: Vec<String> = Vec::new();
+        let mut args: Vec<String> = Vec::new();
+        if let Some(p) = provider_id {
+            conditions.push(format!("s.provider_id = ?{}", args.len() + 1));
+            args.push(p.to_string());
+        }
+        if let Some(n) = name {
+            conditions.push(format!("s.display_name = ?{}", args.len() + 1));
+            args.push(n.to_string());
+        }
+        for cond in &conditions {
+            sql.push_str(" AND ");
+            sql.push_str(cond);
+        }
+        sql.push_str(" ORDER BY s.provider_id, s.display_name, d.version");
+
+        let mut stmt = conn.prepare(&sql)?;
+        let params_dyn: Vec<&dyn rusqlite::ToSql> =
+            args.iter().map(|s| s as &dyn rusqlite::ToSql).collect();
+        let rows = stmt
+            .query_map(params_dyn.as_slice(), |row| {
+                let secret = DbSecret {
+                    id: row.get(0)?,
+                    provider_id: row.get(1)?,
+                    api_ref: row.get(2)?,
+                    display_name: row.get(3)?,
+                    hash: row.get(4)?,
+                    description: row.get(5)?,
+                    remote_updated_at: row
+                        .get::<_, Option<String>>(6)?
+                        .and_then(|s| parse_datetime(&s)),
+                    created_at: row
+                        .get::<_, String>(7)
+                        .ok()
+                        .and_then(|s| parse_datetime(&s))
+                        .unwrap_or_else(Utc::now),
+                };
+                let download = DbDownload {
+                    id: row.get(8)?,
+                    secret_id: row.get(9)?,
+                    version: row.get(10)?,
+                    filename: row.get(11)?,
+                    downloaded_at: row
+                        .get::<_, String>(12)
+                        .ok()
+                        .and_then(|s| parse_datetime(&s))
+                        .unwrap_or_else(Utc::now),
+                    file_hash: row.get(13)?,
+                    pushed_at: row
+                        .get::<_, Option<String>>(14)?
+                        .and_then(|s| parse_datetime(&s)),
+                };
+                Ok((secret, download))
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(rows)
+    }
+
+    /// Stamp `pushed_at` on a download row, marking it synced to the remote.
+    pub fn mark_pushed(
+        &self,
+        download_id: i64,
+        at: DateTime<Utc>,
+    ) -> Result<(), JawsError> {
+        let conn = self.conn.lock().map_err(lock_err)?;
+        conn.execute(
+            "UPDATE downloads SET pushed_at = ?1 WHERE id = ?2",
+            params![at.to_rfc3339(), download_id],
+        )?;
+        Ok(())
+    }
+
+    /// Overwrite the `api_ref` and `hash` for a secret. Used after the first
+    /// successful push to a remote provider, when the local placeholder UUID is
+    /// replaced with the real provider-assigned reference (e.g. an AWS ARN).
+    pub fn update_api_ref(
+        &self,
+        secret_id: i64,
+        new_ref: &str,
+        new_hash: &str,
+    ) -> Result<(), JawsError> {
+        let conn = self.conn.lock().map_err(lock_err)?;
+        conn.execute(
+            "UPDATE secrets SET api_ref = ?1, hash = ?2 WHERE id = ?3",
+            params![new_ref, new_hash, secret_id],
+        )?;
+        Ok(())
     }
 
     /// Get the latest download for a secret.
@@ -389,8 +572,8 @@ impl SecretRepository {
         let result = conn
             .query_row(
                 r#"
-                SELECT id, secret_id, version, filename, downloaded_at, file_hash
-                FROM downloads 
+                SELECT id, secret_id, version, filename, downloaded_at, file_hash, pushed_at
+                FROM downloads
                 WHERE secret_id = ?
                 ORDER BY version DESC
                 LIMIT 1
@@ -407,7 +590,7 @@ impl SecretRepository {
         let conn = self.conn.lock().map_err(lock_err)?;
         let mut stmt = conn.prepare(
             r#"
-            SELECT id, secret_id, version, filename, downloaded_at, file_hash
+            SELECT id, secret_id, version, filename, downloaded_at, file_hash, pushed_at
             FROM downloads WHERE secret_id = ?
             ORDER BY version DESC
             "#,
@@ -430,8 +613,8 @@ impl SecretRepository {
         let result = conn
             .query_row(
                 r#"
-                SELECT id, secret_id, version, filename, downloaded_at, file_hash
-                FROM downloads 
+                SELECT id, secret_id, version, filename, downloaded_at, file_hash, pushed_at
+                FROM downloads
                 WHERE secret_id = ? AND version = ?
                 "#,
                 params![secret_id, version],
@@ -676,6 +859,9 @@ impl SecretRepository {
                 .and_then(|s| parse_datetime(&s))
                 .unwrap_or_else(Utc::now),
             file_hash: row.get(5)?,
+            pushed_at: row
+                .get::<_, Option<String>>(6)?
+                .and_then(|s| parse_datetime(&s)),
         })
     }
 

@@ -30,9 +30,15 @@ pub struct DbDownload {
     pub id: i64,
     pub secret_id: i64,
     pub version: i32,
+    /// Relative path under `secrets_path` to this version's archive
+    /// (e.g. `.versions/aws-prod/db-password/v3`).
     pub filename: String,
     pub downloaded_at: DateTime<Utc>,
     pub file_hash: Option<String>,
+    /// Non-NULL once this row's content has been synced to the remote provider.
+    /// NULL means the local edit is pending push. For the local "jaws" provider
+    /// this is stamped equal to `downloaded_at` (no remote exists).
+    pub pushed_at: Option<DateTime<Utc>>,
 }
 
 /// Input for creating/updating a secret (without auto-generated fields)
