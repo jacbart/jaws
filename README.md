@@ -4,7 +4,7 @@ Just A Working Secretsmanager
 
 A CLI tool and library for managing secrets from multiple providers (AWS Secrets Manager, GCP Secret Manager, 1Password, Bitwarden, and local storage) with local version tracking and secure remote secret sharing.
 
-![Version](https://img.shields.io/badge/version-1.5.1-blue)
+![Version](https://img.shields.io/badge/version-1.5.2-blue)
 ![License](https://img.shields.io/badge/license-MPL--2.0-blue)
 
 ## Demo
