@@ -120,11 +120,11 @@ impl EnrollmentManager {
     /// Mark a token as used in both the in-memory cache and the database.
     fn mark_token_used(&self, token: &str, client_id: &str) {
         // In-memory
-        if let Ok(mut tokens) = self.tokens.lock() {
-            if let Some(entry) = tokens.get_mut(token) {
-                entry.used = true;
-                entry.used_by = Some(client_id.to_string());
-            }
+        if let Ok(mut tokens) = self.tokens.lock()
+            && let Some(entry) = tokens.get_mut(token)
+        {
+            entry.used = true;
+            entry.used_by = Some(client_id.to_string());
         }
 
         // Database

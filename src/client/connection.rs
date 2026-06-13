@@ -102,22 +102,28 @@ pub async fn connect_from_pem(
 ///
 /// During enrollment the client has neither a client certificate nor the
 /// server's CA certificate.  We handle TLS ourselves using `tokio-rustls`
-/// with a permissive certificate verifier, then hand the already-encrypted
-/// stream to tonic via `connect_with_connector` using an `http://` URI so
-/// tonic's own TLS layer is bypassed.
-pub async fn connect_for_enrollment(url: &str) -> Result<Channel, JawsError> {
+/// with a permissive certificate verifier that captures the server's
+/// certificate fingerprint, then hand the already-encrypted stream to tonic.
+///
+/// Returns the gRPC channel and the SHA-256 fingerprint of the server's
+/// end-entity certificate so the caller can verify it out-of-band.
+pub async fn connect_for_enrollment(url: &str) -> Result<(Channel, Option<String>), JawsError> {
     let url = normalize_url(url);
     let (host, port) = extract_host_port(&url);
     let host_for_tls = host.clone();
 
-    // Build a rustls ClientConfig that accepts any server certificate.
-    // This is safe for enrollment because:
-    //   - The enrollment token authenticates the request
-    //   - The server returns its CA cert, which the client pins for all
-    //     subsequent connections (TOFU — Trust On First Use)
+    // Shared storage for the captured server certificate fingerprint
+    let captured_fp = Arc::new(std::sync::Mutex::new(None));
+
+    // Build a rustls ClientConfig that accepts any server certificate but
+    // records its fingerprint for out-of-band verification.
+    let verifier = Arc::new(CapturingCertVerifier {
+        captured: Arc::clone(&captured_fp),
+    });
+
     let mut tls_config = rustls::ClientConfig::builder()
         .dangerous()
-        .with_custom_certificate_verifier(Arc::new(InsecureServerCertVerifier))
+        .with_custom_certificate_verifier(verifier)
         .with_no_client_auth();
     tls_config.alpn_protocols = vec![b"h2".to_vec()];
     let tls_connector = tokio_rustls::TlsConnector::from(Arc::new(tls_config));
@@ -176,25 +182,39 @@ pub async fn connect_for_enrollment(url: &str) -> Result<Channel, JawsError> {
             ))
         })?;
 
-    Ok(channel)
+    // Extract the captured fingerprint now that the handshake is complete
+    let server_fingerprint = captured_fp.lock().ok().and_then(|g| g.clone());
+
+    Ok((channel, server_fingerprint))
 }
 
-// ── Insecure cert verifier (enrollment only) ──────────────────────────
+// ── Capturing cert verifier (enrollment only) ─────────────────────────
 
-/// A certificate verifier that accepts any server certificate.
-/// Used ONLY during the enrollment handshake (TOFU model).
+/// A certificate verifier that accepts any server certificate but records
+/// the SHA-256 fingerprint of the end-entity certificate.
+///
+/// Used ONLY during the enrollment handshake so the user can verify the
+/// server's identity out-of-band before trusting the returned CA certificate.
 #[derive(Debug)]
-struct InsecureServerCertVerifier;
+struct CapturingCertVerifier {
+    captured: Arc<std::sync::Mutex<Option<String>>>,
+}
 
-impl rustls::client::danger::ServerCertVerifier for InsecureServerCertVerifier {
+impl rustls::client::danger::ServerCertVerifier for CapturingCertVerifier {
     fn verify_server_cert(
         &self,
-        _end_entity: &rustls::pki_types::CertificateDer<'_>,
+        end_entity: &rustls::pki_types::CertificateDer<'_>,
         _intermediates: &[rustls::pki_types::CertificateDer<'_>],
         _server_name: &rustls::pki_types::ServerName<'_>,
         _ocsp_response: &[u8],
         _now: rustls::pki_types::UnixTime,
     ) -> Result<rustls::client::danger::ServerCertVerified, rustls::Error> {
+        use sha2::{Digest, Sha256};
+        let hash = Sha256::digest(end_entity.as_ref());
+        let fp = hex::encode(hash);
+        if let Ok(mut guard) = self.captured.lock() {
+            *guard = Some(fp);
+        }
         Ok(rustls::client::danger::ServerCertVerified::assertion())
     }
 

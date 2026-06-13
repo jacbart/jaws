@@ -7,7 +7,7 @@ use clap::CommandFactory;
 use crate::cli::Cli;
 use crate::config::Config;
 use crate::db::SecretRepository;
-use crate::secrets::get_secret_path;
+use crate::secrets::working_file_path;
 
 use super::snapshot::{print_snapshot_summary, snapshot_secrets};
 
@@ -58,10 +58,14 @@ pub async fn handle_default_command(
     let mut selected_secret_ids: Vec<i64> = Vec::new();
 
     for (_, selected_display) in &selected {
-        for (secret, download) in &downloaded {
+        for (secret, _download) in &downloaded {
             let display = format!("{} | {}", secret.provider_id, secret.display_name);
             if &display == selected_display {
-                let file_path = get_secret_path(&config.secrets_path(), &download.filename);
+                let file_path = working_file_path(
+                    &config.secrets_path(),
+                    &secret.provider_id,
+                    &secret.display_name,
+                );
                 files_to_open.push(file_path.to_string_lossy().to_string());
                 selected_secret_ids.push(secret.id);
                 break;

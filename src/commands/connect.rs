@@ -13,6 +13,7 @@ pub async fn handle_connect(
     url: &str,
     token: &str,
     name: Option<String>,
+    fingerprint: Option<String>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     // Determine client name (defaults to hostname)
     let client_name = hostname::get()
@@ -25,8 +26,43 @@ pub async fn handle_connect(
     // Generate a CSR (key pair stays local)
     let (csr_pem, client_key_pem) = pki::generate_csr(&client_name)?;
 
-    // Connect to the server for enrollment (no mTLS yet)
-    let channel = crate::client::connection::connect_for_enrollment(url).await?;
+    // Connect to the server for enrollment (no mTLS yet).
+    // We capture the server's certificate fingerprint so the user can
+    // verify it out-of-band before trusting the returned CA certificate.
+    let (channel, server_fingerprint) =
+        crate::client::connection::connect_for_enrollment(url).await?;
+
+    // Verify or prompt for server fingerprint
+    if let Some(ref fp) = server_fingerprint {
+        eprintln!("Server certificate fingerprint: SHA256:{}", fp);
+
+        if let Some(expected) = fingerprint {
+            if expected != *fp {
+                return Err(format!(
+                    "Server fingerprint mismatch!\nExpected: SHA256:{}\nReceived: SHA256:{}",
+                    expected, fp
+                )
+                .into());
+            }
+            eprintln!("Fingerprint verified.");
+        } else {
+            // Interactive mode — require explicit confirmation
+            eprint!("Trust this server? [y/N] ");
+            use std::io::Write;
+            std::io::stdout().flush()?;
+
+            let mut input = String::new();
+            std::io::stdin().read_line(&mut input)?;
+
+            let trimmed = input.trim();
+            if !trimmed.eq_ignore_ascii_case("y") && !trimmed.eq_ignore_ascii_case("yes") {
+                return Err("Connection aborted by user.".into());
+            }
+        }
+    } else {
+        eprintln!("Warning: could not determine server certificate fingerprint.");
+    }
+
     let mut grpc_client = JawsServiceClient::new(channel);
 
     // Send enrollment request

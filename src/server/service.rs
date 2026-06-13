@@ -81,12 +81,13 @@ impl JawsServiceImpl {
             Ok(false) => Err(Status::permission_denied(
                 "Client certificate has been revoked. Contact the server administrator.",
             )),
-            Err(_) => {
-                // DB error — be permissive if the client presented a CA-signed cert.
-                // The TLS layer already verified the cert chain; the DB check is
-                // an extra revocation layer. If the DB is unavailable, allow the
-                // request rather than locking out all clients.
-                Ok(identity.name)
+            Err(e) => {
+                // DB error — fail closed.  Do not allow revoked (or unknown)
+                // clients to access secrets just because the DB is down.
+                Err(Status::unavailable(format!(
+                    "Authentication service temporarily unavailable: {}",
+                    e
+                )))
             }
         }
     }

@@ -201,22 +201,20 @@ pub(super) async fn discover_and_add_onepassword(
             .providers
             .iter()
             .any(|p| matches!(p.kind.as_str(), "onepassword" | "1password" | "op"))
+            && let Ok(token) = std::env::var(op_token_env)
+            && confirm("Store encrypted copy of 1Password service account token?")
         {
-            if let Ok(token) = std::env::var(op_token_env) {
-                if confirm("Store encrypted copy of 1Password service account token?") {
-                    let store_id = config
-                        .providers
-                        .iter()
-                        .find(|p| matches!(p.kind.as_str(), "onepassword" | "1password" | "op"))
-                        .map(|p| p.id.clone())
-                        .unwrap_or_else(|| "op".to_string());
-                    pending_credentials.push(PendingCredential {
-                        provider_id: store_id,
-                        credential_key: "token".to_string(),
-                        plaintext_value: token,
-                    });
-                }
-            }
+            let store_id = config
+                .providers
+                .iter()
+                .find(|p| matches!(p.kind.as_str(), "onepassword" | "1password" | "op"))
+                .map(|p| p.id.clone())
+                .unwrap_or_else(|| "op".to_string());
+            pending_credentials.push(PendingCredential {
+                provider_id: store_id,
+                credential_key: "token".to_string(),
+                plaintext_value: token,
+            });
         }
     } else {
         println!("{} not set, skipping 1Password setup", op_token_env);
@@ -325,22 +323,20 @@ pub(super) async fn discover_and_add_bitwarden(
             .providers
             .iter()
             .any(|p| matches!(p.kind.as_str(), "bw" | "bitwarden" | "bws"))
+            && let Ok(token) = std::env::var(bw_token_env)
+            && confirm("Store encrypted copy of Bitwarden access token?")
         {
-            if let Ok(token) = std::env::var(bw_token_env) {
-                if confirm("Store encrypted copy of Bitwarden access token?") {
-                    let store_id = config
-                        .providers
-                        .iter()
-                        .find(|p| matches!(p.kind.as_str(), "bw" | "bitwarden" | "bws"))
-                        .map(|p| p.id.clone())
-                        .unwrap_or_else(|| "bw".to_string());
-                    pending_credentials.push(PendingCredential {
-                        provider_id: store_id,
-                        credential_key: "token".to_string(),
-                        plaintext_value: token,
-                    });
-                }
-            }
+            let store_id = config
+                .providers
+                .iter()
+                .find(|p| matches!(p.kind.as_str(), "bw" | "bitwarden" | "bws"))
+                .map(|p| p.id.clone())
+                .unwrap_or_else(|| "bw".to_string());
+            pending_credentials.push(PendingCredential {
+                provider_id: store_id,
+                credential_key: "token".to_string(),
+                plaintext_value: token,
+            });
         }
     } else {
         println!("{} not set, skipping Bitwarden setup", bw_token_env);
@@ -444,10 +440,10 @@ fn discover_gcp_project() -> Option<String> {
         "GCLOUD_PROJECT",
         "CLOUDSDK_CORE_PROJECT",
     ] {
-        if let Ok(project) = std::env::var(env_var) {
-            if !project.is_empty() {
-                return Some(project);
-            }
+        if let Ok(project) = std::env::var(env_var)
+            && !project.is_empty()
+        {
+            return Some(project);
         }
     }
 

@@ -10,24 +10,24 @@
 }:
 
 let
-  version = "0.3.2";
+  version = "0.4.0";
 
   sources = {
     x86_64-linux = {
-      url = "https://files.pythonhosted.org/packages/cb/eb/86f450df04eccbc1317b8316061e768c93554e9fc0facb0185dcf60ef387/onepassword_sdk-0.3.2-cp39-cp39-manylinux_2_32_x86_64.whl";
-      sha256 = "963af1fa1466e794783a657ac25a93d88b0c1e6330354fd8509aeaf0acc9164c";
+      url = "https://files.pythonhosted.org/packages/20/d9/aabbec9ac27ddf42d062f5327f3da4b5ca1f5ce34b3319d5e0ec41fea67b/onepassword_sdk-0.4.0-cp39-cp39-manylinux_2_32_x86_64.whl";
+      sha256 = "13vjh40yv06bzcp4b0j9g3nkg8qmf7a3dlcdibax0fvxshwaih37";
     };
     aarch64-linux = {
-      url = "https://files.pythonhosted.org/packages/b3/6d/81a56216dcc1db7c0e259da3b7c9c290158d0f5ab1c93ed2ab78a8fb9829/onepassword_sdk-0.3.2-cp39-cp39-manylinux_2_32_aarch64.whl";
-      sha256 = "be4382eb5d007c153b0c6c8c096c46280b9d35b513f44bc0fe09a2078dda563f";
+      url = "https://files.pythonhosted.org/packages/22/fb/54e1615166330f10bfaed806b2872bb3093a49ccb1e4a4e50ada7275e150/onepassword_sdk-0.4.0-cp39-cp39-manylinux_2_32_aarch64.whl";
+      sha256 = "070nvdr8pyzhms53a0nzr42jgz5707496lpi34jrzlpb9sqdj9i5";
     };
     x86_64-darwin = {
-      url = "https://files.pythonhosted.org/packages/84/c9/c57b228b379375e71d06084b7f7b26dfb874b994d0db96e30553cc2b34aa/onepassword_sdk-0.3.2-cp39-cp39-macosx_10_9_x86_64.whl";
-      sha256 = "9116696cd26f53419423128a9e15c4d634921b9c82d1e6ebf038a9dc3eb795af";
+      url = "https://files.pythonhosted.org/packages/2f/35/195045a31f950809477c8aec277ec39e5dc423ad8ffa35d9cd629d951256/onepassword_sdk-0.4.0-cp39-cp39-macosx_10_9_x86_64.whl";
+      sha256 = "0k1d10fzjz3a29nnzr2kc7ga90gxnzyjfw1zspncxplyrllwhcy5";
     };
     aarch64-darwin = {
-      url = "https://files.pythonhosted.org/packages/04/72/e75e54e985a4affdf0e5d9b5a9c3945dc0583ce32c1f62d6ee0faef78c41/onepassword_sdk-0.3.2-cp39-cp39-macosx_11_0_arm64.whl";
-      sha256 = "76bb47fd06ef4f8231e0d04c85606dee66c37f50ef0541fc24e88d56a5156931";
+      url = "https://files.pythonhosted.org/packages/52/90/e1f5867161e20605a0b4f7c520327698b34e05c59844df37a7f6e70308e3/onepassword_sdk-0.4.0-cp39-cp39-macosx_11_0_arm64.whl";
+      sha256 = "sha256-4XnWtpyW5b1AN19+sIGUpUaTtIB2NewWjP1v/0/ehOA=";
     };
   };
 

@@ -158,10 +158,10 @@ pub fn keychain_clear_all(secrets_path: &Path, repo: &SecretRepository) -> usize
         Ok(keys) => {
             for (provider_id, credential_key) in keys {
                 let user = entry_user(secrets_path, &provider_id, &credential_key);
-                if let Ok(entry) = keyring::Entry::new(SERVICE, &user) {
-                    if entry.delete_credential().is_ok() {
-                        cleared += 1;
-                    }
+                if let Ok(entry) = keyring::Entry::new(SERVICE, &user)
+                    && entry.delete_credential().is_ok()
+                {
+                    cleared += 1;
                 }
             }
         }

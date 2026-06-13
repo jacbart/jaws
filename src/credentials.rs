@@ -96,9 +96,9 @@ fn clear_passphrase_cache() {
 // -- SSH key path cache helpers --
 
 /// Store an SSH private key path in the session cache.
-fn cache_ssh_key_path(path: &PathBuf) {
+fn cache_ssh_key_path(path: &Path) {
     if let Ok(mut cache) = SSH_KEY_PATH_CACHE.lock() {
-        *cache = Some(path.clone());
+        *cache = Some(path.to_path_buf());
     }
 }
 
@@ -352,14 +352,13 @@ pub fn retrieve_credential(
     }
 
     // 2. Check the OS keychain cache (scoped to secrets_path)
-    if use_keychain {
-        if let Some(cached) =
+    if use_keychain
+        && let Some(cached) =
             keychain::keychain_retrieve(secrets_path, provider_id, credential_key, cache_ttl)
-        {
-            // Populate the in-process cache so we don't hit the keychain again
-            cache_decrypted_value(provider_id, credential_key, &cached);
-            return Ok(Some(cached));
-        }
+    {
+        // Populate the in-process cache so we don't hit the keychain again
+        cache_decrypted_value(provider_id, credential_key, &cached);
+        return Ok(Some(cached));
     }
 
     // 3. Look up the stored credential in the DB

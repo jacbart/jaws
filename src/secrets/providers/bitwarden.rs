@@ -5,7 +5,6 @@ use bitwarden::{
     Client, ClientSettings, DeviceType,
     auth::login::AccessTokenLoginRequest,
     secrets_manager::{
-        ClientProjectsExt, ClientSecretsExt,
         projects::ProjectsListRequest,
         secrets::{
             SecretCreateRequest, SecretGetRequest, SecretIdentifiersByProjectRequest,

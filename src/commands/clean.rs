@@ -38,26 +38,8 @@ pub fn handle_clean(
         .filter(|(s, _)| s.provider_id != "jaws")
         .collect();
 
-    // Count files in secrets directory (excluding db files)
-    let file_count = if secrets_path.exists() {
-        fs::read_dir(&secrets_path)
-            .map(|entries| {
-                entries
-                    .filter_map(|e| e.ok())
-                    .filter(|e| {
-                        let name = e.file_name();
-                        let name_str = name.to_string_lossy();
-                        !name_str.ends_with(".db")
-                            && !name_str.ends_with("-journal")
-                            && !name_str.ends_with("-wal")
-                            && !name_str.ends_with("-shm")
-                    })
-                    .count()
-            })
-            .unwrap_or(0)
-    } else {
-        0
-    };
+    // Count working files + version archives.
+    let file_count = count_secret_files(&secrets_path);
 
     // Nothing to clean?
     if all_secrets.is_empty() && file_count == 0 {
@@ -137,23 +119,24 @@ pub fn handle_clean(
         // Only delete remote provider secrets
         let mut deleted_files = 0;
 
-        // Delete files for remote secrets
-        for (secret, download) in &remote_downloads {
-            let file_path = secrets_path.join(&download.filename);
-            if file_path.exists() {
-                if let Err(e) = fs::remove_file(&file_path) {
-                    eprintln!("Warning: Failed to delete {}: {}", file_path.display(), e);
-                } else {
-                    deleted_files += 1;
-                }
+        // Delete working file + every archive for every remote secret
+        for (secret, _download) in &remote_downloads {
+            let working = crate::secrets::storage::working_file_path(
+                &secrets_path,
+                &secret.provider_id,
+                &secret.display_name,
+            );
+            if working.exists() {
+                let _ = fs::remove_file(&working);
+                deleted_files += 1;
             }
-            // Also delete any older versions
-            for dl in repo.list_downloads(secret.id).unwrap_or_default() {
-                let old_path = secrets_path.join(&dl.filename);
-                if old_path.exists() && old_path != file_path {
-                    let _ = fs::remove_file(&old_path);
-                }
-            }
+            let downloads = repo.list_downloads(secret.id).unwrap_or_default();
+            deleted_files += downloads.len();
+            let _ = crate::secrets::storage::delete_all_archives(
+                &secrets_path,
+                &secret.provider_id,
+                &secret.display_name,
+            );
         }
 
         // Delete remote secrets from database (by each non-jaws provider)
@@ -175,8 +158,17 @@ pub fn handle_clean(
     } else {
         // Full cleanup - delete everything
 
-        // Delete all secret files (not the db yet)
         let mut deleted_files = 0;
+        for dir in [
+            secrets_path.join(crate::secrets::storage::WORKING_DIR),
+            secrets_path.join(crate::secrets::storage::VERSIONS_DIR),
+        ] {
+            if dir.exists() {
+                deleted_files += count_recursive(&dir);
+                let _ = fs::remove_dir_all(&dir);
+            }
+        }
+        // Also sweep any stray legacy files at the root.
         if secrets_path.exists() {
             for entry in fs::read_dir(&secrets_path)? {
                 let entry = entry?;
@@ -185,8 +177,6 @@ pub fn handle_clean(
                     .file_name()
                     .map(|n| n.to_string_lossy().to_string())
                     .unwrap_or_default();
-
-                // Skip database files for now
                 if name.ends_with(".db")
                     || name.ends_with("-journal")
                     || name.ends_with("-wal")
@@ -194,13 +184,9 @@ pub fn handle_clean(
                 {
                     continue;
                 }
-
                 if path.is_file() {
-                    if let Err(e) = fs::remove_file(&path) {
-                        eprintln!("Warning: Failed to delete {}: {}", path.display(), e);
-                    } else {
-                        deleted_files += 1;
-                    }
+                    let _ = fs::remove_file(&path);
+                    deleted_files += 1;
                 }
             }
         }
@@ -216,4 +202,47 @@ pub fn handle_clean(
     }
 
     Ok(())
+}
+
+fn count_secret_files(secrets_path: &std::path::Path) -> usize {
+    let mut total = 0;
+    for dir in [
+        secrets_path.join(crate::secrets::storage::WORKING_DIR),
+        secrets_path.join(crate::secrets::storage::VERSIONS_DIR),
+    ] {
+        total += count_recursive(&dir);
+    }
+    // Include any stray legacy files at the root.
+    if let Ok(entries) = fs::read_dir(secrets_path) {
+        for e in entries.flatten() {
+            let name = e.file_name().to_string_lossy().to_string();
+            if e.path().is_file()
+                && !name.ends_with(".db")
+                && !name.ends_with("-journal")
+                && !name.ends_with("-wal")
+                && !name.ends_with("-shm")
+            {
+                total += 1;
+            }
+        }
+    }
+    total
+}
+
+fn count_recursive(dir: &std::path::Path) -> usize {
+    if !dir.exists() {
+        return 0;
+    }
+    let mut total = 0;
+    if let Ok(entries) = fs::read_dir(dir) {
+        for e in entries.flatten() {
+            let path = e.path();
+            if path.is_dir() {
+                total += count_recursive(&path);
+            } else {
+                total += 1;
+            }
+        }
+    }
+    total
 }

@@ -1,12 +1,12 @@
 //! Delete command handlers - deleting secrets (local, remote, or both).
 
-use std::fs;
 use std::io::{self, Write};
 
 use crate::cli::DeleteScope;
 use crate::config::Config;
 use crate::db::SecretRepository;
-use crate::secrets::{Provider, get_secret_path};
+use crate::secrets::storage::{delete_all_archives, delete_working_file};
+use crate::secrets::Provider;
 use crate::utils::parse_secret_ref;
 
 /// Handle the unified delete command - can delete local, remote, or both
@@ -260,15 +260,13 @@ async fn delete_local(
         return Ok(());
     }
 
-    // Delete all version files
-    let mut deleted_files = 0;
-    for download in &all_downloads {
-        let file_path = get_secret_path(&config.secrets_path(), &download.filename);
-        if file_path.exists() {
-            fs::remove_file(&file_path)?;
-            deleted_files += 1;
-        }
-    }
+    // Delete working file and every version archive.
+    let working_path =
+        crate::secrets::storage::working_file_path(&config.secrets_path(), &secret.provider_id, &secret.display_name);
+    let mut deleted_files = if working_path.exists() { 1 } else { 0 };
+    let _ = delete_working_file(&config.secrets_path(), &secret.provider_id, &secret.display_name);
+    deleted_files += all_downloads.len();
+    let _ = delete_all_archives(&config.secrets_path(), &secret.provider_id, &secret.display_name);
 
     // Delete DB records (downloads are deleted via CASCADE when secret is deleted)
     repo.delete_secret(secret.id)?;
@@ -332,19 +330,12 @@ async fn delete_remote(
     // longer shows the deleted secret.
     if let Ok(Some(secret)) = repo.find_secret_by_provider_and_name(provider_id, secret_name) {
         let downloads = repo.list_downloads(secret.id).unwrap_or_default();
-        let mut deleted_files = 0;
-        for download in &downloads {
-            let file_path = get_secret_path(&config.secrets_path(), &download.filename);
-            if file_path.exists() {
-                let _ = fs::remove_file(&file_path);
-                deleted_files += 1;
-            }
-        }
+        let _ = delete_working_file(&config.secrets_path(), &secret.provider_id, &secret.display_name);
+        let _ = delete_all_archives(&config.secrets_path(), &secret.provider_id, &secret.display_name);
         let _ = repo.delete_secret(secret.id);
-        if deleted_files > 0 || !downloads.is_empty() {
+        if !downloads.is_empty() {
             println!(
-                "Cleaned up local data ({} file(s), {} version record(s))",
-                deleted_files,
+                "Cleaned up local data ({} version record(s))",
                 downloads.len()
             );
         }

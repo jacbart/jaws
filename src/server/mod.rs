@@ -63,22 +63,28 @@ pub async fn run_server(
         repo.clone(),
     ));
 
-    // Generate and display an enrollment token
+    // Generate an enrollment token and write it to a restricted file
+    // instead of logging it (so centralized log collectors don't capture it).
     let token = enrollment.generate_token()?;
+    let token_path = config.secrets_path().join("server").join("enrollment.token");
+    fs::write(&token_path, &token)?;
+    crate::utils::restrict_file_permissions(&token_path)?;
+
     eprintln!();
     eprintln!("=== Enrollment Token ===");
-    eprintln!("  {}", token);
+    eprintln!("  Token written to: {}", token_path.display());
+    eprintln!("  (restricted to owner-only access)");
     eprintln!();
     eprintln!("  Clients can connect with:");
     eprintln!(
-        "    jaws connect https://{}:{} --token {}",
+        "    jaws connect https://{}:{} --token $(cat {})",
         if bind_addr.ip().is_unspecified() {
             "SERVER_IP".to_string()
         } else {
             bind_addr.ip().to_string()
         },
         bind_addr.port(),
-        token
+        token_path.display()
     );
     eprintln!();
     eprintln!("  Token expires in 15 minutes. Generate a new one with:");
@@ -135,10 +141,10 @@ fn load_or_generate_pki(
         &server_config.server_cert_path,
         &server_config.server_key_path,
     ) {
-        let ca_cert = fs::read_to_string(ca_cert_path).map_err(|e| JawsError::Io(e))?;
-        let ca_key = fs::read_to_string(ca_key_path).map_err(|e| JawsError::Io(e))?;
-        let server_cert = fs::read_to_string(server_cert_path).map_err(|e| JawsError::Io(e))?;
-        let server_key = fs::read_to_string(server_key_path).map_err(|e| JawsError::Io(e))?;
+        let ca_cert = fs::read_to_string(ca_cert_path).map_err(JawsError::Io)?;
+        let ca_key = fs::read_to_string(ca_key_path).map_err(JawsError::Io)?;
+        let server_cert = fs::read_to_string(server_cert_path).map_err(JawsError::Io)?;
+        let server_key = fs::read_to_string(server_key_path).map_err(JawsError::Io)?;
         return Ok((ca_cert, ca_key, server_cert, server_key));
     }
 
@@ -162,12 +168,11 @@ fn compute_san_entries(bind_addr: &SocketAddr) -> Vec<String> {
         // 0.0.0.0 — add common local IPs
         sans.push("127.0.0.1".to_string());
         // Try to get the hostname
-        if let Ok(hostname) = hostname::get() {
-            if let Some(h) = hostname.to_str() {
-                if !sans.contains(&h.to_string()) {
-                    sans.push(h.to_string());
-                }
-            }
+        if let Ok(hostname) = hostname::get()
+            && let Some(h) = hostname.to_str()
+            && !sans.contains(&h.to_string())
+        {
+            sans.push(h.to_string());
         }
     } else {
         sans.push(ip.to_string());
@@ -191,8 +196,14 @@ pub fn generate_and_print_token(config: &Config, repo: &SecretRepository) -> Res
     let enrollment = EnrollmentManager::new(ca_cert_pem, ca_key_pem, repo.clone());
     let token = enrollment.generate_token()?;
 
+    // Write to restricted file as well as stdout
+    let token_path = config.secrets_path().join("server").join("enrollment.token");
+    fs::write(&token_path, &token)?;
+    crate::utils::restrict_file_permissions(&token_path)?;
+
     println!("{}", token);
-    eprintln!("Token generated (valid for 15 minutes)");
+    eprintln!("Token written to: {}", token_path.display());
+    eprintln!("Token valid for 15 minutes");
 
     Ok(())
 }

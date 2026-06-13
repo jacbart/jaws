@@ -346,7 +346,6 @@ struct InvocationParameters {
 // The error case is handled by the RustCallStatus
 type InitClientFn = unsafe extern "C" fn(RustBuffer) -> *mut std::ffi::c_void;
 type InvokeSyncFn = unsafe extern "C" fn(RustBuffer, *mut RustCallStatus) -> RustBuffer;
-type ReleaseClientFn = unsafe extern "C" fn(RustBuffer, *mut RustCallStatus);
 type RustBufferFreeFn = unsafe extern "C" fn(RustBuffer, *mut RustCallStatus);
 type FuturePollFn = unsafe extern "C" fn(*mut std::ffi::c_void, extern "C" fn(usize, i8), usize);
 type FutureCompleteFn =
@@ -880,13 +879,6 @@ impl SharedSdkClient {
         Self {
             inner: Arc::new(Mutex::new(client)),
         }
-    }
-
-    pub async fn list_vaults(
-        &self,
-    ) -> Result<Vec<VaultOverview>, Box<dyn std::error::Error + Send + Sync>> {
-        let client = self.inner.lock().await;
-        client.list_vaults()
     }
 
     /// Synchronous version of list_vaults for use in non-async contexts

@@ -10,8 +10,8 @@ use jaws::commands::{
     handle_add_provider, handle_clean, handle_clear_cache, handle_connect, handle_create,
     handle_default_command, handle_delete, handle_disconnect, handle_export, handle_import,
     handle_interactive_generate, handle_list, handle_log, handle_preview, handle_pull,
-    handle_pull_inject, handle_push, handle_remove_provider, handle_rollback, handle_serve,
-    handle_sync,
+    handle_pull_inject, handle_push, handle_remove_provider, handle_rollback, handle_save,
+    handle_serve, handle_status, handle_sync,
 };
 use jaws::config::Config;
 use jaws::db::{SecretRepository, init_db};
@@ -179,8 +179,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // Handle Connect command separately (doesn't require providers or database)
-    if let Some(Commands::Connect { url, token, name }) = &cli.command {
-        return handle_connect(&config, url, token, name.clone()).await;
+    if let Some(Commands::Connect {
+        url,
+        token,
+        name,
+        fingerprint,
+    }) = &cli.command
+    {
+        return handle_connect(&config, url, token, name.clone(), fingerprint.clone()).await;
     }
 
     // Handle Export command separately (doesn't require providers)
@@ -214,6 +220,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Initialize database
     let conn = init_db(&config.db_path())?;
     let repo = SecretRepository::new(conn);
+
+    // One-shot relocation of any legacy `{name}_{hash}_{version}` files into
+    // the v6 `secrets/` + `.versions/` layout. Idempotent — does nothing on
+    // already-migrated installs.
+    let _ = jaws::secrets::migration::migrate_legacy_layout(&config.secrets_path(), &repo);
 
     // Handle no command - default behavior (edit downloaded secrets)
     if cli.command.is_none() {
@@ -308,6 +319,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         Commands::Push { secret_name, edit } => {
             handle_push(&config, &repo, &providers, secret_name, edit).await?;
+        }
+
+        Commands::Save { secret_name } => {
+            handle_save(&config, &repo, secret_name)?;
+        }
+
+        Commands::Status => {
+            handle_status(&config, &repo)?;
         }
 
         Commands::Delete {

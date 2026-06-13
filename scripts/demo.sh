@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Generate the jaws demo GIF using VHS.
+# Generate all JAWS demo GIFs using VHS.
 # Usage: ./scripts/demo.sh
 #
 # Requirements (available in the nix dev shell):
@@ -12,7 +12,6 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
-TAPE_FILE="$SCRIPT_DIR/demo.tape"
 OUTPUT_DIR="$PROJECT_ROOT/assets"
 
 # Check dependencies
@@ -24,27 +23,23 @@ for cmd in vhs ttyd ffmpeg jaws; do
 	fi
 done
 
-if [ ! -f "$TAPE_FILE" ]; then
-	echo "Error: Tape file not found at $TAPE_FILE"
-	exit 1
-fi
-
-# Ensure output directory exists
 mkdir -p "$OUTPUT_DIR"
 
-echo "Recording demo GIF..."
-echo "  Tape:   $TAPE_FILE"
-echo "  Output: $OUTPUT_DIR/demo.gif"
-echo ""
+# Generate each demo tape
+for tape in "$SCRIPT_DIR"/demo/*.tape; do
+	if [ -f "$tape" ]; then
+		name=$(basename "$tape" .tape)
+		echo "Recording demo-$name.gif..."
+		(cd "$PROJECT_ROOT" && vhs "$tape")
+	fi
+done
 
-(cd "$PROJECT_ROOT" && vhs "$TAPE_FILE")
-
-if [ -f "$OUTPUT_DIR/demo.gif" ]; then
-	SIZE=$(du -h "$OUTPUT_DIR/demo.gif" | cut -f1)
-	echo ""
-	echo "Done! Generated $OUTPUT_DIR/demo.gif ($SIZE)"
-else
-	echo ""
-	echo "Error: GIF was not generated. Check vhs output above."
-	exit 1
+# Also regenerate the main demo GIF
+if [ -f "$SCRIPT_DIR/demo.tape" ]; then
+	echo "Recording demo.gif (main)..."
+	(cd "$PROJECT_ROOT" && vhs "$SCRIPT_DIR/demo.tape")
 fi
+
+echo ""
+echo "Done! Generated GIFs:"
+ls -lh "$OUTPUT_DIR"/demo*.gif 2>/dev/null || true
