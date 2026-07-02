@@ -117,7 +117,12 @@ The project ID can be auto-discovered during `jaws config init` from `GOOGLE_CLO
 
 ### 1Password
 
-Requires `OP_SERVICE_ACCOUNT_TOKEN` environment variable with a service account token.
+JAWS supports two authentication methods for 1Password:
+
+1. **Service Account Token** (SDK backend) — requires `OP_SERVICE_ACCOUNT_TOKEN` environment variable
+2. **Desktop App Integration** (CLI backend) — uses biometric auth via 1Password desktop app
+
+By default, JAWS will use the SDK backend if `OP_SERVICE_ACCOUNT_TOKEN` is set, otherwise it falls back to the CLI backend with biometric authentication.
 
 ```kdl
 // Auto-discover all vaults
@@ -129,7 +134,25 @@ provider "op" kind="onepassword" {
 provider "op-dev" kind="onepassword" {
     vault "abc123"
 }
+
+// Force CLI backend even when SDK token is available
+provider "op-biometric" kind="onepassword" {
+    vault "abc123"
+    force_cli true
+}
 ```
+
+#### Performance Notes
+
+- **SDK backend**: Faster (~100ms per API call), no process spawn overhead
+- **CLI backend**: Slower (~500ms per API call), requires biometric authentication
+- Both backends use concurrent requests (up to 10 at a time) to improve performance
+- Large vaults (100+ items) may take 10-60 seconds to sync due to API limitations
+
+The CLI backend requires:
+- 1Password desktop app running
+- "Integrate with 1Password CLI" enabled in Settings > Developer
+- `op` CLI installed (available in `nix develop` shell)
 
 ### Bitwarden
 

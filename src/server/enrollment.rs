@@ -13,6 +13,7 @@ use std::sync::Mutex;
 use chrono::{DateTime, Duration, Utc};
 
 use crate::db::SecretRepository;
+use crate::debug_eprintln;
 use crate::error::JawsError;
 use crate::server::pki;
 
@@ -155,7 +156,7 @@ impl EnrollmentManager {
         // so re-enrollment works cleanly.
         match self.repo.delete_client_by_name(client_name) {
             Ok(n) if n > 0 => {
-                eprintln!(
+                debug_eprintln!(
                     "  Replaced existing client '{}' ({} old record(s) removed)",
                     client_name, n
                 );
@@ -179,7 +180,7 @@ impl EnrollmentManager {
             Some(&format!("fingerprint: {}", &fingerprint[..16])),
         );
 
-        eprintln!(
+        debug_eprintln!(
             "  Client '{}' enrolled successfully (fingerprint: {}...)",
             client_name,
             &fingerprint[..16]

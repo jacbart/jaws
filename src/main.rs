@@ -24,6 +24,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let cli = Cli::parse();
 
+    // Set debug environment variable if --debug flag is present
+    if cli.config.debug {
+        unsafe {
+            std::env::set_var("JAWS_DEBUG", "1");
+        }
+    }
+
     // Load config from file (use CLI-specified path if provided)
     let config = Config::load_from(cli.config.config_path.as_deref())?;
 
@@ -337,8 +344,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             handle_delete(&config, &repo, &providers, secret_name, scope, force).await?;
         }
 
-        Commands::Sync => {
-            handle_sync(&config, &repo, &providers).await?;
+        Commands::Sync { quiet } => {
+            handle_sync(&config, &repo, &providers, quiet).await?;
         }
 
         Commands::Rollback {

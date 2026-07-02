@@ -66,6 +66,7 @@ tower = { version = "0.5", features = ["util"] }
 http = "1"
 time = "=0.3.47"
 hostname = "0.4"
+indicatif = "0.17"
 
 # Optional vendored OpenSSL for cross-compilation
 openssl = { version = "0.10", features = ["vendored"], optional = true }

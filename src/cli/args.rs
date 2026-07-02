@@ -23,4 +23,8 @@ pub struct ConfigArgs {
     /// Path to config file (overrides default search paths)
     #[arg(short = 'c', long = "config", global = true, value_name = "PATH")]
     pub config_path: Option<PathBuf>,
+
+    /// Enable verbose diagnostic output
+    #[arg(short = 'd', long = "debug", global = true)]
+    pub debug: bool,
 }

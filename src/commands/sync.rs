@@ -3,6 +3,7 @@
 use chrono::Duration;
 use chrono::Utc;
 use futures::StreamExt;
+use indicatif::{ProgressBar, ProgressStyle};
 
 use crate::config::Config;
 use crate::db::{SecretInput, SecretRepository};
@@ -14,8 +15,11 @@ pub async fn handle_sync(
     _config: &Config,
     repo: &SecretRepository,
     providers: &[Provider],
+    quiet: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    println!("Syncing remote secret listings...");
+    if !quiet {
+        println!("Syncing remote secret listings...");
+    }
 
     for provider in providers {
         // Skip the local jaws provider — its secrets are already managed
@@ -25,23 +29,27 @@ pub async fn handle_sync(
                 .list_secrets_by_provider(provider.id())
                 .map(|s| s.len())
                 .unwrap_or(0);
-            println!(
-                "  {} [{}]: {} secrets (local)",
-                provider.id(),
-                provider.kind(),
-                count
-            );
-            continue;
-        }
-
-        match sync_provider(repo, provider).await {
-            Ok(count) => {
+            if !quiet {
                 println!(
-                    "  {} [{}]: {} secrets",
+                    "  {} [{}]: {} secrets (local)",
                     provider.id(),
                     provider.kind(),
                     count
                 );
+            }
+            continue;
+        }
+
+        match sync_provider(repo, provider, quiet).await {
+            Ok(count) => {
+                if !quiet {
+                    println!(
+                        "  {} [{}]: {} secrets",
+                        provider.id(),
+                        provider.kind(),
+                        count
+                    );
+                }
             }
             Err(e) => {
                 eprintln!("  {} [{}]: Error - {}", provider.id(), provider.kind(), e);
@@ -49,7 +57,9 @@ pub async fn handle_sync(
         }
     }
 
-    println!("Sync complete.");
+    if !quiet {
+        println!("Sync complete.");
+    }
     Ok(())
 }
 
@@ -76,9 +86,26 @@ pub fn should_refresh_cache(
 pub async fn sync_provider(
     repo: &SecretRepository,
     provider: &Provider,
+    quiet: bool,
 ) -> Result<usize, Box<dyn std::error::Error>> {
+    let pb = if !quiet {
+        let pb = ProgressBar::new_spinner();
+        pb.set_style(
+            ProgressStyle::default_spinner()
+                .template("{spinner:.green} {msg}")
+                .unwrap(),
+        );
+        pb.enable_steady_tick(std::time::Duration::from_millis(100));
+        pb.set_message(format!("Syncing {}...", provider.id()));
+        pb.tick();
+        pb
+    } else {
+        ProgressBar::hidden()
+    };
+
     let mut stream = provider.list_secrets_stream();
     let mut count = 0;
+    let start_time = std::time::Instant::now();
 
     while let Some(result) = stream.next().await {
         match result {
@@ -104,6 +131,12 @@ pub async fn sync_provider(
 
                 repo.upsert_secret(&input)?;
                 count += 1;
+
+                if !quiet {
+                    let elapsed = start_time.elapsed().as_secs();
+                    pb.set_message(format!("Syncing {}... ({}s)", provider.id(), elapsed));
+                    pb.tick();
+                }
             }
             Err(e) => {
                 let msg = e.to_string();
@@ -115,6 +148,7 @@ pub async fn sync_provider(
         }
     }
 
+    pb.finish();
     repo.update_provider_sync_time(provider.id())?;
 
     Ok(count)

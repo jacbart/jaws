@@ -8,6 +8,7 @@ use ff::{FuzzyFinderSession, TuiConfig};
 
 use crate::config::{Config, ProviderConfig};
 use crate::secrets::{BitwardenSecretManager, OnePasswordSecretManager};
+use crate::secrets::providers::onepassword::cli::OpCliClient;
 
 use super::helpers::{PendingCredential, confirm, prompt};
 
@@ -130,10 +131,13 @@ pub(super) async fn discover_and_add_onepassword(
     let op_token_env = "OP_SERVICE_ACCOUNT_TOKEN";
 
     println!("Checking for 1Password...");
-    if std::env::var(op_token_env).is_ok() {
+
+    let has_token = std::env::var(op_token_env).is_ok();
+
+    if has_token {
         println!("Found {}. Discovering vaults...", op_token_env);
 
-        match OnePasswordSecretManager::new("op-discovery".to_string(), None, op_token_env).await {
+        match OnePasswordSecretManager::from_sdk("op-discovery".to_string(), None, op_token_env).await {
             Ok(manager) => match manager.list_vaults() {
                 Ok(vaults) if !vaults.is_empty() => {
                     println!("Found {} vault(s).", vaults.len());
@@ -193,10 +197,9 @@ pub(super) async fn discover_and_add_onepassword(
                 Ok(_) => println!("No 1Password vaults accessible"),
                 Err(e) => println!("Could not list 1Password vaults: {}", e),
             },
-            Err(e) => println!("Could not initialize 1Password: {}", e),
+            Err(e) => println!("Could not initialize 1Password SDK: {}", e),
         }
 
-        // Offer to store the token if any OP providers were added
         if config
             .providers
             .iter()
@@ -216,9 +219,80 @@ pub(super) async fn discover_and_add_onepassword(
                 plaintext_value: token,
             });
         }
+    } else if OpCliClient::is_available().await {
+        println!("1Password CLI integration detected (desktop app). Discovering vaults...");
+
+        let cli_client = OpCliClient::new();
+        let temp_manager = match OnePasswordSecretManager::new("op-discovery".to_string(), None, Box::new(cli_client)).await {
+            Ok(m) => m,
+            Err(e) => {
+                println!("Could not initialize 1Password CLI client: {}", e);
+                return Ok(0);
+            }
+        };
+
+        match temp_manager.list_vaults() {
+            Ok(vaults) if !vaults.is_empty() => {
+                println!("Found {} vault(s).", vaults.len());
+
+                if confirm("Add 1Password provider(s)?") {
+                    println!("  Tip: Use 'all' option to auto-discover vaults at runtime\n");
+
+                    let mut items: Vec<String> =
+                        vec!["[all] - Auto-discover all vaults at runtime".to_string()];
+                    for vault in &vaults {
+                        items.push(format!("{} ({})", vault.title, vault.id));
+                    }
+
+                    let mut tui_config = TuiConfig::with_height(15.min(items.len() as u16 + 3));
+                    tui_config.show_help_text = true;
+
+                    let (session, tui_future) = FuzzyFinderSession::with_config(true, tui_config);
+
+                    for item in &items {
+                        let _ = session.add(item).await;
+                    }
+                    drop(session);
+
+                    let selected = tui_future.await.unwrap_or_default();
+
+                    if !selected.is_empty() {
+                        if selected.iter().any(|(_, s)| s.starts_with("[all]")) {
+                            config.add_provider(ProviderConfig::new_onepassword(
+                                "op".to_string(),
+                                Some("all".to_string()),
+                                None,
+                            ));
+                            println!("Added 1Password provider with auto-discovery");
+                        } else {
+                            for (_, selection) in &selected {
+                                if let Some((name, rest)) = selection.split_once(" (") {
+                                    let vault_id = rest.trim_end_matches(')');
+                                    let provider_id =
+                                        format!("op-{}", name.to_lowercase().replace(' ', "-"));
+                                    config.add_provider(ProviderConfig::new_onepassword(
+                                        provider_id,
+                                        Some(vault_id.to_string()),
+                                        None,
+                                    ));
+                                }
+                            }
+                            println!("Added {} 1Password provider(s)", selected.len());
+                        }
+                    } else {
+                        println!("No 1Password vaults selected");
+                    }
+                } else {
+                    println!("Skipping 1Password");
+                }
+            }
+            Ok(_) => println!("No 1Password vaults accessible"),
+            Err(e) => println!("Could not list 1Password vaults: {}", e),
+        }
     } else {
-        println!("{} not set, skipping 1Password setup", op_token_env);
-        println!("  Tip: Set this environment variable and re-run to add 1Password providers");
+        println!("No 1Password authentication available.");
+        println!("  Set {} for service account access,", op_token_env);
+        println!("  or enable 'Integrate with 1Password CLI' in the 1Password desktop app (Settings > Developer).");
     }
 
     Ok(config.providers.len() - initial_count)

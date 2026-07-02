@@ -118,6 +118,10 @@ pub struct ProviderConfig {
     /// GCP project ID for Google Cloud Secret Manager
     #[knuffel(child, unwrap(argument))]
     pub project: Option<String>,
+
+    /// Force CLI usage for 1Password even when SDK is available
+    #[knuffel(child, unwrap(argument))]
+    pub force_cli: Option<bool>,
 }
 
 impl ProviderConfig {
@@ -132,6 +136,7 @@ impl ProviderConfig {
             organization: None,
             token_env: None,
             project: None,
+            force_cli: None,
         }
     }
 
@@ -146,6 +151,7 @@ impl ProviderConfig {
             organization: None,
             token_env,
             project: None,
+            force_cli: None,
         }
     }
 
@@ -165,6 +171,7 @@ impl ProviderConfig {
             organization: organization_id,
             token_env,
             project: None,
+            force_cli: None,
         }
     }
 
@@ -179,6 +186,7 @@ impl ProviderConfig {
             organization: None,
             token_env: None,
             project: project_id,
+            force_cli: None,
         }
     }
 }

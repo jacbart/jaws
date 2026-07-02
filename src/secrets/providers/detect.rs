@@ -9,6 +9,7 @@ use aws_sdk_secretsmanager::{Client, config::Region};
 use crate::config::{Config, ProviderConfig};
 use crate::credentials::retrieve_credential;
 use crate::db::SecretRepository;
+use crate::debug_eprintln;
 use crate::error::JawsError;
 
 use google_cloud_secretmanager_v1::client::SecretManagerService;
@@ -17,6 +18,9 @@ use super::{
     AwsSecretManager, BitwardenSecretManager, GcpSecretManager, JawsSecretManager,
     OnePasswordSecretManager, Provider,
 };
+use super::onepassword::cli::OpCliClient;
+use super::onepassword::ffi::OnePasswordSdkClient;
+use super::onepassword::OpClient;
 
 /// Detect and initialize all available providers.
 /// The jaws provider is always available and is added first.
@@ -44,7 +48,7 @@ pub async fn detect_providers(
                     match Config::discover_aws_profiles() {
                         Ok(profiles) => {
                             if profiles.is_empty() {
-                                eprintln!("No AWS profiles found in ~/.aws/credentials");
+                                debug_eprintln!("No AWS profiles found in ~/.aws/credentials");
                             }
                             for profile_name in profiles {
                                 let region = Config::get_aws_profile_region(&profile_name);
@@ -58,6 +62,7 @@ pub async fn detect_providers(
                                     organization: None,
                                     token_env: None,
                                     project: None,
+                                    force_cli: None,
                                 };
 
                                 match init_aws_provider(
@@ -117,7 +122,7 @@ pub async fn detect_providers(
                                 providers.push(Box::new(op_provider));
                             }
                         }
-                        Err(e) => eprintln!("Failed to discover 1Password vaults: {}", e),
+                        Err(_) => {}
                     }
                 } else {
                     match init_onepassword_provider(
@@ -132,10 +137,7 @@ pub async fn detect_providers(
                         Ok(op_provider) => {
                             providers.push(Box::new(op_provider));
                         }
-                        Err(e) => eprintln!(
-                            "Failed to init 1Password provider '{}': {}",
-                            provider_config.id, e
-                        ),
+                        Err(_) => {}
                     }
                 }
             }
@@ -250,7 +252,7 @@ fn try_restore_credential_to_env(
             unsafe {
                 std::env::set_var(env_var, &value);
             }
-            eprintln!(
+            debug_eprintln!(
                 "  Restored {} from encrypted storage for provider '{}'",
                 env_var, provider_id
             );
@@ -267,17 +269,19 @@ fn try_restore_credential_to_env(
     }
 }
 
-async fn init_onepassword_all_vaults(
+async fn create_op_client(
     config: &ProviderConfig,
     repo: Option<&SecretRepository>,
     use_keychain: bool,
     cache_ttl: u64,
     secrets_path: &Path,
-) -> Result<Vec<OnePasswordSecretManager>, JawsError> {
+) -> Option<Box<dyn OpClient>> {
     let token_env = config
         .token_env
         .as_deref()
         .unwrap_or("OP_SERVICE_ACCOUNT_TOKEN");
+
+    let force_cli = config.force_cli.unwrap_or(false);
 
     try_restore_credential_to_env(
         repo,
@@ -289,13 +293,53 @@ async fn init_onepassword_all_vaults(
         secrets_path,
     );
 
-    let temp_manager = OnePasswordSecretManager::new(config.id.clone(), None, token_env).await?;
+    // Try SDK first unless force_cli is set
+    if !force_cli {
+        if std::env::var(token_env).is_ok() {
+            match OnePasswordSdkClient::from_env(token_env).await {
+                Ok(client) => {
+                    debug_eprintln!("  Using 1Password SDK backend (service account token)");
+                    return Some(Box::new(client));
+                }
+                Err(e) => {
+                    debug_eprintln!("  1Password SDK initialization failed: {}", e);
+                }
+            }
+        }
+    } else {
+        debug_eprintln!("  force_cli enabled, skipping SDK backend");
+    }
+
+    // Fall back to CLI
+    if OpCliClient::is_available().await {
+        debug_eprintln!("  Using 1Password CLI backend (biometric auth via desktop app)");
+        return Some(Box::new(OpCliClient::new()));
+    }
+
+    None
+}
+
+async fn init_onepassword_all_vaults(
+    config: &ProviderConfig,
+    repo: Option<&SecretRepository>,
+    use_keychain: bool,
+    cache_ttl: u64,
+    secrets_path: &Path,
+) -> Result<Vec<OnePasswordSecretManager>, JawsError> {
+    let client = create_op_client(config, repo, use_keychain, cache_ttl, secrets_path)
+        .await
+        .ok_or_else(|| JawsError::provider(
+            "onepassword",
+            "No 1Password authentication available. Set OP_SERVICE_ACCOUNT_TOKEN or enable 1Password CLI integration with the desktop app.",
+        ))?;
+
+    let temp_manager = OnePasswordSecretManager::new(config.id.clone(), None, client).await?;
     let vaults = temp_manager.list_vaults()?;
 
     if vaults.is_empty() {
         return Err(JawsError::provider(
             "onepassword",
-            "No 1Password vaults accessible with the current service account token",
+            "No 1Password vaults accessible with the current credentials",
         ));
     }
 
@@ -304,7 +348,14 @@ async fn init_onepassword_all_vaults(
         let vault_id = vault.id.clone();
         let provider_id = format!("op-{}", vault.title.to_lowercase().replace(' ', "-"));
 
-        match OnePasswordSecretManager::new(provider_id, Some(vault_id), token_env).await {
+        let vault_client = create_op_client(config, repo, use_keychain, cache_ttl, secrets_path)
+            .await
+            .ok_or_else(|| JawsError::provider(
+                "onepassword",
+                "No 1Password authentication available",
+            ))?;
+
+        match OnePasswordSecretManager::new(provider_id, Some(vault_id), vault_client).await {
             Ok(manager) => {
                 providers.push(manager);
             }
@@ -376,22 +427,15 @@ async fn init_onepassword_provider(
     secrets_path: &Path,
 ) -> Result<OnePasswordSecretManager, JawsError> {
     let vault = config.vault.clone();
-    let token_env = config
-        .token_env
-        .as_deref()
-        .unwrap_or("OP_SERVICE_ACCOUNT_TOKEN");
 
-    try_restore_credential_to_env(
-        repo,
-        &config.id,
-        "token",
-        token_env,
-        use_keychain,
-        cache_ttl,
-        secrets_path,
-    );
+    let client = create_op_client(config, repo, use_keychain, cache_ttl, secrets_path)
+        .await
+        .ok_or_else(|| JawsError::provider(
+            "onepassword",
+            "No 1Password authentication available. Set OP_SERVICE_ACCOUNT_TOKEN or enable 1Password CLI integration with the desktop app.",
+        ))?;
 
-    OnePasswordSecretManager::new(config.id.clone(), vault, token_env).await
+    OnePasswordSecretManager::new(config.id.clone(), vault, client).await
 }
 
 async fn init_bitwarden_provider(

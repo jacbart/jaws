@@ -33,6 +33,7 @@ use crate::archive::{
     prompt_passphrase_with_confirm,
 };
 use crate::db::SecretRepository;
+use crate::debug_eprintln;
 use crate::keychain;
 
 /// Maximum number of passphrase attempts before giving up.
@@ -253,7 +254,7 @@ pub fn build_decryption_method(
                 let priv_path = hint.strip_suffix(".pub").unwrap_or(hint);
                 let path = crate::config::expand_tilde(priv_path);
                 if path.exists() {
-                    eprintln!("  Using private key: {}", path.display());
+                    debug_eprintln!("  Using private key: {}", path.display());
                     cache_ssh_key_path(&path);
                     return Ok(CredentialDecryptionMethod::SshPrivateKey(path));
                 }
@@ -425,7 +426,7 @@ fn decrypt_with_passphrase_retry(
             Err(_) => {
                 // Cached passphrase didn't work -- clear it and fall through to prompt
                 clear_passphrase_cache();
-                eprintln!("  Cached passphrase failed, prompting for a new one...");
+                debug_eprintln!("  Cached passphrase failed, prompting for a new one...");
             }
         }
     }

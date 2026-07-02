@@ -12,6 +12,7 @@ use std::fs;
 use std::path::Path;
 
 use crate::db::SecretRepository;
+use crate::debug_eprintln;
 use crate::error::JawsError;
 use crate::secrets::storage::{
     archive_relpath, parse_legacy_filename, sanitize_filename, version_archive_path,
@@ -74,7 +75,7 @@ pub fn migrate_legacy_layout(
         // Find which provider this hash belongs to. If none matches we leave
         // the file where it is — better safe than to nuke unrelated content.
         let Some(secret) = repo.get_secret_by_hash(&hash)? else {
-            eprintln!(
+            debug_eprintln!(
                 "  jaws migrate: skipping orphaned legacy file group {} (hash {}) — no matching secrets row",
                 display_name, &hash[..8.min(hash.len())]
             );
@@ -128,7 +129,7 @@ pub fn migrate_legacy_layout(
             let expected = archive_relpath(&provider_id, &display_name, d.version);
             if d.filename != expected {
                 // SQL migration should have set this, but be defensive.
-                eprintln!(
+                debug_eprintln!(
                     "  jaws migrate: NOTE downloads row v{} for {}://{} has filename '{}' but expected '{}'",
                     d.version, provider_id, display_name, d.filename, expected
                 );
@@ -137,7 +138,7 @@ pub fn migrate_legacy_layout(
     }
 
     if moved > 0 {
-        eprintln!(
+        debug_eprintln!(
             "jaws: migrated {} legacy secret file(s) into the new secrets/ + .versions/ layout",
             moved
         );

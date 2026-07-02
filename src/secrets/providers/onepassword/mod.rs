@@ -1,34 +1,30 @@
-mod ffi;
+pub mod client;
+pub mod cli;
+pub mod ffi;
 
 use crate::error::JawsError;
 use crate::secrets::manager::SecretManager;
 use async_trait::async_trait;
+use client::SharedSdkClient;
 use ffi::{
-    Item, ItemCategory, ItemField, ItemFieldType, OnePasswordSdkClient, SharedSdkClient,
+    Item, ItemCategory, ItemField, ItemFieldType, OnePasswordSdkClient,
     VaultOverview,
 };
 use futures::stream::{self, Stream, StreamExt};
 use std::fmt;
 
-/// Separator used between display path and API reference in combined format
+pub use client::OpClient;
+pub use cli::OpCliClient;
+
 const REF_SEPARATOR: &str = "|||";
 
-/// A 1Password secret reference that combines a human-readable display path
-/// with an API reference using UUIDs.
-///
-/// Format when serialized: "display_path|||api_ref"
-/// - display_path: Human-readable path like "Vault Name/Item Title/Field Name"
-/// - api_ref: API reference like "op://vault_id/item_id/field_id" (uses UUIDs)
 #[derive(Debug, Clone)]
 pub struct SecretRef {
-    /// Human-readable path for display and filesystem storage
     pub display_path: String,
-    /// API reference using UUIDs for SDK calls
     pub api_ref: String,
 }
 
 impl SecretRef {
-    /// Create a new SecretRef
     pub fn new(display_path: impl Into<String>, api_ref: impl Into<String>) -> Self {
         Self {
             display_path: display_path.into(),
@@ -36,11 +32,6 @@ impl SecretRef {
         }
     }
 
-    /// Parse a combined reference string into a SecretRef
-    ///
-    /// Handles both:
-    /// - Combined format: "display_path|||api_ref"  
-    /// - Legacy format: "op://vault/item/field" or plain path
     pub fn parse(combined: &str) -> Self {
         if let Some((display, api)) = combined.split_once(REF_SEPARATOR) {
             Self {
@@ -60,7 +51,6 @@ impl SecretRef {
         }
     }
 
-    /// Serialize to the combined format string
     pub fn to_combined(&self) -> String {
         format!("{}{}{}", self.display_path, REF_SEPARATOR, self.api_ref)
     }
@@ -80,17 +70,11 @@ pub struct OnePasswordSecretManager {
 }
 
 impl OnePasswordSecretManager {
-    /// Create a new 1Password secret manager
-    /// If vault is None, the manager can still list vaults but cannot access secrets
     pub async fn new(
         provider_id: String,
         vault: Option<String>,
-        token_env: &str,
+        client: Box<dyn OpClient>,
     ) -> Result<Self, JawsError> {
-        let client = OnePasswordSdkClient::from_env(token_env)
-            .await
-            .map_err(|e| JawsError::provider("onepassword", e.to_string()))?;
-
         let sdk_client = SharedSdkClient::new(client);
 
         let (vault_id, vault_name) = if let Some(vault_ref) = vault {
@@ -111,16 +95,11 @@ impl OnePasswordSecretManager {
         })
     }
 
-    /// Create a new 1Password secret manager with a specific vault ID
     pub async fn with_vault_id(
         provider_id: String,
         vault_id: String,
-        token_env: &str,
+        client: Box<dyn OpClient>,
     ) -> Result<Self, JawsError> {
-        let client = OnePasswordSdkClient::from_env(token_env)
-            .await
-            .map_err(|e| JawsError::provider("onepassword", e.to_string()))?;
-
         let sdk_client = SharedSdkClient::new(client);
 
         let vault_info = sdk_client
@@ -136,15 +115,23 @@ impl OnePasswordSecretManager {
         })
     }
 
-    /// List all vaults accessible to the service account
+    pub async fn from_sdk(
+        provider_id: String,
+        vault: Option<String>,
+        token_env: &str,
+    ) -> Result<Self, JawsError> {
+        let client = OnePasswordSdkClient::from_env(token_env)
+            .await
+            .map_err(|e| JawsError::provider("onepassword", e.to_string()))?;
+        Self::new(provider_id, vault, Box::new(client)).await
+    }
+
     pub fn list_vaults(&self) -> Result<Vec<VaultOverview>, JawsError> {
         self.sdk_client
             .list_vaults_sync()
             .map_err(|e| JawsError::provider("onepassword", e.to_string()))
     }
 
-    /// Resolve vault ID and item details from a path string
-    /// Returns (vault_id, item_title, optional_field_name)
     async fn resolve_context(
         &self,
         path: &str,
@@ -185,11 +172,10 @@ impl OnePasswordSecretManager {
         }
     }
 
-    /// Find an item ID by title in a specific vault
     async fn find_item_id(&self, vault_id: &str, title: &str) -> Result<String, JawsError> {
         let items = self
             .sdk_client
-            .list_items(vault_id)
+            .list_items(vault_id, &self.vault_name)
             .await
             .map_err(|e| JawsError::provider("onepassword", e.to_string()))?;
 
@@ -300,7 +286,7 @@ impl SecretManager for OnePasswordSecretManager {
 
         let created_item = self
             .sdk_client
-            .create_item(&item)
+            .create_item(&item, &self.vault_name)
             .await
             .map_err(|e| JawsError::provider("onepassword", e.to_string()))?;
 
@@ -311,7 +297,7 @@ impl SecretManager for OnePasswordSecretManager {
     }
 
     async fn update(&self, name: &str, value: &str) -> Result<String, JawsError> {
-        let (vault_id, item_id, field_name) = if name.starts_with("op://") {
+        let (vault_id, item_ref, field_name) = if name.starts_with("op://") {
             let path = name.strip_prefix("op://").unwrap();
             let parts: Vec<&str> = path.split('/').collect();
             match parts.len() {
@@ -334,67 +320,77 @@ impl SecretManager for OnePasswordSecretManager {
             (vault_id, item_id, field_name)
         };
 
-        let mut item = self
+        let target_field_id = field_name.unwrap_or_else(|| "password".to_string());
+
+        let item = self
             .sdk_client
-            .get_item(&vault_id, &item_id)
+            .get_item(&vault_id, &self.vault_name, &item_ref)
             .await
             .map_err(|e| JawsError::provider("onepassword", e.to_string()))?;
 
-        let target_field_id = field_name.unwrap_or_else(|| "password".to_string());
-        let mut updated = false;
+        let mut matched_field_id = target_field_id.clone();
+        let mut matched_field_type = ItemFieldType::Concealed;
 
-        for field in &mut item.fields {
+        for field in &item.fields {
             if field.id == target_field_id || field.title == target_field_id {
-                field.value = value.to_string();
-                updated = true;
+                matched_field_id = field.id.clone();
+                matched_field_type = field.field_type.clone();
                 break;
             }
         }
 
-        if !updated && target_field_id == "password" {
-            for field in &mut item.fields {
+        if matched_field_id == target_field_id && target_field_id == "password" {
+            for field in &item.fields {
                 if let ItemFieldType::Concealed = field.field_type {
-                    field.value = value.to_string();
-                    updated = true;
+                    matched_field_id = field.id.clone();
+                    matched_field_type = field.field_type.clone();
                     break;
                 }
             }
         }
 
-        if !updated {
-            item.fields.push(ItemField {
-                id: target_field_id.clone(),
-                title: target_field_id.clone(),
-                section_id: None,
-                field_type: ItemFieldType::Concealed,
-                value: value.to_string(),
-            });
-        }
-
-        let updated_item = self
-            .sdk_client
-            .put_item(&item)
+        self.sdk_client
+            .update_item_field(
+                &vault_id,
+                &self.vault_name,
+                &item_ref,
+                &matched_field_id,
+                value,
+                matched_field_type,
+            )
             .await
             .map_err(|e| JawsError::provider("onepassword", e.to_string()))?;
 
-        Ok(format!(
-            "Updated item '{}' ({})",
-            updated_item.title, updated_item.id
-        ))
+        Ok(format!("Updated item '{}'", item.title))
     }
 
     async fn delete(&self, name: &str, force: bool) -> Result<(), JawsError> {
-        let (vault_id, item_title, _) = self.resolve_context(name).await?;
-        let item_id = self.find_item_id(&vault_id, &item_title).await?;
+        let (vault_id, item_ref, _) = if name.starts_with("op://") {
+            let path = name.strip_prefix("op://").unwrap();
+            let parts: Vec<&str> = path.split('/').collect();
+            match parts.len() {
+                2 | 3 => (parts[0].to_string(), parts[1].to_string(), None),
+                _ => {
+                    return Err(JawsError::validation(format!(
+                        "Invalid op:// reference format: {}",
+                        name
+                    )));
+                }
+            }
+        } else {
+            let (vault_id, item_title, field_name) = self.resolve_context(name).await?;
+            let item_id = self.find_item_id(&vault_id, &item_title).await?;
+            (vault_id, item_id, field_name)
+        };
 
         if force {
             self.sdk_client
-                .delete_item(&vault_id, &item_id)
+                .delete_item(&vault_id, &self.vault_name, &item_ref)
                 .await
                 .map_err(|e| JawsError::provider("onepassword", e.to_string()))?;
         } else {
             self.sdk_client
-                .archive_item(&vault_id, &item_id)
+                .archive_item(&vault_id, &self.vault_name, &item_ref)
                 .await
                 .map_err(|e| JawsError::provider("onepassword", e.to_string()))?;
         }
@@ -404,54 +400,125 @@ impl SecretManager for OnePasswordSecretManager {
 
     async fn rollback(&self, _name: &str, _version_id: Option<&str>) -> Result<String, JawsError> {
         Err(JawsError::unsupported(
-            "1Password SDK does not support rollback operations. Please use the 1Password app or CLI.",
+            "1Password does not support rollback operations. Please use the 1Password app.",
         ))
     }
 }
 
-/// Helper function for streaming - separated to avoid lifetime issues
+/// List all items in a vault and build secret references for each field.
+///
+/// # Performance Note
+///
+/// This function uses an N+1 query pattern due to 1Password API limitations:
+/// 1. First call: `list_items()` retrieves item overviews (no field data)
+/// 2. For each item: `get_item()` retrieves full item details with all fields
+///
+/// Neither the 1Password SDK nor CLI supports batch retrieval of full items.
+/// The `buffer_unordered(10)` concurrency limit balances performance with
+/// API rate limits and desktop app authentication stability.
+///
+/// For large vaults (100+ items), this can take 10-60 seconds depending on
+/// network latency and authentication method (SDK vs CLI).
 async fn list_items_for_stream(
     sdk_client: SharedSdkClient,
     vault_id: String,
     vault_name: String,
 ) -> Result<Vec<String>, Box<dyn std::error::Error + Send>> {
-    let items = sdk_client.list_items(&vault_id).await.map_err(|e| {
+    let items = sdk_client.list_items(&vault_id, &vault_name).await.map_err(|e| {
         Box::new(std::io::Error::other(e.to_string())) as Box<dyn std::error::Error + Send>
     })?;
 
-    let mut secret_refs = Vec::new();
-
-    for item in items {
-        if let Ok(full_item) = sdk_client.get_item(&vault_id, &item.id).await {
-            for field in &full_item.fields {
-                if !field.value.is_empty() && !field.title.is_empty() {
-                    let secret_ref = SecretRef::new(
-                        format!("{}/{}/{}", vault_name, full_item.title, field.title),
-                        format!("op://{}/{}/{}", vault_id, full_item.id, field.id),
-                    );
-                    secret_refs.push(secret_ref.to_combined());
+    // Fetch full item details concurrently (up to 10 at a time)
+    let refs_results: Vec<Result<Vec<String>, Box<dyn std::error::Error + Send>>> = 
+        stream::iter(items)
+            .map(|item| {
+                let sdk_client = sdk_client.clone();
+                let vault_id = vault_id.clone();
+                let vault_name = vault_name.clone();
+                async move {
+                    let full_item = sdk_client.get_item(&vault_id, &vault_name, &item.id).await.map_err(|e| {
+                        Box::new(std::io::Error::other(e.to_string())) as Box<dyn std::error::Error + Send>
+                    })?;
+                    Ok(build_secret_refs_for_item(full_item, &vault_id, &vault_name, &sdk_client).await)
                 }
-            }
+            })
+            .buffer_unordered(10)
+            .collect()
+            .await;
 
-            if !full_item.notes.is_empty() {
-                let secret_ref = SecretRef::new(
-                    format!("{}/{}/notesPlain", vault_name, full_item.title),
-                    format!("op://{}/{}/notesPlain", vault_id, full_item.id),
-                );
-                secret_refs.push(secret_ref.to_combined());
-            }
-
-            if full_item.category == ItemCategory::Document
-                && let Some(doc) = &full_item.document
-            {
-                let secret_ref = SecretRef::new(
-                    format!("{}/{}/{}", vault_name, full_item.title, doc.name),
-                    format!("op://{}/{}/{}", vault_id, full_item.id, doc.id),
-                );
-                secret_refs.push(secret_ref.to_combined());
-            }
-        }
+    let mut secret_refs = Vec::new();
+    for result in refs_results {
+        secret_refs.extend(result?);
     }
 
     Ok(secret_refs)
+}
+
+async fn build_secret_refs_for_item(
+    full_item: Item,
+    vault_id: &str,
+    vault_name: &str,
+    sdk_client: &SharedSdkClient,
+) -> Vec<String> {
+    let mut refs = Vec::new();
+
+    for field in &full_item.fields {
+        if !field.value.is_empty() && !field.title.is_empty() {
+            let api_ref = sdk_client
+                .format_item_ref(
+                    vault_name,
+                    vault_id,
+                    &full_item.title,
+                    &full_item.id,
+                    &field.title,
+                    &field.id,
+                )
+                .await;
+            let secret_ref = SecretRef::new(
+                format!("{}/{}/{}", vault_name, full_item.title, field.title),
+                api_ref,
+            );
+            refs.push(secret_ref.to_combined());
+        }
+    }
+
+    if !full_item.notes.is_empty() {
+        let api_ref = sdk_client
+            .format_item_ref(
+                vault_name,
+                vault_id,
+                &full_item.title,
+                &full_item.id,
+                "notesPlain",
+                "notesPlain",
+            )
+            .await;
+        let secret_ref = SecretRef::new(
+            format!("{}/{}/notesPlain", vault_name, full_item.title),
+            api_ref,
+        );
+        refs.push(secret_ref.to_combined());
+    }
+
+    if full_item.category == ItemCategory::Document
+        && let Some(doc) = &full_item.document
+    {
+        let api_ref = sdk_client
+            .format_item_ref(
+                vault_name,
+                vault_id,
+                &full_item.title,
+                &full_item.id,
+                &doc.name,
+                &doc.id,
+            )
+            .await;
+        let secret_ref = SecretRef::new(
+            format!("{}/{}/{}", vault_name, full_item.title, doc.name),
+            api_ref,
+        );
+        refs.push(secret_ref.to_combined());
+    }
+
+    refs
 }

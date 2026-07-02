@@ -26,6 +26,7 @@ pkgs.mkShell {
     git-cliff
     cargo-zigbuild
     protobuf
+    onepassword-cli
     # Demo GIF recording
     vhs
     ttyd

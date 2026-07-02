@@ -105,36 +105,66 @@ impl SecretRepository {
     // ========================================================================
 
     /// Insert or update a secret. Returns the secret ID.
+    /// First checks for existing secret by (provider_id, display_name) to handle
+    /// cases where api_ref changes (e.g., from name-based to ID-based references).
     pub fn upsert_secret(&self, secret: &SecretInput) -> Result<i64, JawsError> {
         let conn = self.conn.lock().map_err(lock_err)?;
-        conn.execute(
-            r#"
-            INSERT INTO secrets (provider_id, api_ref, display_name, hash, description, remote_updated_at)
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6)
-            ON CONFLICT(provider_id, api_ref) DO UPDATE SET
-                display_name = excluded.display_name,
-                hash = excluded.hash,
-                description = COALESCE(excluded.description, secrets.description),
-                remote_updated_at = excluded.remote_updated_at
-            "#,
-            params![
-                secret.provider_id,
-                secret.api_ref,
-                secret.display_name,
-                secret.hash,
-                secret.description,
-                secret.remote_updated_at.map(|dt| dt.to_rfc3339()),
-            ],
-        )?;
-
-        // Get the ID (either newly inserted or existing)
-        let id: i64 = conn.query_row(
-            "SELECT id FROM secrets WHERE provider_id = ? AND api_ref = ?",
-            params![secret.provider_id, secret.api_ref],
-            |row| row.get(0),
-        )?;
-
-        Ok(id)
+        
+        // First, check if a secret exists with the same provider_id and display_name
+        let existing_id: Option<i64> = conn
+            .query_row(
+                "SELECT id FROM secrets WHERE provider_id = ? AND display_name = ?",
+                params![secret.provider_id, secret.display_name],
+                |row| row.get(0),
+            )
+            .optional()?;
+        
+        if let Some(id) = existing_id {
+            // Update existing secret with new api_ref and other fields
+            conn.execute(
+                r#"
+                UPDATE secrets 
+                SET api_ref = ?1, 
+                    hash = ?2, 
+                    description = COALESCE(?3, description),
+                    remote_updated_at = ?4
+                WHERE id = ?5
+                "#,
+                params![
+                    secret.api_ref,
+                    secret.hash,
+                    secret.description,
+                    secret.remote_updated_at.map(|dt| dt.to_rfc3339()),
+                    id,
+                ],
+            )?;
+            Ok(id)
+        } else {
+            // Insert new secret
+            conn.execute(
+                r#"
+                INSERT INTO secrets (provider_id, api_ref, display_name, hash, description, remote_updated_at)
+                VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+                "#,
+                params![
+                    secret.provider_id,
+                    secret.api_ref,
+                    secret.display_name,
+                    secret.hash,
+                    secret.description,
+                    secret.remote_updated_at.map(|dt| dt.to_rfc3339()),
+                ],
+            )?;
+            
+            // Get the ID of the newly inserted row
+            let id: i64 = conn.query_row(
+                "SELECT id FROM secrets WHERE provider_id = ? AND display_name = ?",
+                params![secret.provider_id, secret.display_name],
+                |row| row.get(0),
+            )?;
+            
+            Ok(id)
+        }
     }
 
     /// Get a secret by its hash.

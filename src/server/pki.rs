@@ -14,6 +14,7 @@ use rcgen::{
 };
 use time::OffsetDateTime;
 
+use crate::debug_eprintln;
 use crate::error::JawsError;
 use crate::utils::restrict_file_permissions;
 
@@ -235,18 +236,18 @@ pub fn init_server_pki(secrets_path: &Path, san_entries: &[String]) -> Result<Pk
 
     // Generate CA if it doesn't exist
     if !paths.ca_exists() {
-        eprintln!("Generating new Certificate Authority...");
+        debug_eprintln!("Generating new Certificate Authority...");
         let (ca_cert_pem, ca_key_pem) = generate_ca()?;
         fs::write(&paths.ca_cert, &ca_cert_pem)?;
         fs::write(&paths.ca_key, &ca_key_pem)?;
         restrict_file_permissions(&paths.ca_key)?;
         restrict_file_permissions(&paths.ca_cert)?;
-        eprintln!("  CA certificate: {}", paths.ca_cert.display());
+        debug_eprintln!("  CA certificate: {}", paths.ca_cert.display());
     }
 
     // Generate server cert if it doesn't exist
     if !paths.server_cert_exists() {
-        eprintln!("Generating server certificate...");
+        debug_eprintln!("Generating server certificate...");
         let ca_cert_pem = fs::read_to_string(&paths.ca_cert)?;
         let ca_key_pem = fs::read_to_string(&paths.ca_key)?;
         let (server_cert_pem, server_key_pem) =
@@ -255,8 +256,8 @@ pub fn init_server_pki(secrets_path: &Path, san_entries: &[String]) -> Result<Pk
         fs::write(&paths.server_key, &server_key_pem)?;
         restrict_file_permissions(&paths.server_key)?;
         restrict_file_permissions(&paths.server_cert)?;
-        eprintln!("  Server certificate: {}", paths.server_cert.display());
-        eprintln!("  SANs: {:?}", san_entries);
+        debug_eprintln!("  Server certificate: {}", paths.server_cert.display());
+        debug_eprintln!("  SANs: {:?}", san_entries);
     }
 
     Ok(paths)

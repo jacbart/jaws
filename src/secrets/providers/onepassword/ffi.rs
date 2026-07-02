@@ -4,10 +4,12 @@
 //! the correct UniFFI calling conventions to access vault and item listing
 //! functionality.
 
+use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::env;
 use std::sync::Arc;
-use tokio::sync::Mutex;
+
+use super::client::OpClient;
 
 // ============================================================================
 // UniFFI Types
@@ -865,105 +867,108 @@ impl OnePasswordSdkClient {
     }
 }
 
-// ============================================================================
-// Thread-safe Wrapper
-// ============================================================================
+#[async_trait]
+impl OpClient for OnePasswordSdkClient {
+    async fn resolve_secret(&self, reference: &str) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+        let invocation = Invocation {
+            invocation: InvocationInner {
+                client_id: self.client_id,
+                parameters: InvocationParameters {
+                    name: "SecretsResolve".to_string(),
+                    parameters: serde_json::json!({
+                        "secret_reference": reference
+                    }),
+                },
+            },
+        };
 
-/// Thread-safe wrapper for the SDK client
-pub struct SharedSdkClient {
-    inner: Arc<Mutex<OnePasswordSdkClient>>,
-}
+        let response = self.invoke(&invocation)?;
 
-impl SharedSdkClient {
-    pub fn new(client: OnePasswordSdkClient) -> Self {
-        Self {
-            inner: Arc::new(Mutex::new(client)),
+        if let Ok(value) = serde_json::from_str::<serde_json::Value>(&response) {
+            if let Some(secret) = value.get("secret").and_then(|s| s.as_str()) {
+                return Ok(secret.to_string());
+            }
+            if let Some(secret_str) = value.as_str() {
+                return Ok(secret_str.to_string());
+            }
         }
+
+        Ok(response)
     }
 
-    /// Synchronous version of list_vaults for use in non-async contexts
-    pub fn list_vaults_sync(
-        &self,
-    ) -> Result<Vec<VaultOverview>, Box<dyn std::error::Error + Send + Sync>> {
-        // Use try_lock to avoid blocking if possible
-        match self.inner.try_lock() {
-            Ok(client) => client.list_vaults(),
-            Err(_) => Err("Could not acquire lock on 1Password client".into()),
-        }
+    async fn list_vaults(&self) -> Result<Vec<VaultOverview>, Box<dyn std::error::Error + Send + Sync>> {
+        self.list_vaults()
     }
 
-    pub async fn find_vault(
-        &self,
-        name_or_id: &str,
-    ) -> Result<VaultOverview, Box<dyn std::error::Error + Send + Sync>> {
-        let client = self.inner.lock().await;
-        client.find_vault(name_or_id)
+    async fn find_vault(&self, name_or_id: &str) -> Result<VaultOverview, Box<dyn std::error::Error + Send + Sync>> {
+        self.find_vault(name_or_id)
     }
 
-    pub async fn list_items(
-        &self,
-        vault_id: &str,
-    ) -> Result<Vec<ItemOverview>, Box<dyn std::error::Error + Send + Sync>> {
-        let client = self.inner.lock().await;
-        client.list_items(vault_id)
+    async fn list_items(&self, vault_id: &str, _vault_name: &str) -> Result<Vec<ItemOverview>, Box<dyn std::error::Error + Send + Sync>> {
+        self.list_items(vault_id)
     }
 
-    pub async fn get_item(
+    async fn get_item(&self, vault_id: &str, _vault_name: &str, item_ref: &str) -> Result<Item, Box<dyn std::error::Error + Send + Sync>> {
+        self.get_item(vault_id, item_ref)
+    }
+
+    async fn create_item(&self, item: &Item, _vault_name: &str) -> Result<Item, Box<dyn std::error::Error + Send + Sync>> {
+        self.create_item(item)
+    }
+
+    async fn update_item_field(
         &self,
         vault_id: &str,
-        item_id: &str,
-    ) -> Result<Item, Box<dyn std::error::Error + Send + Sync>> {
-        let client = self.inner.lock().await;
-        client.get_item(vault_id, item_id)
-    }
-
-    pub async fn resolve_secret(
-        &self,
-        reference: &str,
-    ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
-        let client = self.inner.lock().await;
-        client.resolve_secret(reference)
-    }
-
-    pub async fn create_item(
-        &self,
-        item: &Item,
-    ) -> Result<Item, Box<dyn std::error::Error + Send + Sync>> {
-        let client = self.inner.lock().await;
-        client.create_item(item)
-    }
-
-    pub async fn put_item(
-        &self,
-        item: &Item,
-    ) -> Result<Item, Box<dyn std::error::Error + Send + Sync>> {
-        let client = self.inner.lock().await;
-        client.put_item(item)
-    }
-
-    pub async fn delete_item(
-        &self,
-        vault_id: &str,
-        item_id: &str,
+        _vault_name: &str,
+        item_ref: &str,
+        field_id: &str,
+        value: &str,
+        _field_type: ItemFieldType,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        let client = self.inner.lock().await;
-        client.delete_item(vault_id, item_id)
-    }
+        let mut item = self.get_item(vault_id, item_ref)?;
 
-    pub async fn archive_item(
-        &self,
-        vault_id: &str,
-        item_id: &str,
-    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        let client = self.inner.lock().await;
-        client.archive_item(vault_id, item_id)
-    }
-}
-
-impl Clone for SharedSdkClient {
-    fn clone(&self) -> Self {
-        Self {
-            inner: Arc::clone(&self.inner),
+        let mut updated = false;
+        for field in &mut item.fields {
+            if field.id == field_id || field.title == field_id {
+                field.value = value.to_string();
+                updated = true;
+                break;
+            }
         }
+
+        if !updated && field_id == "password" {
+            for field in &mut item.fields {
+                if let ItemFieldType::Concealed = field.field_type {
+                    field.value = value.to_string();
+                    updated = true;
+                    break;
+                }
+            }
+        }
+
+        if !updated {
+            item.fields.push(ItemField {
+                id: field_id.to_string(),
+                title: field_id.to_string(),
+                section_id: None,
+                field_type: ItemFieldType::Concealed,
+                value: value.to_string(),
+            });
+        }
+
+        self.put_item(&item)?;
+        Ok(())
+    }
+
+    async fn delete_item(&self, vault_id: &str, _vault_name: &str, item_ref: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        self.delete_item(vault_id, item_ref)
+    }
+
+    async fn archive_item(&self, vault_id: &str, _vault_name: &str, item_ref: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        self.archive_item(vault_id, item_ref)
+    }
+
+    fn format_item_ref(&self, _vault_name: &str, vault_id: &str, _item_title: &str, item_id: &str, _field_title: &str, field_id: &str) -> String {
+        format!("op://{}/{}/{}", vault_id, item_id, field_id)
     }
 }

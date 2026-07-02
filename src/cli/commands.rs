@@ -77,7 +77,11 @@ pub enum Commands {
         force: bool,
     },
     /// Refresh the local cache of remote secrets
-    Sync,
+    Sync {
+        /// Suppress progress output (useful for scripting)
+        #[arg(short, long)]
+        quiet: bool,
+    },
     /// List all known secrets (one per line, for scripting)
     List {
         /// Filter by provider (e.g., "jaws", "aws-dev")

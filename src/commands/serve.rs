@@ -5,6 +5,7 @@ use std::path::PathBuf;
 
 use crate::config::Config;
 use crate::db::{DbProvider, SecretRepository};
+use crate::debug_eprintln;
 use crate::secrets::detect_providers;
 use crate::server::{self, ServerConfig};
 
@@ -57,7 +58,7 @@ pub async fn handle_serve(
             .unwrap_or_else(|| "jaws-server".to_string())
     });
 
-    eprintln!("Initializing providers...");
+    debug_eprintln!("Initializing providers...");
     let providers = detect_providers(config, Some(repo)).await?;
 
     // Register providers in the database
@@ -69,7 +70,7 @@ pub async fn handle_serve(
             config_json: None,
         })?;
     }
-    eprintln!("  {} provider(s) available", providers.len());
+    debug_eprintln!("  {} provider(s) available", providers.len());
 
     let server_config = ServerConfig {
         bind_addr,
