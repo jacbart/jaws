@@ -30,7 +30,12 @@
         lib.genAttrs allSystems (
           system:
           f {
-            pkgs = import nixpkgs { inherit system overlays; };
+            pkgs = import nixpkgs {
+              inherit system overlays;
+              config.allowUnfreePredicate = pkg: builtins.elem (lib.getName pkg) [
+                "1password-cli"
+              ];
+            };
           }
         );
 
