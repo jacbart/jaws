@@ -2,22 +2,90 @@
 
 use std::path::{Path, PathBuf};
 
-use super::types::Config;
+use super::types::{Config, Defaults, ProviderConfig, ServerConnection};
+
+/// Raw deserialization structs mirroring hcl-rs's labeled-block shape.
+/// `provider "<id>" { ... }` deserializes as a map keyed by the block label.
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RawConfig {
+    defaults: Option<Defaults>,
+    #[serde(default)]
+    provider: hcl::Map<String, RawProvider>,
+    #[serde(default)]
+    server: hcl::Map<String, RawServer>,
+}
+
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RawProvider {
+    kind: String,
+    profile: Option<String>,
+    region: Option<String>,
+    vault: Option<String>,
+    organization: Option<String>,
+    token_env: Option<String>,
+    project: Option<String>,
+    force_cli: Option<bool>,
+}
+
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RawServer {
+    url: String,
+    ca_cert: Option<String>,
+    client_cert: Option<String>,
+    client_key: Option<String>,
+}
 
 impl Config {
-    /// Get the explicit ~/.config/jaws/jaws.kdl path (XDG-style, cross-platform)
+    /// Parse configuration from an HCL string.
+    pub fn from_hcl(content: &str) -> Result<Self, hcl::Error> {
+        let raw: RawConfig = hcl::from_str(content)?;
+        Ok(Self {
+            defaults: raw.defaults,
+            providers: raw
+                .provider
+                .into_iter()
+                .map(|(id, p)| ProviderConfig {
+                    id,
+                    kind: p.kind,
+                    profile: p.profile,
+                    region: p.region,
+                    vault: p.vault,
+                    organization: p.organization,
+                    token_env: p.token_env,
+                    project: p.project,
+                    force_cli: p.force_cli,
+                })
+                .collect(),
+            servers: raw
+                .server
+                .into_iter()
+                .map(|(name, s)| ServerConnection {
+                    name,
+                    url: s.url,
+                    ca_cert: s.ca_cert,
+                    client_cert: s.client_cert,
+                    client_key: s.client_key,
+                })
+                .collect(),
+        })
+    }
+
+    /// Get the explicit ~/.config/jaws/jaws.hcl path (XDG-style, cross-platform)
     fn xdg_config_path() -> Option<PathBuf> {
-        dirs::home_dir().map(|h| h.join(".config/jaws/jaws.kdl"))
+        dirs::home_dir().map(|h| h.join(".config/jaws/jaws.hcl"))
     }
 
     /// Get the list of config file search paths in priority order
     fn get_config_search_paths() -> Vec<PathBuf> {
         let mut paths = Vec::new();
 
-        // 1. ./jaws.kdl (current directory - highest priority for project-local config)
-        paths.push(PathBuf::from("jaws.kdl"));
+        // 1. ./jaws.hcl (current directory - highest priority for project-local config)
+        paths.push(PathBuf::from("jaws.hcl"));
 
-        // 2. ~/.config/jaws/jaws.kdl (XDG-style, explicit cross-platform support)
+        // 2. ~/.config/jaws/jaws.hcl (XDG-style, explicit cross-platform support)
         if let Some(xdg_path) = Self::xdg_config_path() {
             paths.push(xdg_path);
         }
@@ -25,20 +93,20 @@ impl Config {
         // 3. Platform-native config directory (~/Library/Application Support/ on macOS)
         // Skip if it's the same as the XDG path (e.g., on Linux where they're identical)
         if let Some(config_dir) = dirs::config_dir() {
-            let native_path = config_dir.join("jaws/jaws.kdl");
+            let native_path = config_dir.join("jaws/jaws.hcl");
             if Self::xdg_config_path().as_ref() != Some(&native_path) {
                 paths.push(native_path);
             }
         }
 
-        // 4. ~/.local/share/jaws/jaws.kdl (XDG data directory)
+        // 4. ~/.local/share/jaws/jaws.hcl (XDG data directory)
         if let Some(data_dir) = dirs::data_dir() {
-            paths.push(data_dir.join("jaws/jaws.kdl"));
+            paths.push(data_dir.join("jaws/jaws.hcl"));
         }
 
-        // 5. ~/jaws/jaws.kdl (home directory)
+        // 5. ~/jaws/jaws.hcl (home directory)
         if let Some(home_dir) = dirs::home_dir() {
-            paths.push(home_dir.join("jaws/jaws.kdl"));
+            paths.push(home_dir.join("jaws/jaws.hcl"));
         }
 
         paths
@@ -57,7 +125,7 @@ impl Config {
         // Platform-native config directory (e.g., ~/Library/Application Support/ on macOS)
         // Skip if it's the same as the XDG path
         if let Some(config_dir) = dirs::config_dir() {
-            let native_path = config_dir.join("jaws/jaws.kdl");
+            let native_path = config_dir.join("jaws/jaws.hcl");
             if Self::xdg_config_path().as_ref() != Some(&native_path) {
                 options.push((native_path, "Platform config directory"));
             }
@@ -65,16 +133,16 @@ impl Config {
 
         // XDG data directory
         if let Some(data_dir) = dirs::data_dir() {
-            options.push((data_dir.join("jaws/jaws.kdl"), "XDG data directory"));
+            options.push((data_dir.join("jaws/jaws.hcl"), "XDG data directory"));
         }
 
         // Home directory
         if let Some(home_dir) = dirs::home_dir() {
-            options.push((home_dir.join("jaws/jaws.kdl"), "Home directory"));
+            options.push((home_dir.join("jaws/jaws.hcl"), "Home directory"));
         }
 
         // Current directory
-        options.push((PathBuf::from("jaws.kdl"), "Current directory"));
+        options.push((PathBuf::from("jaws.hcl"), "Current directory"));
 
         options
     }
@@ -87,19 +155,19 @@ impl Config {
             .find(|path| path.exists())
     }
 
-    /// Get the default config path (~/.config/jaws/jaws.kdl)
+    /// Get the default config path (~/.config/jaws/jaws.hcl)
     pub fn default_config_path() -> PathBuf {
-        Self::xdg_config_path().unwrap_or_else(|| PathBuf::from("jaws.kdl"))
+        Self::xdg_config_path().unwrap_or_else(|| PathBuf::from("jaws.hcl"))
     }
 
     /// Load configuration from a specific path
     fn load_from_path(path: &Path) -> Result<Self, Box<dyn std::error::Error>> {
         let content = std::fs::read_to_string(path)?;
-        let config = knuffel::parse::<Config>("jaws.kdl", &content)?;
-        Ok(config)
+        Self::from_hcl(&content)
+            .map_err(|e| format!("failed to parse {}: {}", path.display(), e).into())
     }
 
-    /// Load configuration from jaws.kdl, searching multiple locations
+    /// Load configuration from jaws.hcl, searching multiple locations
     pub fn load() -> Result<Self, Box<dyn std::error::Error>> {
         let search_paths = Self::get_config_search_paths();
 
@@ -159,132 +227,139 @@ impl Config {
             std::fs::create_dir_all(parent)?;
         }
 
-        let kdl_content = r#"// Global defaults
-// cache_ttl is in seconds (default: 900 = 15 minutes)
-// default_provider allows omitting the provider:// prefix in commands (e.g., jaws pull my-secret -p)
-// keychain_cache caches decrypted credentials in the OS keychain (default: true)
-defaults editor="vim" secrets_path="./.secrets" cache_ttl=900
-// default_provider="jaws"
-// keychain_cache=false
+        let hcl_content = r#"# Global defaults
+# cache_ttl is in seconds (default: 900 = 15 minutes)
+# default_provider allows omitting the provider:// prefix in commands (e.g., jaws pull my-secret -p)
+# keychain_cache caches decrypted credentials in the OS keychain (default: true)
+defaults {
+  editor       = "vim"
+  secrets_path = "./.secrets"
+  cache_ttl    = 900
+  # default_provider = "jaws"
+  # keychain_cache   = false
+}
 
-// Example AWS Provider
-// provider "aws-dev" kind="aws" {
-//     profile "default"
-//     region "us-east-1"
-// }
+# Example AWS Provider
+# provider "aws-dev" {
+#   kind    = "aws"
+#   profile = "default"
+#   region  = "us-east-1"
+# }
 
-// Use profile "all" to auto-discover all AWS profiles from ~/.aws/credentials
-// provider "aws" kind="aws" {
-//     profile "all"
-// }
+# Use profile "all" to auto-discover all AWS profiles from ~/.aws/credentials
+# provider "aws" {
+#   kind    = "aws"
+#   profile = "all"
+# }
 
-// Example 1Password Provider
-// provider "op-team" kind="onepassword" {
-//     vault "Engineering"
-// }
+# Example 1Password Provider
+# provider "op-team" {
+#   kind  = "onepassword"
+#   vault = "Engineering"
+# }
 
-// Use vault "all" to auto-discover all 1Password vaults
-// provider "op" kind="onepassword" {
-//     vault "all"
-// }
+# Use vault "all" to auto-discover all 1Password vaults
+# provider "op" {
+#   kind  = "onepassword"
+#   vault = "all"
+# }
 
-// Example GCP Secret Manager Provider
-// Uses Application Default Credentials (gcloud auth application-default login)
-// provider "gcp-prod" kind="gcp" {
-//     project "my-gcp-project-id"
-// }
+# Example GCP Secret Manager Provider
+# Uses Application Default Credentials (gcloud auth application-default login)
+# provider "gcp-prod" {
+#   kind    = "gcp"
+#   project = "my-gcp-project-id"
+# }
 "#;
 
-        std::fs::write(&config_path, kdl_content)?;
+        std::fs::write(&config_path, hcl_content)?;
         Ok(config_path)
     }
 
-    /// Serialize config to KDL format
-    pub fn to_kdl(&self) -> String {
-        let mut output = String::new();
+    /// Serialize config to HCL format
+    pub fn to_hcl(&self) -> String {
+        use hcl::{Block, Body};
 
-        // Write header comment
-        output.push_str("// jaws configuration file\n");
-        output.push_str("// cache_ttl is in seconds (default: 900 = 15 minutes)\n\n");
+        let mut body = Body::builder();
 
-        // Write defaults
-        let defaults = self.defaults.as_ref();
-        output.push_str("defaults");
-
-        if let Some(d) = defaults {
-            if let Some(editor) = &d.editor {
-                output.push_str(&format!(" editor=\"{}\"", editor));
+        if let Some(d) = &self.defaults {
+            let mut b = Block::builder("defaults");
+            if let Some(v) = &d.editor {
+                b = b.add_attribute(("editor", v.as_str()));
             }
-            if let Some(secrets_path) = &d.secrets_path {
-                output.push_str(&format!(" secrets_path=\"{}\"", secrets_path));
+            if let Some(v) = &d.secrets_path {
+                b = b.add_attribute(("secrets_path", v.as_str()));
             }
-            if let Some(cache_ttl) = d.cache_ttl {
-                output.push_str(&format!(" cache_ttl={}", cache_ttl));
+            if let Some(v) = d.cache_ttl {
+                b = b.add_attribute(("cache_ttl", v));
             }
-            if let Some(default_provider) = &d.default_provider {
-                output.push_str(&format!(" default_provider=\"{}\"", default_provider));
+            if let Some(v) = &d.default_provider {
+                b = b.add_attribute(("default_provider", v.as_str()));
             }
-            if let Some(keychain_cache) = d.keychain_cache {
-                output.push_str(&format!(" keychain_cache={}", keychain_cache));
+            if let Some(v) = d.max_versions {
+                b = b.add_attribute(("max_versions", v as u64));
             }
+            if let Some(v) = d.keychain_cache {
+                b = b.add_attribute(("keychain_cache", v));
+            }
+            body = body.add_block(b.build());
         }
-        output.push('\n');
 
-        // Write providers
         for provider in &self.providers {
-            output.push_str(&format!(
-                "\nprovider \"{}\" kind=\"{}\" {{\n",
-                provider.id, provider.kind
-            ));
-
-            if let Some(profile) = &provider.profile {
-                output.push_str(&format!("    profile \"{}\"\n", profile));
+            let mut b = Block::builder("provider")
+                .add_label(provider.id.as_str())
+                .add_attribute(("kind", provider.kind.as_str()));
+            if let Some(v) = &provider.profile {
+                b = b.add_attribute(("profile", v.as_str()));
             }
-            if let Some(region) = &provider.region {
-                output.push_str(&format!("    region \"{}\"\n", region));
+            if let Some(v) = &provider.region {
+                b = b.add_attribute(("region", v.as_str()));
             }
-            if let Some(vault) = &provider.vault {
-                output.push_str(&format!("    vault \"{}\"\n", vault));
+            if let Some(v) = &provider.vault {
+                b = b.add_attribute(("vault", v.as_str()));
             }
-            if let Some(organization) = &provider.organization {
-                output.push_str(&format!("    organization \"{}\"\n", organization));
+            if let Some(v) = &provider.organization {
+                b = b.add_attribute(("organization", v.as_str()));
             }
-            if let Some(token_env) = &provider.token_env {
-                output.push_str(&format!("    token-env \"{}\"\n", token_env));
+            if let Some(v) = &provider.token_env {
+                b = b.add_attribute(("token_env", v.as_str()));
             }
-            if let Some(project) = &provider.project {
-                output.push_str(&format!("    project \"{}\"\n", project));
+            if let Some(v) = &provider.project {
+                b = b.add_attribute(("project", v.as_str()));
             }
-
-            output.push_str("}\n");
+            if let Some(v) = provider.force_cli {
+                b = b.add_attribute(("force_cli", v));
+            }
+            body = body.add_block(b.build());
         }
 
-        // Write server connections
         for server in &self.servers {
-            output.push_str(&format!(
-                "\nserver \"{}\" url=\"{}\" {{\n",
-                server.name, server.url
-            ));
-
-            if let Some(ca_cert) = &server.ca_cert {
-                output.push_str(&format!("    ca-cert \"{}\"\n", ca_cert));
+            let mut b = Block::builder("server")
+                .add_label(server.name.as_str())
+                .add_attribute(("url", server.url.as_str()));
+            if let Some(v) = &server.ca_cert {
+                b = b.add_attribute(("ca_cert", v.as_str()));
             }
-            if let Some(client_cert) = &server.client_cert {
-                output.push_str(&format!("    client-cert \"{}\"\n", client_cert));
+            if let Some(v) = &server.client_cert {
+                b = b.add_attribute(("client_cert", v.as_str()));
             }
-            if let Some(client_key) = &server.client_key {
-                output.push_str(&format!("    client-key \"{}\"\n", client_key));
+            if let Some(v) = &server.client_key {
+                b = b.add_attribute(("client_key", v.as_str()));
             }
-
-            output.push_str("}\n");
+            body = body.add_block(b.build());
         }
 
-        output
+        let rendered = hcl::to_string(&body.build())
+            .expect("serializing config to HCL cannot fail");
+
+        format!(
+            "# jaws configuration file\n# cache_ttl is in seconds (default: 900 = 15 minutes)\n\n{rendered}"
+        )
     }
 
     /// Save config to file
     pub fn save(&self, path: &Path) -> Result<(), Box<dyn std::error::Error>> {
-        std::fs::write(path, self.to_kdl())?;
+        std::fs::write(path, self.to_hcl())?;
         // Restrict config file permissions (may contain provider details)
         crate::utils::restrict_file_permissions(path)?;
         Ok(())

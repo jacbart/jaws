@@ -112,15 +112,19 @@ pub async fn handle_connect(
         config.save(&config_path)?;
         eprintln!("  Server connection saved to: {}", config_path.display());
     } else {
-        eprintln!("  No config file found. Add this to your jaws.kdl:");
+        eprintln!("  No config file found. Add this to your jaws.hcl:");
         eprintln!();
-        eprintln!("  server \"{}\" url=\"{}\" {{", server_name, url);
-        eprintln!("      ca-cert \"{}\"", client_paths.ca_cert.display());
+        eprintln!("  server \"{}\" {{", server_name);
+        eprintln!("      url         = \"{}\"", url);
+        eprintln!("      ca_cert     = \"{}\"", client_paths.ca_cert.display());
         eprintln!(
-            "      client-cert \"{}\"",
+            "      client_cert = \"{}\"",
             client_paths.client_cert.display()
         );
-        eprintln!("      client-key \"{}\"", client_paths.client_key.display());
+        eprintln!(
+            "      client_key  = \"{}\"",
+            client_paths.client_key.display()
+        );
         eprintln!("  }}");
     }
 

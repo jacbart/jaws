@@ -120,7 +120,7 @@ The flake includes a Home Manager module for declarative configuration:
 }
 ```
 
-This generates `~/.config/jaws/jaws.kdl` from the declared options.
+This generates `~/.config/jaws/jaws.hcl` from the declared options.
 
 ### Provider Options
 
@@ -175,6 +175,6 @@ devShells.default = jaws.devShells.${system}.default;
 ---
 
 See also:
-- [Configuration](configuration.md) — `jaws.kdl` format and provider setup
+- [Configuration](configuration.md) — `jaws.hcl` format and provider setup
 - [Development](development.md) — building, testing, releases
 - [Getting Started](getting-started.md) — first-time user walkthrough

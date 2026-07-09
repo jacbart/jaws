@@ -11,7 +11,7 @@
 //! ## Namespace isolation
 //!
 //! Keychain entries are scoped by the **canonicalized secrets path**, so multiple
-//! `jaws.kdl` configs on the same machine (with different `secrets_path` values)
+//! `jaws.hcl` configs on the same machine (with different `secrets_path` values)
 //! will never collide, even if they share provider IDs.
 //!
 //! Entry key format: `{canonical_secrets_path}:{provider_id}/{credential_key}`

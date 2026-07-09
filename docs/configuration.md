@@ -3,7 +3,7 @@
 ## Table of Contents
 
 - [Config File Location](#config-file-location)
-- [KDL Format](#kdl-format)
+- [HCL Format](#hcl-format)
 - [Defaults](#defaults)
 - [Providers](#providers)
   - [AWS](#aws)
@@ -18,50 +18,60 @@
 
 ## Config File Location
 
-JAWS looks for `jaws.kdl` in this order:
+JAWS looks for `jaws.hcl` in this order:
 
 1. Path specified by `--config` CLI flag
 2. `JAWS_CONFIG_PATH` environment variable
-3. `./jaws.kdl` (current directory)
-4. `~/.config/jaws/jaws.kdl`
-5. `~/.jaws/jaws.kdl`
+3. `./jaws.hcl` (current directory)
+4. `~/.config/jaws/jaws.hcl`
+5. `~/.jaws/jaws.hcl`
 
 Use `jaws config` to see which file is currently loaded.
 
 ---
 
-## KDL Format
+## HCL Format
 
-JAWS uses [KDL](https://kdl.dev/) — a human-friendly document language similar to JSON but with a cleaner syntax.
+JAWS uses [HCL](https://github.com/hashicorp/hcl) — the human-friendly configuration language used by Terraform and other HashiCorp tools.
 
-```kdl
-// jaws.kdl — full example
+```hcl
+# jaws.hcl — full example
 
-defaults editor="nvim" secrets_path="~/.jaws/secrets" cache_ttl=900 default_provider="jaws"
-
-provider "aws-prod" kind="aws" {
-    profile "production"
-    region "us-east-1"
+defaults {
+  editor           = "nvim"
+  secrets_path     = "~/.jaws/secrets"
+  cache_ttl        = 900
+  default_provider = "jaws"
 }
 
-provider "op-team" kind="onepassword" {
-    vault "abc123"
+provider "aws-prod" {
+  kind    = "aws"
+  profile = "production"
+  region  = "us-east-1"
 }
 
-provider "bw-project" kind="bw" {
-    vault "project-uuid"
-    organization "org-uuid"
-    token-env "BWS_ACCESS_TOKEN"
+provider "op-team" {
+  kind  = "onepassword"
+  vault = "abc123"
 }
 
-provider "gcp-prod" kind="gcp" {
-    project "my-gcp-project-id"
+provider "bw-project" {
+  kind         = "bw"
+  vault        = "project-uuid"
+  organization = "org-uuid"
+  token_env    = "BWS_ACCESS_TOKEN"
 }
 
-server "myserver" url="https://10.0.0.5:9643" {
-    ca-cert "~/.config/jaws/clients/myserver/ca.pem"
-    client-cert "~/.config/jaws/clients/myserver/client.pem"
-    client-key "~/.config/jaws/clients/myserver/client-key.pem"
+provider "gcp-prod" {
+  kind    = "gcp"
+  project = "my-gcp-project-id"
+}
+
+server "myserver" {
+  url         = "https://10.0.0.5:9643"
+  ca_cert     = "~/.config/jaws/clients/myserver/ca.pem"
+  client_cert = "~/.config/jaws/clients/myserver/client.pem"
+  client_key  = "~/.config/jaws/clients/myserver/client-key.pem"
 }
 ```
 
@@ -85,16 +95,18 @@ server "myserver" url="https://10.0.0.5:9643" {
 
 Requires AWS credentials in `~/.aws/credentials` with Secrets Manager permissions.
 
-```kdl
-// Auto-discover all profiles
-provider "aws" kind="aws" {
-    profile "all"
+```hcl
+# Auto-discover all profiles
+provider "aws" {
+  kind    = "aws"
+  profile = "all"
 }
 
-// Specific profile and region
-provider "aws-prod" kind="aws" {
-    profile "production"
-    region "us-east-1"
+# Specific profile and region
+provider "aws-prod" {
+  kind    = "aws"
+  profile = "production"
+  region  = "us-east-1"
 }
 ```
 
@@ -107,9 +119,10 @@ Requires [Application Default Credentials](https://cloud.google.com/docs/authent
 gcloud auth application-default login
 ```
 
-```kdl
-provider "gcp-prod" kind="gcp" {
-    project "my-gcp-project-id"
+```hcl
+provider "gcp-prod" {
+  kind    = "gcp"
+  project = "my-gcp-project-id"
 }
 ```
 
@@ -124,21 +137,24 @@ JAWS supports two authentication methods for 1Password:
 
 By default, JAWS will use the SDK backend if `OP_SERVICE_ACCOUNT_TOKEN` is set, otherwise it falls back to the CLI backend with biometric authentication.
 
-```kdl
-// Auto-discover all vaults
-provider "op" kind="onepassword" {
-    vault "all"
+```hcl
+# Auto-discover all vaults
+provider "op" {
+  kind  = "onepassword"
+  vault = "all"
 }
 
-// Specific vault
-provider "op-dev" kind="onepassword" {
-    vault "abc123"
+# Specific vault
+provider "op-dev" {
+  kind  = "onepassword"
+  vault = "abc123"
 }
 
-// Force CLI backend even when SDK token is available
-provider "op-biometric" kind="onepassword" {
-    vault "abc123"
-    force_cli true
+# Force CLI backend even when SDK token is available
+provider "op-biometric" {
+  kind      = "onepassword"
+  vault     = "abc123"
+  force_cli = true
 }
 ```
 
@@ -158,11 +174,12 @@ The CLI backend requires:
 
 Requires `BWS_ACCESS_TOKEN` environment variable with a Secrets Manager access token.
 
-```kdl
-provider "bw-myproject" kind="bw" {
-    vault "project-uuid-here"
-    organization "org-uuid-here"
-    token-env "BWS_ACCESS_TOKEN"
+```hcl
+provider "bw-myproject" {
+  kind         = "bw"
+  vault        = "project-uuid-here"
+  organization = "org-uuid-here"
+  token_env    = "BWS_ACCESS_TOKEN"
 }
 ```
 
@@ -201,11 +218,12 @@ jaws save                  # registers it
 
 Server entries are added automatically by `jaws connect`. You can also add them manually:
 
-```kdl
-server "myserver" url="https://10.0.0.5:9643" {
-    ca-cert "~/.config/jaws/clients/myserver/ca.pem"
-    client-cert "~/.config/jaws/clients/myserver/client.pem"
-    client-key "~/.config/jaws/clients/myserver/client-key.pem"
+```hcl
+server "myserver" {
+  url         = "https://10.0.0.5:9643"
+  ca_cert     = "~/.config/jaws/clients/myserver/ca.pem"
+  client_cert = "~/.config/jaws/clients/myserver/client.pem"
+  client_key  = "~/.config/jaws/clients/myserver/client-key.pem"
 }
 ```
 

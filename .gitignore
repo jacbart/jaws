@@ -1,5 +1,5 @@
 # jaws binary and configuration files
-jaws.kdl
+jaws.hcl
 jaws
 *.barrel
 !docker.jaws

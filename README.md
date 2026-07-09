@@ -79,7 +79,7 @@ See [Getting Started](docs/getting-started.md) for the full walkthrough.
 ## Documentation
 
 - [Getting Started](docs/getting-started.md) — first-time setup, secrets workflow
-- [Configuration](docs/configuration.md) — KDL format, all provider types
+- [Configuration](docs/configuration.md) — HCL format, all provider types
 - [Commands](docs/commands.md) — complete CLI reference (auto-generated)
 - [Remote Sharing](docs/remote-sharing.md) — `jaws serve` and `jaws connect`
 - [Security](docs/security.md) — threat model, mTLS, best practices

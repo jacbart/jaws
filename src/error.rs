@@ -21,7 +21,7 @@ pub enum JawsError {
     /// JSON serialization/deserialization error.
     Json(serde_json::Error),
 
-    /// KDL config file parsing error.
+    /// Config file parsing error.
     Config(String),
 
     // ── Provider-specific ──────────────────────────────────────────────

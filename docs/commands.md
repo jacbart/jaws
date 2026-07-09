@@ -338,7 +338,7 @@ Usage: jaws config init [OPTIONS]
 
 Options:
   -c, --config <PATH>  Path to config file (overrides default search paths)
-      --path <PATH>    Path where to create the config file (default: ./jaws.kdl)
+      --path <PATH>    Path where to create the config file (default: ./jaws.hcl)
       --overwrite      Overwrite existing config file if it exists
   -m, --minimal        Generate minimal config without interactive prompts
   -h, --help           Print help
@@ -437,5 +437,5 @@ Options:
 
 See also:
 - [Getting Started](getting-started.md) — common workflows
-- [Configuration](configuration.md) — `jaws.kdl` format and providers
+- [Configuration](configuration.md) — `jaws.hcl` format and providers
 - [Remote Sharing](remote-sharing.md) — `jaws serve` and `jaws connect`

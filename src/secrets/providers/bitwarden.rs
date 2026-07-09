@@ -261,7 +261,7 @@ impl SecretManager for BitwardenSecretManager {
     ) -> Result<String, JawsError> {
         let project_id = self.project_id.ok_or_else(|| {
             JawsError::validation(
-                "Project ID is required to create secrets. Configure 'vault' (project_id) in jaws.kdl",
+                "Project ID is required to create secrets. Configure 'vault' (project_id) in jaws.hcl",
             )
         })?;
 

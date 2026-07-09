@@ -40,7 +40,7 @@ See [Nix documentation](nix.md#cross-compiled-binaries) for pre-built targets.
 
 ## Initialize Configuration
 
-JAWS uses a `jaws.kdl` configuration file. Generate one interactively:
+JAWS uses a `jaws.hcl` configuration file. Generate one interactively:
 
 ```bash
 jaws config init
@@ -54,7 +54,7 @@ For a minimal template without prompts:
 jaws config init --minimal
 ```
 
-See [Configuration](configuration.md) for the full KDL reference.
+See [Configuration](configuration.md) for the full configuration reference.
 
 ---
 
@@ -178,7 +178,7 @@ jaws import backup.barrel
 
 ## Next Steps
 
-- [Configuration](configuration.md) — full KDL reference, all provider types
+- [Configuration](configuration.md) — full configuration reference, all provider types
 - [Commands](commands.md) — complete CLI command reference
 - [Security](security.md) — threat model, mTLS details, best practices
 - [Troubleshooting](TROUBLESHOOTING.md) — common issues and fixes

@@ -2,7 +2,7 @@
 
 use chrono::{DateTime, Utc};
 
-/// A provider configured in jaws.kdl
+/// A provider configured in jaws.hcl
 #[derive(Debug, Clone)]
 pub struct DbProvider {
     pub id: String,

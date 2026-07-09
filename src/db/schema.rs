@@ -64,7 +64,7 @@ fn create_tables(conn: &Connection) -> rusqlite::Result<()> {
             version INTEGER NOT NULL
         );
 
-        -- Providers configured in jaws.kdl
+        -- Providers configured in jaws.hcl
         CREATE TABLE providers (
             id TEXT PRIMARY KEY,
             kind TEXT NOT NULL,

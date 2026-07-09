@@ -36,7 +36,7 @@ This trait is used as `Box<dyn SecretManager>` (aliased as `Provider`) throughou
 
 ## Provider Model
 
-Providers are detected at runtime based on the configuration file (`jaws.kdl`):
+Providers are detected at runtime based on the configuration file (`jaws.hcl`):
 
 | Provider | Kind | Backend |
 |----------|------|---------|
@@ -133,7 +133,7 @@ src/
 ├── cli/             # Clap argument and command definitions
 ├── client/          # RemoteProvider, mTLS connection, enrollment
 ├── commands/        # Command handlers (pull, push, serve, etc.)
-├── config/          # KDL parsing, provider discovery
+├── config/          # HCL parsing, provider discovery
 ├── db/              # SQLite schema, migrations, repository
 ├── secrets/         # Secret providers
 │   └── providers/   # AWS, GCP, 1Password, Bitwarden, local

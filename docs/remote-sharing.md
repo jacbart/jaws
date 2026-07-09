@@ -105,7 +105,7 @@ This:
 3. Sends the enrollment token and CSR
 4. Receives a signed client certificate and the CA certificate
 5. Saves certificates to `~/.config/jaws/clients/<servername>/`
-6. Adds the server entry to `jaws.kdl`
+6. Adds the server entry to `jaws.hcl`
 
 After enrollment, discover remote providers:
 
@@ -203,7 +203,7 @@ Remove a server connection and delete client certificates:
 jaws disconnect myserver
 ```
 
-This removes the server from `jaws.kdl` and deletes the certificate directory.
+This removes the server from `jaws.hcl` and deletes the certificate directory.
 
 ---
 

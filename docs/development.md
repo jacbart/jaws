@@ -65,7 +65,7 @@ cargo test
 The test suite covers:
 - Provider trait implementations
 - Database migrations and queries
-- Configuration parsing (KDL)
+- Configuration parsing (HCL)
 - Archive encryption/decryption
 - PKI certificate generation
 

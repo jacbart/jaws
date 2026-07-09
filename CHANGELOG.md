@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **BREAKING: config format switched from KDL to HCL.** The config file is now `jaws.hcl` (was `jaws.kdl`); `jaws.kdl` files are no longer read from any search path and must be converted by hand. Motivation: the `knuffel` KDL parser is unmaintained and only supports KDL v1, so any file reformatted by `kdlfmt` (which emits KDL v2) failed to parse. Parsing now uses the actively maintained `hcl-rs` crate with strict unknown-field rejection. The Home Manager module now generates `~/.config/jaws/jaws.hcl`. Bonus fixes: `max_versions` and `force_cli` were silently dropped when saving the config, and values containing quotes/backslashes were not escaped — both fixed by the new serializer.
+
 ### Added
 
 - **Folder-first workflow.** Open `secrets_path/secrets/{provider_id}/{name}` in any text editor to read or edit a secret, or drop a new file there to create one. `jaws save` reconciles the working dir with the local SQLite DB, hashing each file and archiving prior contents under `.versions/{provider_id}/{name}/v{N}`. Every provider (jaws, aws, gcp, onepassword, bitwarden) uses the same edit surface.

@@ -1,6 +1,5 @@
 //! Configuration type definitions.
 
-use knuffel::Decode;
 use std::path::PathBuf;
 
 /// Expand tilde (~) prefix to the user's home directory.
@@ -18,65 +17,53 @@ pub(crate) fn expand_tilde(path: &str) -> PathBuf {
     PathBuf::from(path)
 }
 
-/// Main configuration structure parsed from jaws.kdl.
-#[derive(Debug, Decode, Clone)]
+/// Main configuration structure parsed from jaws.hcl.
+#[derive(Debug, Clone)]
 pub struct Config {
-    #[knuffel(child)]
     pub defaults: Option<Defaults>,
 
-    #[knuffel(children(name = "provider"))]
     pub providers: Vec<ProviderConfig>,
 
     /// Remote server connections (for `jaws connect`).
-    #[knuffel(children(name = "server"))]
     pub servers: Vec<ServerConnection>,
 }
 
 /// A configured connection to a remote jaws server.
-#[derive(Debug, Decode, Clone)]
+#[derive(Debug, Clone)]
 pub struct ServerConnection {
     /// Server name (used as provider prefix, e.g., "myserver").
-    #[knuffel(argument)]
     pub name: String,
 
     /// Server URL (e.g., "https://10.0.0.5:9643").
-    #[knuffel(property)]
     pub url: String,
 
     /// Path to the CA certificate for this server.
-    #[knuffel(child, unwrap(argument))]
     pub ca_cert: Option<String>,
 
     /// Path to the client certificate for this server.
-    #[knuffel(child, unwrap(argument))]
     pub client_cert: Option<String>,
 
     /// Path to the client private key for this server.
-    #[knuffel(child, unwrap(argument))]
     pub client_key: Option<String>,
 }
 
 /// Default settings for jaws.
-#[derive(Debug, Decode, Clone, Default)]
+#[derive(Debug, Clone, Default, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Defaults {
-    #[knuffel(property)]
     pub editor: Option<String>,
 
-    #[knuffel(property(name = "secrets_path"))]
     pub secrets_path: Option<String>,
 
-    #[knuffel(property(name = "cache_ttl"))]
     pub cache_ttl: Option<u64>,
 
     /// Default provider for commands that accept a secret reference.
     /// When set, allows omitting the provider:// prefix.
-    #[knuffel(property(name = "default_provider"))]
     pub default_provider: Option<String>,
 
     /// Maximum number of versions to keep per secret.
     /// Older versions are automatically pruned when this limit is exceeded.
     /// Default: 10
-    #[knuffel(property(name = "max_versions"))]
     pub max_versions: Option<u32>,
 
     /// Whether to cache decrypted credentials in the OS keychain.
@@ -85,42 +72,32 @@ pub struct Defaults {
     /// subsequent invocations don't prompt for a passphrase until the cache_ttl
     /// expires.  Set to `false` to disable.
     /// Default: true
-    #[knuffel(property(name = "keychain_cache"))]
     pub keychain_cache: Option<bool>,
 }
 
 /// Configuration for a secrets provider.
-#[derive(Debug, Decode, Clone)]
+#[derive(Debug, Clone)]
 pub struct ProviderConfig {
-    #[knuffel(argument)]
     pub id: String,
 
-    #[knuffel(property)]
     pub kind: String, // "aws", "onepassword", "bw", or "gcp"
 
-    #[knuffel(child, unwrap(argument))]
     pub profile: Option<String>,
 
-    #[knuffel(child, unwrap(argument))]
     pub region: Option<String>,
 
     /// Vault ID for 1Password, or Project ID for Bitwarden
-    #[knuffel(child, unwrap(argument))]
     pub vault: Option<String>,
 
     /// Organization ID for Bitwarden (and potentially others)
-    #[knuffel(child, unwrap(argument))]
     pub organization: Option<String>,
 
-    #[knuffel(child, unwrap(argument))]
     pub token_env: Option<String>,
 
     /// GCP project ID for Google Cloud Secret Manager
-    #[knuffel(child, unwrap(argument))]
     pub project: Option<String>,
 
     /// Force CLI usage for 1Password even when SDK is available
-    #[knuffel(child, unwrap(argument))]
     pub force_cli: Option<bool>,
 }
 

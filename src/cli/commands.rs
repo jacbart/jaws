@@ -269,7 +269,7 @@ pub enum Commands {
 pub enum ConfigCommands {
     /// Initialize a new config file (interactive by default)
     Init {
-        /// Path where to create the config file (default: ./jaws.kdl)
+        /// Path where to create the config file (default: ./jaws.hcl)
         #[arg(long)]
         path: Option<PathBuf>,
 
